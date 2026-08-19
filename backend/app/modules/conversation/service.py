@@ -1,13 +1,19 @@
+import asyncio
 import base64
 import binascii
 import json
+from collections.abc import AsyncIterator
+from contextlib import suppress
 from datetime import datetime, timezone
-from uuid import UUID
+from typing import Any
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import select, tuple_
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.base import AIProvider
+from app.ai.factory import get_ai_provider
 from app.infrastructure.database.models import (
     Conversation,
     ConversationSummary,
@@ -22,6 +28,7 @@ from app.modules.conversation.schemas import (
     MessageDTO,
     PageMeta,
     PatchConversationRequest,
+    SendMessageRequest,
 )
 
 
@@ -62,6 +69,45 @@ def _decode_message_cursor(cursor: str) -> tuple[int, UUID]:
         return int(raw[0]), UUID(raw[1])
     except (binascii.Error, UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError) as exc:
         raise _error(422, "VALIDATION_ERROR", "invalid cursor") from exc
+
+
+def _sse_frame(
+    event: str,
+    data: dict[str, Any],
+    *,
+    event_id: UUID | str | None = None,
+) -> str:
+    lines: list[str] = []
+    if event_id is not None:
+        lines.append(f"id: {event_id}")
+    lines.append(f"event: {event}")
+    lines.append(
+        "data: " + json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    )
+    return "\n".join(lines) + "\n\n"
+
+
+def _sse_error(
+    request_id: str,
+    code: str,
+    message: str,
+    *,
+    details: dict[str, Any] | None = None,
+) -> str:
+    return _sse_frame(
+        "error",
+        {
+            "request_id": request_id,
+            "code": code,
+            "message": message,
+            "details": details or {},
+            "fatal": True,
+        },
+    )
+
+
+def _isoformat_z(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _list_item_dto(conversation: Conversation) -> ConversationListItemDTO:
@@ -192,6 +238,236 @@ class ConversationService:
         await session.commit()
         await session.refresh(conversation)
         return _conversation_dto(conversation, None)
+
+    async def _next_message_sequence(
+        self, session: AsyncSession, conversation_id: UUID
+    ) -> int:
+        result = await session.execute(
+            select(func.max(Message.sequence)).where(
+                Message.conversation_id == conversation_id
+            )
+        )
+        current_sequence = result.scalar_one()
+        return (current_sequence or 0) + 1
+
+    async def send_message(
+        self,
+        session: AsyncSession,
+        user_id: UUID,
+        conversation_id: UUID,
+        request: SendMessageRequest,
+    ) -> AsyncIterator[str]:
+        """Persist the student turn, then return its AI-backed SSE generator.
+
+        The preflight work intentionally happens before the StreamingResponse is
+        created, so ownership, not-found, deleted, and validation errors retain
+        their normal HTTP status and error envelope.
+        """
+        profile = await self._get_profile(session, user_id)
+        conversation = await session.get(Conversation, conversation_id)
+        if conversation is None:
+            raise _error(404, "CONVERSATION_NOT_FOUND", "conversation not found")
+        if conversation.student_id != profile.student_id:
+            raise _error(403, "FORBIDDEN", "conversation does not belong to student")
+        if conversation.status == "DELETED":
+            raise _error(
+                409,
+                "CONVERSATION_INVALID_STATUS",
+                "deleted conversation cannot receive messages",
+            )
+
+        current_context = dict(conversation.current_page_context or {})
+        if request.screen_context is not None:
+            current_context.update(request.screen_context)
+        if request.selected_text is not None:
+            current_context["selected_text"] = request.selected_text
+
+        student_sequence = await self._next_message_sequence(
+            session, conversation_id
+        )
+        now = datetime.now(timezone.utc)
+        student_message = Message(
+            conversation_id=conversation_id,
+            role="STUDENT",
+            type=request.type,
+            content=request.content,
+            metadata_={},
+            sequence=student_sequence,
+            created_at=now,
+        )
+        conversation.current_page_context = current_context
+        conversation.last_message_at = now
+        session.add(student_message)
+        await session.commit()
+        await session.refresh(student_message)
+
+        history_rows = (
+            await session.execute(
+                select(Message)
+                .where(Message.conversation_id == conversation_id)
+                .order_by(Message.sequence.asc())
+            )
+        ).scalars().all()
+        history: list[dict[str, str]] = []
+        for message in history_rows:
+            role = {
+                "STUDENT": "user",
+                "TEACHER": "assistant",
+                "SYSTEM": "system",
+            }.get(message.role, "user")
+            history.append({"role": role, "content": message.content})
+
+        teacher_message_id = uuid4()
+        teacher_sequence = student_sequence + 1
+        teacher_created_at = datetime.now(timezone.utc)
+        request_id = str(uuid4())
+        system_prompt = (
+            "你是霜铃，一位耐心、清晰的中文 K12 数字教师。"
+            "请根据学生的问题循序解释，鼓励学生自己思考。"
+            f"当前页面上下文：{json.dumps(current_context, ensure_ascii=False)}"
+        )
+
+        async def stream() -> AsyncIterator[str]:
+            yield _sse_frame(
+                "message.start",
+                {
+                    "message_id": str(teacher_message_id),
+                    "conversation_id": str(conversation_id),
+                    "role": "TEACHER",
+                    "type": "TEXT",
+                    "sequence": teacher_sequence,
+                    "created_at": _isoformat_z(teacher_created_at),
+                    "request_id": request_id,
+                },
+                event_id=teacher_message_id,
+            )
+
+            chunks: list[str] = []
+            try:
+                provider = get_ai_provider()
+                delta_index = 0
+                async for chunk in self._provider_chunks(
+                    provider, history, system_prompt
+                ):
+                    if chunk is None:
+                        yield ": ping\n\n"
+                        continue
+                    if not chunk:
+                        continue
+                    chunks.append(chunk)
+                    yield _sse_frame(
+                        "text.delta",
+                        {
+                            "message_id": str(teacher_message_id),
+                            "delta": chunk,
+                            "index": delta_index,
+                            "sequence": teacher_sequence,
+                        },
+                        event_id=teacher_message_id,
+                    )
+                    delta_index += 1
+
+                content = "".join(chunks)
+                model_info = provider.model_info
+                yield _sse_frame(
+                    "text.done",
+                    {
+                        "message_id": str(teacher_message_id),
+                        "content": content,
+                        "model_info": model_info,
+                        "usage": {
+                            "input_tokens": sum(
+                                len(item["content"]) for item in history
+                            ),
+                            "output_tokens": len(content),
+                        },
+                    },
+                    event_id=teacher_message_id,
+                )
+
+                teacher_message = Message(
+                    message_id=teacher_message_id,
+                    conversation_id=conversation_id,
+                    role="TEACHER",
+                    type="TEXT",
+                    content=content,
+                    metadata_={},
+                    sequence=teacher_sequence,
+                    model_info=model_info,
+                    created_at=teacher_created_at,
+                )
+                session.add(teacher_message)
+                conversation.last_message_at = teacher_created_at
+                try:
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                    yield _sse_error(
+                        request_id,
+                        "MESSAGE_PERSISTENCE_ERROR",
+                        "assistant message could not be persisted",
+                    )
+                    return
+
+                yield _sse_frame(
+                    "message.done",
+                    {
+                        "message_id": str(teacher_message_id),
+                        "conversation_id": str(conversation_id),
+                        "sequence": teacher_sequence,
+                        "created_at": _isoformat_z(teacher_created_at),
+                        "metadata": {},
+                    },
+                    event_id=teacher_message_id,
+                )
+            except Exception:
+                await session.rollback()
+                yield _sse_error(
+                    request_id,
+                    "AI_PROVIDER_ERROR",
+                    "AI provider unavailable",
+                )
+
+        return stream()
+
+    async def _provider_chunks(
+        self,
+        provider: AIProvider,
+        history: list[dict[str, str]],
+        system_prompt: str,
+    ) -> AsyncIterator[str | None]:
+        """Bridge provider output to a queue so 15s heartbeats remain reliable."""
+        queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
+
+        async def produce() -> None:
+            try:
+                async for chunk in provider.stream_chat(history, system_prompt):
+                    await queue.put(("chunk", chunk))
+                await queue.put(("done", None))
+            except Exception as exc:
+                await queue.put(("error", exc))
+
+        producer = asyncio.create_task(produce())
+        try:
+            while True:
+                try:
+                    kind, value = await asyncio.wait_for(queue.get(), timeout=15)
+                except asyncio.TimeoutError:
+                    yield None
+                    continue
+                if kind == "chunk":
+                    yield str(value)
+                elif kind == "done":
+                    return
+                else:
+                    if isinstance(value, Exception):
+                        raise value
+                    raise RuntimeError("AI provider stream failed")
+        finally:
+            if not producer.done():
+                producer.cancel()
+            with suppress(asyncio.CancelledError):
+                await producer
 
     async def get_conversation(
         self, session: AsyncSession, user_id: UUID, conversation_id: UUID

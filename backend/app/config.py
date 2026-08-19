@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # 2-C 认证使用（JWT Bearer，0-D §1.2）
     jwt_secret: str = "dev-only-change-me-32bytes-secret"
     jwt_expire_minutes: int = 60 * 24 * 7
+    ai_provider: str = "mock"
+    ai_model: str = "mock-model"
+    ai_max_tokens: int = 512
 
 
 settings = Settings()

@@ -2,6 +2,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_student
@@ -13,6 +14,7 @@ from app.modules.conversation.schemas import (
     ConversationStatus,
     CreateConversationRequest,
     PatchConversationRequest,
+    SendMessageRequest,
 )
 from app.modules.conversation.service import ConversationService
 
@@ -48,6 +50,25 @@ async def create_conversation(
 ):
     conversation = await service.create_conversation(session, user.user_id, body)
     return ok(conversation)
+
+
+@router.post("/conversations/{conversation_id}/messages")
+async def send_message(
+    user: Annotated[User, Depends(require_student)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    conversation_id: UUID,
+    body: SendMessageRequest,
+):
+    stream = await service.send_message(session, user.user_id, conversation_id, body)
+    return StreamingResponse(
+        stream,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/conversations/{conversation_id}/messages")

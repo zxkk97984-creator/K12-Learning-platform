@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -29,6 +29,13 @@ class PatchConversationRequest(BaseModel):
     # ACTIVE is accepted here so the service can return the required 409 for
     # the invalid DELETED -> ACTIVE transition instead of a schema 422.
     status: ConversationStatus | None = None
+
+
+class SendMessageRequest(BaseModel):
+    content: str = Field(min_length=1)
+    type: Literal["TEXT"] = "TEXT"
+    screen_context: dict[str, Any] | None = None
+    selected_text: str | None = None
 
 
 class ConversationListItemDTO(BaseModel):

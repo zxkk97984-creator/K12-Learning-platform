@@ -1,0 +1,276 @@
+"""Phase 4-B SSE conversation tests (real PostgreSQL + TestClient)."""
+
+import asyncio
+import json
+from uuid import UUID
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import select
+
+from app.ai.base import AIProvider
+from app.infrastructure.database.models import StudentProfile, User
+from app.infrastructure.database.session import async_session
+from app.main import app
+from app.modules.identity.security import hash_password
+
+
+OWNER_NAME = "test_conversation_sse_user"
+OWNER_PASSWORD = "conversation-sse-pass"
+OTHER_NAME = "other_conversation_sse_user"
+OTHER_PASSWORD = "other-conversation-sse-pass"
+
+
+def _ensure_user(username: str, password: str, nickname: str) -> None:
+    async def run() -> None:
+        async with async_session() as session:
+            user = (
+                await session.execute(select(User).where(User.username == username))
+            ).scalar_one_or_none()
+            if user is None:
+                user = User(
+                    username=username,
+                    password_hash=hash_password(password),
+                    user_type="STUDENT",
+                )
+                session.add(user)
+                await session.flush()
+
+            profile = (
+                await session.execute(
+                    select(StudentProfile).where(StudentProfile.user_id == user.user_id)
+                )
+            ).scalar_one_or_none()
+            if profile is None:
+                session.add(
+                    StudentProfile(
+                        user_id=user.user_id,
+                        nickname=nickname,
+                        grade=8,
+                        language="zh-CN",
+                    )
+                )
+            await session.commit()
+
+    asyncio.run(run())
+
+
+@pytest.fixture(scope="module")
+def client() -> TestClient:
+    _ensure_user(OWNER_NAME, OWNER_PASSWORD, "SSE 测试")
+    _ensure_user(OTHER_NAME, OTHER_PASSWORD, "其他 SSE 测试")
+    return TestClient(app)
+
+
+@pytest.fixture(scope="module")
+def token(client: TestClient) -> str:
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": OWNER_NAME, "password": OWNER_PASSWORD},
+    )
+    assert response.status_code == 200
+    return response.json()["data"]["access_token"]
+
+
+@pytest.fixture(scope="module")
+def other_token(client: TestClient) -> str:
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": OTHER_NAME, "password": OTHER_PASSWORD},
+    )
+    assert response.status_code == 200
+    return response.json()["data"]["access_token"]
+
+
+def headers(token: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "text/event-stream",
+    }
+
+
+def create_conversation(client: TestClient, token: str) -> str:
+    response = client.post(
+        "/api/v1/conversations",
+        headers=headers(token),
+        json={"title": "SSE 测试会话"},
+    )
+    assert response.status_code == 201
+    return response.json()["data"]["conversation_id"]
+
+
+def parse_sse(raw: str) -> list[dict]:
+    events: list[dict] = []
+    for frame in raw.split("\n\n"):
+        if not frame.strip() or frame.lstrip().startswith(":"):
+            continue
+        event_name = None
+        event_id = None
+        data_lines: list[str] = []
+        for line in frame.splitlines():
+            if line.startswith("id: "):
+                event_id = line[4:]
+            elif line.startswith("event: "):
+                event_name = line[7:]
+            elif line.startswith("data: "):
+                data_lines.append(line[6:])
+        if event_name is not None:
+            events.append(
+                {
+                    "id": event_id,
+                    "event": event_name,
+                    "data": json.loads("\n".join(data_lines)),
+                }
+            )
+    return events
+
+
+class FailingProvider(AIProvider):
+    provider = "failing"
+    model = "test-model"
+
+    async def stream_chat(self, history, system_prompt):
+        del history, system_prompt
+        raise RuntimeError("simulated provider outage")
+        if False:
+            yield ""
+
+
+class TestConversationSSE:
+    def test_stream_order_and_message_persistence(
+        self, client: TestClient, token: str
+    ) -> None:
+        conversation_id = create_conversation(client, token)
+        response = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(token),
+            json={
+                "content": "什么是训练数据",
+                "screen_context": {"route": "/reader", "page_type": "reader"},
+                "selected_text": "训练数据",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        events = parse_sse(response.text)
+        names = [event["event"] for event in events]
+        assert names[0] == "message.start"
+        assert names[-2:] == ["text.done", "message.done"]
+        assert names.count("text.delta") > 1
+        assert set(names).issubset({"message.start", "text.delta", "text.done", "message.done"})
+
+        start = events[0]["data"]
+        text_done = next(event["data"] for event in events if event["event"] == "text.done")
+        done = events[-1]["data"]
+        assert start["conversation_id"] == conversation_id
+        assert start["role"] == "TEACHER"
+        assert start["sequence"] == 2
+        assert text_done["model_info"]["provider"] == "mock"
+        assert done["message_id"] == start["message_id"]
+        assert done["sequence"] == 2
+
+        messages = client.get(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(token),
+        )
+        assert messages.status_code == 200
+        rows = messages.json()["data"]
+        assert [row["role"] for row in rows] == ["STUDENT", "TEACHER"]
+        assert [row["sequence"] for row in rows] == [1, 2]
+        assert rows[0]["content"] == "什么是训练数据"
+        assert rows[0]["metadata"] == {}
+        assert rows[1]["content"] == text_done["content"]
+        assert rows[1]["model_info"]["model"] == "mock-model"
+
+        detail = client.get(
+            f"/api/v1/conversations/{conversation_id}", headers=headers(token)
+        )
+        assert detail.status_code == 200
+        context = detail.json()["data"]["current_page_context"]
+        assert context["route"] == "/reader"
+        assert context["selected_text"] == "训练数据"
+
+    def test_stream_requires_owner_and_active_conversation(
+        self, client: TestClient, token: str, other_token: str
+    ) -> None:
+        conversation_id = create_conversation(client, token)
+        forbidden = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(other_token),
+            json={"content": "越权提问"},
+        )
+        assert forbidden.status_code == 403
+        assert forbidden.json()["error"]["code"] == "FORBIDDEN"
+
+        missing_id = UUID("00000000-0000-0000-0000-000000000098")
+        missing = client.post(
+            f"/api/v1/conversations/{missing_id}/messages",
+            headers=headers(token),
+            json={"content": "不存在的会话"},
+        )
+        assert missing.status_code == 404
+        assert missing.json()["error"]["code"] == "CONVERSATION_NOT_FOUND"
+
+        deleted = client.patch(
+            f"/api/v1/conversations/{conversation_id}",
+            headers=headers(token),
+            json={"status": "DELETED"},
+        )
+        assert deleted.status_code == 200
+        invalid_status = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(token),
+            json={"content": "已删除会话"},
+        )
+        assert invalid_status.status_code == 409
+        assert invalid_status.json()["error"]["code"] == "CONVERSATION_INVALID_STATUS"
+
+    def test_stream_validation_and_authentication(
+        self, client: TestClient, token: str
+    ) -> None:
+        conversation_id = create_conversation(client, token)
+
+        no_auth = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            json={"content": "没有令牌"},
+        )
+        assert no_auth.status_code == 401
+        assert no_auth.json()["error"]["code"] == "UNAUTHENTICATED"
+
+        invalid_type = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(token),
+            json={"content": "错误类型", "type": "QUIZ"},
+        )
+        assert invalid_type.status_code == 422
+        assert invalid_type.json()["error"]["code"] == "VALIDATION_ERROR"
+
+        empty_content = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(token),
+            json={"content": ""},
+        )
+        assert empty_content.status_code == 422
+        assert empty_content.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    def test_provider_failure_is_emitted_as_fatal_sse_error(
+        self, client: TestClient, token: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        conversation_id = create_conversation(client, token)
+        monkeypatch.setattr(
+            "app.modules.conversation.service.get_ai_provider",
+            lambda: FailingProvider(),
+        )
+
+        response = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(token),
+            json={"content": "触发 provider 错误"},
+        )
+
+        assert response.status_code == 200
+        events = parse_sse(response.text)
+        assert [event["event"] for event in events] == ["message.start", "error"]
+        assert events[-1]["data"]["code"] == "AI_PROVIDER_ERROR"
+        assert events[-1]["data"]["fatal"] is True
