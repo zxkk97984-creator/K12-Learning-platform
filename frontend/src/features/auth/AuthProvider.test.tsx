@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { StudentProfile } from '@/entities/student/types'
 
-const loginMock = vi.fn()
-const logoutMock = vi.fn()
-const getMeMock = vi.fn()
+import { ApiError } from '@/shared/api/http'
+
+const { loginMock, logoutMock, getMeMock } = vi.hoisted(() => ({
+  loginMock: vi.fn(),
+  logoutMock: vi.fn(),
+  getMeMock: vi.fn(),
+}))
 
 vi.mock('@/mocks/services', () => ({
   studentService: {
@@ -18,6 +22,10 @@ vi.mock('@/mocks/services', () => ({
     updatePreferences: vi.fn(),
   },
 }))
+
+afterEach(() => {
+  cleanup()
+})
 
 import { AuthProvider, useAuth } from './AuthProvider'
 
@@ -87,9 +95,8 @@ describe('AuthProvider', () => {
 
   it('初始化 getMe 401 → 清 token 未登录', async () => {
     window.localStorage.setItem('shuangling-access-token', 'jwt-expired')
-    const error = new Error('401') as Error & { status: number }
-    error.status = 401
-    getMeMock.mockRejectedValue(error)
+    // 真实场景 apiRequest 抛 ApiError；普通 Error 不满足 AuthProvider 的 instanceof 判断
+    getMeMock.mockRejectedValue(new ApiError(401, 'UNAUTHENTICATED', 'unauthorized'))
     renderAuth()
     await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('anon'))
     expect(window.localStorage.getItem('shuangling-access-token')).toBeNull()

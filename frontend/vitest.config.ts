@@ -10,6 +10,9 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    // 强制 NODE_ENV=test：shell 若为 production，React 会走 production 构建（无 React.act），
+    // 导致 @testing-library/react 渲染失败
+    env: { NODE_ENV: 'test' },
   },
 })

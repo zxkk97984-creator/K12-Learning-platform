@@ -109,6 +109,27 @@ describe('ApiQuizService', () => {
     ])
   })
 
+  it('创建测验缺省值为 CHAPTER_QUIZ / 3 题 / MEDIUM', async () => {
+    const fetchMock = vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(201, { data: session, meta: {} }),
+    )
+
+    await service.createQuizSession({ conversation_id: 'conversation-1' })
+
+    expect(fetchMock.mock.calls[0]).toEqual([
+      '/api/v1/quiz-sessions',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          conversation_id: 'conversation-1',
+          quiz_kind: 'CHAPTER_QUIZ',
+          question_count: 3,
+          difficulty: 'MEDIUM',
+        }),
+      }),
+    ])
+  })
+
   it('读取历史、详情、题目、答卷和互动审计', async () => {
     const fetchMock = vi.mocked(fetch)
       .mockResolvedValueOnce(jsonResponse(200, { data: [session], meta: {} }))
@@ -192,5 +213,28 @@ describe('ApiQuizService', () => {
     await expect(service.getQuizSessions()).rejects.toEqual(
       expect.objectContaining({ status: 401, code: 'UNAUTHENTICATED' }),
     )
+  })
+
+  it('getHints 是 requestHint 的别名', async () => {
+    const fetchMock = vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(201, {
+        data: {
+          hint_level: 2,
+          hint_text: '再想想规律。',
+          max_hint_level: 3,
+          interaction_id: 'interaction-2',
+        },
+        meta: {},
+      }),
+    )
+
+    await expect(service.getHints('quiz-1', 'question-1')).resolves.toMatchObject({
+      hint_level: 2,
+      hint_text: '再想想规律。',
+    })
+    expect(fetchMock.mock.calls[0]).toEqual([
+      '/api/v1/quiz-sessions/quiz-1/questions/question-1/hints',
+      expect.objectContaining({ method: 'POST' }),
+    ])
   })
 })

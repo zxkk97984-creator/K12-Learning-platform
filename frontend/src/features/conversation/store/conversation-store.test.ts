@@ -275,4 +275,117 @@ describe('conversation store real service lifecycle', () => {
       }),
     ])
   })
+
+  it('quiz tool.result 失败时渲染错误状态，不渲染 QuizCard', async () => {
+    mocks.conversationService.sendMessage.mockImplementation(
+      async (_id: string, _input: unknown, callbacks?: SendMessageCallbacks) => {
+        callbacks?.onToolStart?.({
+          tool_run_id: 'tool-run-error',
+          tool: 'quiz',
+          state: 'running',
+          payload: { quiz_session_id: null },
+        })
+        callbacks?.onToolResult?.({
+          tool_run_id: 'tool-run-error',
+          tool: 'quiz',
+          status: 'error',
+          payload: { error: 'generation failed' },
+        })
+        callbacks?.onDone?.({
+          message_id: 'teacher-error',
+          conversation_id: 'conversation-1',
+          sequence: 2,
+        })
+      },
+    )
+
+    await useConversationStore.getState().send('给我出题')
+
+    expect(useConversationStore.getState().messages).toEqual([
+      expect.objectContaining({ role: 'user', content: '给我出题' }),
+      expect.objectContaining({
+        id: 'tool-tool-run-error',
+        role: 'ai',
+        kind: 'tool',
+        content: 'Quiz Skill 生成失败，请稍后再试',
+        quiz: null,
+      }),
+      expect.objectContaining({ id: 'teacher-error', role: 'ai', kind: 'text' }),
+    ])
+  })
+
+  it('非 quiz 工具沿用通用 TOOL_STATUS 文案', async () => {
+    mocks.conversationService.sendMessage.mockImplementation(
+      async (_id: string, _input: unknown, callbacks?: SendMessageCallbacks) => {
+        callbacks?.onToolStart?.({
+          tool_run_id: 'tool-run-hint',
+          tool: 'hint',
+          state: 'running',
+          payload: {},
+        })
+        callbacks?.onToolResult?.({
+          tool_run_id: 'tool-run-hint',
+          tool: 'hint',
+          status: 'success',
+          payload: { hint_level: 1 },
+        })
+        callbacks?.onDone?.({
+          message_id: 'teacher-hint',
+          conversation_id: 'conversation-1',
+          sequence: 2,
+        })
+      },
+    )
+
+    await useConversationStore.getState().send('给我一点提示')
+
+    expect(useConversationStore.getState().messages).toEqual([
+      expect.objectContaining({ role: 'user', content: '给我一点提示' }),
+      expect.objectContaining({
+        id: 'tool-tool-run-hint',
+        role: 'ai',
+        kind: 'tool',
+        content: 'hint · 已完成',
+      }),
+      expect.objectContaining({ id: 'teacher-hint', role: 'ai', kind: 'text' }),
+    ])
+  })
+
+  it('quiz tool.result 缺 quiz_session_id 时保持 tool 状态', async () => {
+    mocks.conversationService.sendMessage.mockImplementation(
+      async (_id: string, _input: unknown, callbacks?: SendMessageCallbacks) => {
+        callbacks?.onToolStart?.({
+          tool_run_id: 'tool-run-empty',
+          tool: 'quiz',
+          state: 'running',
+          payload: { quiz_session_id: null },
+        })
+        callbacks?.onToolResult?.({
+          tool_run_id: 'tool-run-empty',
+          tool: 'quiz',
+          status: 'success',
+          payload: {},
+        })
+        callbacks?.onDone?.({
+          message_id: 'teacher-empty',
+          conversation_id: 'conversation-1',
+          sequence: 2,
+        })
+      },
+    )
+
+    await useConversationStore.getState().send('给我出题')
+
+    expect(useConversationStore.getState().messages).toEqual([
+      expect.objectContaining({ role: 'user', content: '给我出题' }),
+      expect.objectContaining({
+        id: 'tool-tool-run-empty',
+        role: 'ai',
+        kind: 'quiz',
+        content: 'Quiz Skill 已创建 · 正式测验已记录',
+        quiz: null,
+      }),
+      expect.objectContaining({ id: 'teacher-empty', role: 'ai', kind: 'text' }),
+    ])
+  })
 })
