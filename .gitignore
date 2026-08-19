@@ -51,3 +51,4 @@ tmp/
 .agents/
 .codex/
 .hermes-tasks/
+backend/storage/
