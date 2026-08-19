@@ -4,10 +4,22 @@ import { useNavigate } from 'react-router-dom'
 import type { QuizSession } from '@/entities/quiz/types'
 import { quizSource } from '@/features/quiz/lib'
 import { quizService } from '@/mocks/services'
+import type { QuizListParams } from '@/shared/api/quiz-service'
 
 type QuizFilter = '全部' | '章节测验' | 'AI 小测' | '更早'
 
 const FILTERS: QuizFilter[] = ['全部', '章节测验', 'AI 小测', '更早']
+
+function paramsForFilter(filter: QuizFilter): QuizListParams {
+  if (filter === '章节测验') return { quiz_kind: 'CHAPTER_QUIZ', limit: 100 }
+  if (filter === 'AI 小测') return { quiz_kind: 'AI_QUIZ', limit: 100 }
+  if (filter === '更早') {
+    const date = new Date()
+    date.setDate(date.getDate() - 30)
+    return { date_to: date.toISOString(), limit: 100 }
+  }
+  return { limit: 100 }
+}
 
 export default function QuizzesPage() {
   const navigate = useNavigate()
@@ -20,7 +32,7 @@ export default function QuizzesPage() {
     let cancelled = false
     void (async () => {
       try {
-        const list = await quizService.getQuizSessions()
+        const list = await quizService.getQuizSessions(paramsForFilter(filter))
         if (cancelled) return
         setSessions(list)
         const entries = await Promise.all(
@@ -39,14 +51,9 @@ export default function QuizzesPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [filter])
 
-  const filtered =
-    filter === '全部'
-      ? sessions
-      : filter === '更早'
-        ? []
-        : sessions.filter((session) => session.quiz_kind === (filter === '章节测验' ? 'CHAPTER_QUIZ' : 'AI_QUIZ'))
+  const filtered = sessions
 
   return (
     <section className="py-10">

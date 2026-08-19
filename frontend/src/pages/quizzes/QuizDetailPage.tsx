@@ -5,17 +5,25 @@ import type {
   QuizAnswer,
   QuizInteraction,
   QuizQuestion,
-  QuizSession,
 } from '@/entities/quiz/types'
 import { useCompanionStore } from '@/features/companion'
 import { useConversationStore } from '@/features/conversation'
 import { quizSource } from '@/features/quiz/lib'
 import { quizService } from '@/mocks/services'
+import type { QuizSessionDetail } from '@/shared/api/quiz-service'
+
+function answerValue(value: Record<string, unknown> | null | undefined): string | null {
+  if (!value) return null
+  if (typeof value.key === 'string' || typeof value.key === 'number') return String(value.key)
+  if (Array.isArray(value.keys)) return value.keys.map(String).join(', ')
+  if (typeof value.value === 'string' || typeof value.value === 'number') return String(value.value)
+  return null
+}
 
 export default function QuizDetailPage() {
   const { quizId = 'q1' } = useParams()
   const runIntent = useConversationStore((state) => state.runIntent)
-  const [session, setSession] = useState<QuizSession | null>(null)
+  const [session, setSession] = useState<QuizSessionDetail | null>(null)
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [answers, setAnswers] = useState<QuizAnswer[]>([])
   const [interactions, setInteractions] = useState<QuizInteraction[]>([])
@@ -35,7 +43,7 @@ export default function QuizDetailPage() {
         ])
         if (cancelled) return
         setSession(current)
-        setQuestions(questionList)
+        setQuestions(current.questions_snapshot?.length ? current.questions_snapshot : questionList)
         setAnswers(answerList)
         setInteractions(interactionList)
         setSource(await quizSource(current.book_id, current.chapter_id))
@@ -103,10 +111,10 @@ export default function QuizDetailPage() {
             (item) =>
               item.question_id === question.question_id && item.interaction_type === 'HINT_RESPONSE',
           )
-          const correctKey = String(question.correct_answer.key)
+          const correctKey = answerValue(question.correct_answer)
           const correctText =
-            question.options.find((option) => option.key === correctKey)?.text ?? correctKey
-          const answerKey = answer ? String(answer.submitted_answer.key) : null
+            question.options.find((option) => option.key === correctKey)?.text ?? correctKey ?? '—'
+          const answerKey = answerValue(answer?.submitted_answer)
           const answerText = answer
             ? question.options.find((option) => option.key === answerKey)?.text ?? answerKey
             : null
@@ -140,7 +148,7 @@ export default function QuizDetailPage() {
               </div>
               <div className="mt-1 grid grid-cols-[84px_28px_minmax(0,1fr)] items-baseline gap-3">
                 <span className="font-mono text-[10px] text-muted">正确答案</span>
-                <strong className="font-mono text-[13px] text-fg">{correctKey}</strong>
+                <strong className="font-mono text-[13px] text-fg">{correctKey ?? '—'}</strong>
                 <p className="text-[13px] text-muted">{correctText}</p>
               </div>
               {hintInteractions.length > 0 ? (
@@ -165,7 +173,7 @@ export default function QuizDetailPage() {
         })}
       </ol>
       <p className="mt-4 font-mono text-[10px] text-muted">
-        共 {summary?.total ?? 0} 题 · 只读快照，不重新生成题目
+        共 {summary?.total ?? questions.length} 题 · 只读快照，不重新生成题目 · 技能版本 {session.skill_version}
       </p>
     </section>
   )

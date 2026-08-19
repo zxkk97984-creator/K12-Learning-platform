@@ -9,9 +9,10 @@ interface QuizCardProps {
   sessionId: string
 }
 
-/** 对话内交互式单选题卡（0-B §2.7；正确答案判定以 MockQuizService 为准，原型为 B） */
+/** 对话内交互式单选题卡（0-B §2.7；正确答案以服务端 Quiz API 判定为准） */
 export function QuizCard({ sessionId }: QuizCardProps) {
   const [question, setQuestion] = useState<QuizQuestion | null>(null)
+  const [questionCount, setQuestionCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [answered, setAnswered] = useState<string | null>(null)
@@ -27,7 +28,10 @@ export function QuizCard({ sessionId }: QuizCardProps) {
       .getQuestions(sessionId)
       .then((questions) => {
         if (cancelled) return
-        if (questions.length > 0) setQuestion(questions[0])
+        if (questions.length > 0) {
+          setQuestion(questions[0])
+          setQuestionCount(questions.length)
+        }
         else setError('本题暂无数据（题库由后续内容任务补全）')
       })
       .catch(() => {
@@ -110,19 +114,17 @@ export function QuizCard({ sessionId }: QuizCardProps) {
     )
   }
 
-  const correctKey = String(question.correct_answer.key)
-
   return (
     <div className="mt-2 rounded-[13px] border border-border bg-fg-soft p-3" data-od-id="chat-quiz-card">
       <div className="flex items-center justify-between font-mono text-[9px] text-muted">
         <span>结构化测验 · Quiz Session</span>
-        <span>第 1 题 / 共 3 题</span>
+        <span>第 1 题 / 共 {questionCount || 1} 题</span>
       </div>
       <h4 className="mt-2.5 text-[13px] leading-snug text-fg">{question.stem}</h4>
       <div className="mt-2.5 grid gap-1.5">
         {question.options.map((option) => {
           const isSelected = selected === option.key
-          const isCorrect = completed && option.key === correctKey
+          const isCorrect = completed && answered === option.key
           const isWrong = answered === option.key && !completed
           return (
             <button

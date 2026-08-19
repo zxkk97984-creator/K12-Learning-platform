@@ -46,7 +46,7 @@ export interface QuizSession {
   quiz_session_id: string
   student_id: string
   conversation_id: string | null
-  teacher_role_id: string
+  teacher_role_id: string | null
   book_id: string | null
   chapter_id: string | null
   title: string

@@ -62,11 +62,11 @@ test.describe('黄金路径', () => {
     await page.getByRole('button', { name: '提交答案' }).click()
     await expect(page.getByText('✓ 已完成')).toBeVisible({ timeout: 10_000 })
 
-    // 7. 去 quizzes：历史列表含随堂测验（q-live）
+    // 7. 去 quizzes：历史列表含随堂测验（5-C 起标题由后端生成，断言放宽）
     await page.keyboard.press('Escape')
     await page.getByRole('link', { name: '测验' }).click()
     await expect(page.getByRole('heading', { name: '每一次答题，都会留下线索。' })).toBeVisible()
-    await expect(page.getByText('训练数据 · 随堂测验')).toBeVisible()
+    await expect(page.getByText(/随堂测验/).first()).toBeVisible()
 
     // 8. 去 profile：画像页
     await page.getByRole('link', { name: '成长' }).click()

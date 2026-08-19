@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { quizService } from '../services'
+import { MockQuizService } from './quiz-service'
 
 describe('MockQuizService', () => {
+  const quizService = new MockQuizService()
   it('初始 3 条测验，createQuizSession 生成 q-live', async () => {
     expect(await quizService.getQuizSessions()).toHaveLength(3)
     const created = await quizService.createQuizSession({ quiz_kind: 'AI_QUIZ' })

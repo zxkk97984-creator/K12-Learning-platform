@@ -4,7 +4,27 @@ import type {
   QuizKind,
   QuizQuestion,
   QuizSession,
+  QuizStatus,
 } from '@/entities/quiz/types'
+
+export type QuizDifficulty = 'EASY' | 'MEDIUM' | 'HARD'
+
+export interface QuizSessionDetail extends QuizSession {
+  /** Immutable question snapshot returned by GET /quiz-sessions/{id}. */
+  questions_snapshot?: QuizQuestion[]
+  duration_seconds?: number
+  model_info?: Record<string, unknown> | null
+}
+
+export interface QuizListParams {
+  cursor?: string
+  limit?: number
+  quiz_kind?: QuizKind
+  status?: QuizStatus
+  book_id?: string
+  date_from?: string
+  date_to?: string
+}
 
 export interface CreateQuizInput {
   conversation_id?: string | null
@@ -12,6 +32,7 @@ export interface CreateQuizInput {
   chapter_id?: string | null
   quiz_kind?: QuizKind
   question_count?: number
+  difficulty?: QuizDifficulty
 }
 
 export interface SubmitAnswerInput {
@@ -26,8 +47,8 @@ export interface HintResult {
 }
 
 export interface QuizService {
-  getQuizSessions(): Promise<QuizSession[]>
-  getQuizSession(quizSessionId: string): Promise<QuizSession>
+  getQuizSessions(params?: QuizListParams): Promise<QuizSession[]>
+  getQuizSession(quizSessionId: string): Promise<QuizSessionDetail>
   /** 0-D：POST /quiz-sessions（真实后端 202 + 轮询；Mock 同步返回 ACTIVE） */
   createQuizSession(input?: CreateQuizInput): Promise<QuizSession>
   getQuestions(quizSessionId: string): Promise<QuizQuestion[]>
