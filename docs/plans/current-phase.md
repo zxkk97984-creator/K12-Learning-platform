@@ -3,7 +3,9 @@
 > 本文件由 Hermes（总控）维护，是会话恢复的权威进度来源。恢复时先读 `霜铃_V3_Hermes-Codex_多Agent协同开发总路线.md`（Execution Baseline）再读本文件。
 
 ## 当前阶段
-**Phase 6 — 语音对话**（Phase 5 已完成，自动进入）
+**Phase 7 — 长期记忆与 AI 学习画像**（Memory Domain 已完成，Memory Pipeline + ProfileInsight 待做）
+
+> 编号对齐说明（2026-08-19）：此前推进编号与总控有偏差——已完成的「Phase 4/5」实为总控 Phase 4（Conversation）+ Phase 5（Screen Context，1-G/3-E 已覆盖）+ Phase 6（Quiz Skill，全部完成）。总控 Phase 0~6 实质全部完成。下一任务按总控 Phase 7 编号推进。
 
 ## 已完成 Checkpoint
 - `phase-0-checkpoint`：仓库初始化 + 全套契约
@@ -20,17 +22,20 @@
 ## Phase 6 目标（总控 §16）
 语音对话（Voice）——语音输入/输出、VoiceSession、语音偏好落地。
 
-## Phase 6 待拆解（Hermes 规划，按总控 §16）
-- 6-A 后端 Voice Domain（voice_sessions 表 + API：POST /voice-sessions、PATCH /voice-sessions/{id}、GET /voice-sessions、SSE 语音事件）
-- 6-B 语音服务抽象（STT/TTS provider 接口 + Mock 实现；settings 切换；前端可用 mock 语音）
-- 6-C 前端语音输入（录音 → STT 文本 → 对话）/ 语音输出（TTS 播放）
-- 6-D 语音偏好落地（voice_preference 设置页生效）+ 测试 + Gate
+## Phase 7 待拆解（Hermes 规划，按总控 §16）
+- 7-A Memory Pipeline（LearningEvent → Evidence → MemoryCandidate → 聚合 → Stable Memory / ProfileInsight；规则版，无真实 LLM）
+- 7-B ProfileInsight（profile_insights 表 + 5 档定性：偏弱/一般/较稳定/较强/仍需观察；GET /me/insights、GET /me/insights/{id}、GET /me/episodes）
+- 7-C StudentEpisode（情节记忆表 + API）
+- 7-D `.agent.md` 渲染（xiaoming.agent.md：Structured Memory → Renderer → Markdown View）
+- 7-E 验收：学生问「为什么你觉得我比较喜欢通过例子学习？」AI 引用真实 Evidence 回答（规则版）
+- 7-F 前端画像页接入 + 测试 + Gate
+- 前置：Phase 2~6 已完成（身份/内容/对话/Quiz/记忆 Domain）
 
-## 关键基线引用（Phase 6）
-- 总控 §16（Phase 6 完整定义：语音对话）
-- `docs/contracts/api-contract.md`（0-D §9.4 conversations channel=VOICE、voice 相关端点；§15 SSE）
-- `docs/architecture/database-design.md`（0-E voice_sessions 表定义，若有）
-- `docs/architecture/domain-model.md`（0-C VoiceSession）
+## Phase 8 目标（总控 §17）
+Knowledge Base 与 RAG（knowledge_resources 表 + 解析管线 + 检索 + 引用）
+
+## Phase 9 目标（总控 §18）
+语音输入 / TTS（WebSocket 契约 §16 定稿实现；voice_preference 落地；STT/TTS provider 抽象）
 
 ## 当前 blocker
 无
