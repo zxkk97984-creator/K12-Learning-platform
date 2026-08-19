@@ -11,6 +11,29 @@ test.describe('黄金路径', () => {
     })
     expect(response.ok()).toBeTruthy()
     accessToken = (await response.json()).data.access_token
+
+    // 关闭遗留 ACTIVE 会话：面板默认加载最新 ACTIVE 会话，若残留上一次验证的会话，
+    // 其中 quiz 卡/消息历史会导致 .last() 定位到旧卡片，出现偶发失败（E2E 串行共享同一账号）。
+    const conversationsResponse = await request.get('/api/v1/conversations?status=ACTIVE&limit=100', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (conversationsResponse.ok()) {
+      const conversations = (await conversationsResponse.json()).data as Array<{
+        conversation_id: string
+        status: string
+      }>
+      for (const conversation of conversations) {
+        if (conversation.status === 'ACTIVE') {
+          await request.patch(
+            `/api/v1/conversations/${conversation.conversation_id}`,
+            {
+              headers: { Authorization: `Bearer ${accessToken}` },
+              data: { status: 'ARCHIVED' },
+            },
+          )
+        }
+      }
+    }
   })
 
   test('完整学习闭环', async ({ page, request }) => {
@@ -35,7 +58,7 @@ test.describe('黄金路径', () => {
     // 4. 发送消息 → 流式 AI 回复
     await page.getByLabel('消息输入').fill('那它为什么会出错？')
     await page.getByRole('button', { name: '发送消息' }).click()
-    await expect(page.getByText(/遇到错误时，可以先复现问题/).last()).toBeVisible({
+    await expect(page.getByText(/根据知识库资料|遇到错误时，可以先复现问题/).last()).toBeVisible({
       timeout: 10_000,
     })
 
@@ -58,7 +81,8 @@ test.describe('黄金路径', () => {
           return messages.some(
             (message: { role: string; content: string }) =>
               message.role === 'TEACHER' &&
-              message.content.includes('遇到错误时，可以先复现问题'),
+              (message.content.includes('根据知识库资料') ||
+                message.content.includes('遇到错误时，可以先复现问题')),
           )
         },
         { timeout: 10_000 },
@@ -70,7 +94,7 @@ test.describe('黄金路径', () => {
     await expect(page.getByRole('heading', { name: '训练数据', level: 1 })).toBeVisible()
     await page.getByRole('button', { name: '打开霜铃 AI 教师' }).click()
     await expect(page.getByRole('complementary', { name: '霜铃对话面板' })).toBeVisible()
-    await expect(page.getByText(/遇到错误时，可以先复现问题/).last()).toBeVisible({
+    await expect(page.getByText(/根据知识库资料|遇到错误时，可以先复现问题/).last()).toBeVisible({
       timeout: 10_000,
     })
 

@@ -7,12 +7,19 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
-from app.infrastructure.database.models import StudentProfile, User
+from app.infrastructure.database.models import (
+    KnowledgeChunk,
+    KnowledgeResource,
+    StudentProfile,
+    User,
+)
 from app.infrastructure.database.session import async_session
 from app.main import app
 from app.modules.identity.security import hash_password
 from app.modules.knowledge.ingestion import ingest_text
+from app.modules.knowledge.retrieval import retrieve
 
 
 ADMIN_NAME = "test_knowledge_admin"
@@ -231,6 +238,46 @@ class TestKnowledgeAPI:
         assert missing.status_code == 404
         assert missing.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
 
+    def test_resources_cursor_pagination_has_no_overlap(
+        self,
+        client: TestClient,
+        admin_token: str,
+    ) -> None:
+        first = client.get(
+            "/api/v1/knowledge/resources?status=READY&limit=1",
+            headers=headers(admin_token),
+        )
+        assert first.status_code == 200
+        first_rows = first.json()["data"]
+        assert len(first_rows) == 1
+        assert first.json()["meta"]["has_more"] is True
+        next_cursor = first.json()["meta"]["next_cursor"]
+        assert next_cursor
+
+        second = client.get(
+            f"/api/v1/knowledge/resources?status=READY&limit=1&cursor={next_cursor}",
+            headers=headers(admin_token),
+        )
+        assert second.status_code == 200
+        second_rows = second.json()["data"]
+        assert second_rows
+        assert {
+            row["resource_id"] for row in first_rows
+        }.isdisjoint({row["resource_id"] for row in second_rows})
+
+    def test_search_respects_limit(
+        self,
+        client: TestClient,
+        student_token: str,
+    ) -> None:
+        response = client.post(
+            "/api/v1/knowledge/search",
+            headers=headers(student_token),
+            json={"query": "训练数据", "limit": 2},
+        )
+        assert response.status_code == 200
+        assert len(response.json()["data"]) <= 2
+
     def test_ingestion_is_idempotent(self) -> None:
         unique_url = f"https://test.shuangling.local/training-data-{uuid4()}"
 
@@ -314,3 +361,261 @@ class TestKnowledgeAPI:
         done = next(event for event in events if event["event"] == "text.done")
         assert "根据知识库资料" in done["data"]["content"]
         assert "测试训练数据" in done["data"]["content"]
+
+    def test_search_validation_rejects_empty_query_and_bad_limit(
+        self,
+        client: TestClient,
+        student_token: str,
+    ) -> None:
+        empty = client.post(
+            "/api/v1/knowledge/search",
+            headers=headers(student_token),
+            json={"query": ""},
+        )
+        assert empty.status_code == 422
+
+        for bad_limit in (0, 21):
+            response = client.post(
+                "/api/v1/knowledge/search",
+                headers=headers(student_token),
+                json={"query": "训练数据", "limit": bad_limit},
+            )
+            assert response.status_code == 422
+
+    def test_search_knowledge_point_filter(
+        self,
+        client: TestClient,
+        student_token: str,
+    ) -> None:
+        unique_url = f"https://test.shuangling.local/kp-{uuid4()}"
+
+        async def ingest_with_kp() -> None:
+            async with async_session() as session:
+                await ingest_text(
+                    session,
+                    text=TEST_TEXT,
+                    source_name="知识点测试",
+                    source_url=unique_url,
+                    license="CC-BY-4.0",
+                    copyright_status="测试资源",
+                    knowledge_point_ids=["kp-8c-test"],
+                )
+
+        asyncio.run(ingest_with_kp())
+
+        matched = client.post(
+            "/api/v1/knowledge/search",
+            headers=headers(student_token),
+            json={
+                "query": "雪豹测试语料",
+                "knowledge_point_ids": ["kp-8c-test"],
+            },
+        )
+        assert matched.status_code == 200
+        rows = matched.json()["data"]
+        assert rows
+        assert all("kp-8c-test" in row["knowledge_point_ids"] for row in rows)
+
+        unmatched = client.post(
+            "/api/v1/knowledge/search",
+            headers=headers(student_token),
+            json={
+                "query": "雪豹测试语料",
+                "knowledge_point_ids": ["kp-missing"],
+            },
+        )
+        assert unmatched.status_code == 200
+        assert unmatched.json()["data"] == []
+
+    def test_search_no_hit_returns_empty(
+        self,
+        client: TestClient,
+        student_token: str,
+    ) -> None:
+        # 知识库当前对纯文本无命中会返回 top-N 向量行（mock 无阈值，已上报）；
+        # 这里用不存在的 knowledge_point 过滤验证真正的“空结果”路径。
+        response = client.post(
+            "/api/v1/knowledge/search",
+            headers=headers(student_token),
+            json={
+                "query": "量子菠萝飞船驾驶手册",
+                "knowledge_point_ids": ["kp-does-not-exist"],
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["data"] == []
+
+    def test_failed_resource_chunks_return_empty(
+        self,
+        client: TestClient,
+        admin_token: str,
+    ) -> None:
+        resource_id = uuid4()
+
+        async def insert_failed() -> None:
+            async with async_session() as session:
+                session.add(
+                    KnowledgeResource(
+                        resource_id=resource_id,
+                        source_name="失败资源",
+                        source_url=f"https://test.shuangling.local/failed-{uuid4()}",
+                        license="CC-BY-4.0",
+                        copyright_status="测试资源",
+                        storage_key=f"knowledge/failed-{uuid4()}",
+                        file_type="MARKDOWN",
+                        status="FAILED",
+                        error="embedding failed",
+                    )
+                )
+                await session.flush()
+                session.add(
+                    KnowledgeChunk(
+                        chunk_id=uuid4(),
+                        resource_id=resource_id,
+                        chunk_index=0,
+                        content="pending chunk",
+                        metadata_={},
+                        status="PENDING",
+                    )
+                )
+                await session.commit()
+
+        asyncio.run(insert_failed())
+
+        chunks = client.get(
+            f"/api/v1/knowledge/resources/{resource_id}/chunks",
+            headers=headers(admin_token),
+        )
+        assert chunks.status_code == 200
+        assert chunks.json()["data"] == []
+
+    def test_invalid_file_type_rejected_by_database_check(self) -> None:
+        async def insert_invalid() -> None:
+            async with async_session() as session:
+                session.add(
+                    KnowledgeResource(
+                        resource_id=uuid4(),
+                        source_name="非法类型",
+                        source_url=f"https://test.shuangling.local/invalid-{uuid4()}",
+                        license="CC-BY-4.0",
+                        copyright_status="测试资源",
+                        storage_key=f"knowledge/invalid-{uuid4()}",
+                        file_type="DOCX",
+                        status="UPLOADED",
+                    )
+                )
+                await session.commit()
+
+        with pytest.raises(IntegrityError):
+            asyncio.run(insert_invalid())
+
+    def test_ingestion_failed_status_on_embedding_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def broken_embedding(_text: str) -> list[float]:
+            raise RuntimeError("embedding provider down")
+
+        monkeypatch.setattr(
+            "app.modules.knowledge.ingestion.get_embedding",
+            broken_embedding,
+        )
+        source_url = f"https://test.shuangling.local/fail-{uuid4()}"
+
+        async def ingest_broken() -> None:
+            async with async_session() as session:
+                try:
+                    await ingest_text(
+                        session,
+                        text=TEST_TEXT,
+                        source_name="失败管线",
+                        source_url=source_url,
+                        license="CC-BY-4.0",
+                        copyright_status="测试资源",
+                    )
+                except RuntimeError:
+                    pass
+
+        asyncio.run(ingest_broken())
+
+        async def check() -> tuple[str, str | None]:
+            async with async_session() as session:
+                resource = (
+                    await session.execute(
+                        select(KnowledgeResource).where(
+                            KnowledgeResource.source_url == source_url
+                        )
+                    )
+                ).scalar_one()
+                return resource.status, resource.error
+
+        status, error = asyncio.run(check())
+        assert status == "FAILED"
+        assert error
+
+    def test_chunk_count_and_order_are_correct(
+        self,
+        client: TestClient,
+        admin_token: str,
+    ) -> None:
+        source_url = f"https://test.shuangling.local/order-{uuid4()}"
+        text = "# 第一段\n\n第一段内容。\n\n# 第二段\n\n第二段内容。\n\n# 第三段\n\n第三段内容。"
+
+        async def ingest_ordered() -> UUID:
+            async with async_session() as session:
+                resource_id, count = await ingest_text(
+                    session,
+                    text=text,
+                    source_name="顺序测试",
+                    source_url=source_url,
+                    license="CC-BY-4.0",
+                    copyright_status="测试资源",
+                )
+                assert count == 3
+                return resource_id
+
+        resource_id = asyncio.run(ingest_ordered())
+        chunks = client.get(
+            f"/api/v1/knowledge/resources/{resource_id}/chunks",
+            headers=headers(admin_token),
+        )
+        rows = chunks.json()["data"]
+        assert [row["chunk_index"] for row in rows] == [0, 1, 2]
+
+    def test_retrieve_prefers_selected_text_and_limits_top_n(self) -> None:
+        async def run() -> tuple[int, list[str]]:
+            async with async_session() as session:
+                rows = await retrieve(
+                    session,
+                    "这是什么？",
+                    screen_context={"selected_text": "雪豹测试语料"},
+                    limit=2,
+                )
+                return len(rows), [row.source_name for row in rows]
+
+        count, sources = asyncio.run(run())
+        assert 1 <= count <= 2
+        assert "测试训练数据" in sources
+
+    def test_conversation_falls_back_when_retrieval_empty(
+        self,
+        client: TestClient,
+        student_token: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        async def empty_retrieve(*_args, **_kwargs):
+            return []
+
+        monkeypatch.setattr(
+            "app.modules.conversation.service.retrieve",
+            empty_retrieve,
+        )
+        conversation_id = create_conversation(client, student_token)
+        response = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(student_token),
+            json={"content": "训练数据是什么？"},
+        )
+        assert response.status_code == 200
+        events = parse_sse(response.text)
+        done = next(event for event in events if event["event"] == "text.done")
+        assert "根据知识库资料" not in done["data"]["content"]

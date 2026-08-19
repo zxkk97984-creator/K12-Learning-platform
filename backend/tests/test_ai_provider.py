@@ -76,3 +76,23 @@ def test_mock_provider_cites_knowledge_reference() -> None:
 
     assert "根据知识库资料" in reply
     assert "AI 不是魔法" in reply
+
+
+def test_mock_provider_truncates_long_reference_content() -> None:
+    provider = MockAIProvider()
+    long_content = "雪豹测试语料" * 40
+    system_prompt = (
+        "你是霜铃。\n"
+        "【知识库参考】\n"
+        f"- 内容：{long_content}\n"
+        "- 来源：长文档\n"
+        "- 链接：https://demo/long\n"
+    )
+
+    chunks = _collect_with_system(provider, system_prompt)
+    reply = "".join(chunks)
+
+    assert "根据知识库资料" in reply
+    assert "长文档" in reply
+    snippet = reply.removeprefix("根据知识库资料：").split("（参考：")[0]
+    assert len(snippet) <= 140
