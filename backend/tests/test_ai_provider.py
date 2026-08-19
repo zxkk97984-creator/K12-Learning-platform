@@ -18,6 +18,19 @@ def _collect_chunks(provider: MockAIProvider) -> list[str]:
     return asyncio.run(run())
 
 
+def _collect_with_system(provider: MockAIProvider, system_prompt: str) -> list[str]:
+    async def run() -> list[str]:
+        return [
+            chunk
+            async for chunk in provider.stream_chat(
+                [{"role": "user", "content": "训练数据是什么"}],
+                system_prompt,
+            )
+        ]
+
+    return asyncio.run(run())
+
+
 def test_mock_provider_streams_rule_based_chunks() -> None:
     provider = MockAIProvider(model="test-model")
 
@@ -46,3 +59,20 @@ def test_provider_factory_uses_mock_from_settings() -> None:
     finally:
         settings.ai_provider = original_provider
         settings.ai_model = original_model
+
+
+def test_mock_provider_cites_knowledge_reference() -> None:
+    provider = MockAIProvider()
+    system_prompt = (
+        "你是霜铃。\n"
+        "【知识库参考】\n"
+        "- 内容：训练数据是一组用来帮助机器发现规律的例子。\n"
+        "- 来源：AI 不是魔法\n"
+        "- 链接：https://demo/training\n"
+    )
+
+    chunks = _collect_with_system(provider, system_prompt)
+    reply = "".join(chunks)
+
+    assert "根据知识库资料" in reply
+    assert "AI 不是魔法" in reply

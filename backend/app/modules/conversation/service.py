@@ -31,6 +31,7 @@ from app.modules.conversation.schemas import (
     SendMessageRequest,
 )
 from app.modules.memory.agent_md import build_evidence_reply, is_evidence_question
+from app.modules.knowledge.retrieval import retrieve
 from app.modules.quiz.schemas import CreateQuizSessionRequest
 from app.modules.quiz.service import QuizService
 
@@ -344,11 +345,36 @@ class ConversationService:
                 )
         except Exception:  # pragma: no cover - evidence citation must not break chat
             evidence_reply = None
+        retrieved_chunks = []
+        try:
+            if not quiz_intent and evidence_reply is None:
+                retrieved_chunks = await retrieve(
+                    session,
+                    request.content,
+                    screen_context=current_context,
+                    limit=3,
+                )
+        except Exception:  # pragma: no cover - retrieval must not break chat
+            retrieved_chunks = []
+        reference_block = ""
+        if retrieved_chunks:
+            lines = ["【知识库参考】"]
+            for item in retrieved_chunks:
+                url = item.chunk.metadata.get("source_url", "")
+                lines.append(f"- 内容：{item.chunk.content}")
+                lines.append(f"- 来源：{item.source_name}")
+                lines.append(f"- 链接：{url}")
+            reference_block = "\n".join(lines)
         system_prompt = (
             "你是霜铃，一位耐心、清晰的中文 K12 数字教师。"
             "请根据学生的问题循序解释，鼓励学生自己思考。"
             f"当前页面上下文：{json.dumps(current_context, ensure_ascii=False)}"
         )
+        if reference_block:
+            system_prompt += (
+                f"\n\n{reference_block}\n"
+                "请优先基于知识库参考回答，并在末尾注明（参考：来源名称）。"
+            )
 
         async def stream() -> AsyncIterator[str]:
             yield _sse_frame(

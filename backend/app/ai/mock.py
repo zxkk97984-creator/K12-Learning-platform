@@ -49,18 +49,44 @@ class MockAIProvider(AIProvider):
             "最后用一个小例子检查结论。"
         )
 
+    @staticmethod
+    def _reference_reply(system_prompt: str) -> str | None:
+        marker = "【知识库参考】"
+        if marker not in system_prompt:
+            return None
+        content: str | None = None
+        source: str | None = None
+        in_reference = False
+        for line in system_prompt.splitlines():
+            if line.strip() == marker:
+                in_reference = True
+                continue
+            if not in_reference:
+                continue
+            if line.startswith("- 内容："):
+                content = line[len("- 内容：") :].strip()
+            elif line.startswith("- 来源："):
+                source = line[len("- 来源：") :].strip()
+            elif line.startswith("【"):
+                break
+        if not content:
+            return None
+        snippet = content[:140]
+        return f"根据知识库资料：{snippet}（参考：{source or '知识库'}）"
+
     async def stream_chat(
         self,
         history: Sequence[dict[str, Any]],
         system_prompt: str,
     ) -> AsyncIterator[str]:
-        del system_prompt  # The deterministic mock only needs the latest user turn.
         content = ""
         for message in reversed(history):
             if message.get("role") in {"user", "student", "STUDENT"}:
                 content = str(message.get("content", ""))
                 break
-        reply = self._reply_for(content)[: self.max_tokens]
+        reply = (
+            self._reference_reply(system_prompt) or self._reply_for(content)
+        )[: self.max_tokens]
         for start in range(0, len(reply), self.chunk_size):
             await asyncio.sleep(self.delay_seconds)
             yield reply[start : start + self.chunk_size]

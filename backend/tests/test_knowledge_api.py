@@ -1,13 +1,14 @@
 """Phase 8 Knowledge API / ingestion tests (real PostgreSQL + pgvector)."""
 
 import asyncio
+import json
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.infrastructure.database.models import User
+from app.infrastructure.database.models import StudentProfile, User
 from app.infrastructure.database.session import async_session
 from app.main import app
 from app.modules.identity.security import hash_password
@@ -26,6 +27,10 @@ TEST_TEXT = """# 训练数据
 # 特征与标签
 
 训练数据包含“机器看到的内容”和“我们希望它学会的答案”，也就是特征和标签。
+
+# 雪豹测试语料
+
+雪豹测试语料是一种用于验证检索注入的独特标记。
 """
 
 
@@ -43,7 +48,25 @@ def _ensure_user(username: str, password: str, user_type: str) -> None:
                         user_type=user_type,
                     )
                 )
-                await session.commit()
+                await session.flush()
+            if user_type == "STUDENT":
+                profile = (
+                    await session.execute(
+                        select(StudentProfile).where(
+                            StudentProfile.user_id == user.user_id
+                        )
+                    )
+                ).scalar_one_or_none()
+                if profile is None:
+                    session.add(
+                        StudentProfile(
+                            user_id=user.user_id,
+                            nickname="知识学生",
+                            grade=8,
+                            language="zh-CN",
+                        )
+                    )
+            await session.commit()
 
     asyncio.run(run())
 
@@ -55,7 +78,7 @@ def _ingest_test_resource() -> UUID:
                 session,
                 text=TEST_TEXT,
                 source_name="测试训练数据",
-                source_url="https://test.shuangling.local/training-data",
+                source_url=f"https://test.shuangling.local/training-data-{uuid4()}",
                 license="CC-BY-4.0",
                 copyright_status="测试资源",
             )
@@ -98,6 +121,35 @@ def resource_id() -> UUID:
 
 def headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def parse_sse(raw: str) -> list[dict]:
+    events: list[dict] = []
+    for frame in raw.split("\n\n"):
+        if not frame.strip() or frame.lstrip().startswith(":"):
+            continue
+        event_name = None
+        data_lines: list[str] = []
+        for line in frame.splitlines():
+            if line.startswith("event: "):
+                event_name = line[7:]
+            elif line.startswith("data: "):
+                data_lines.append(line[6:])
+        if event_name is not None:
+            events.append(
+                {"event": event_name, "data": json.loads("\n".join(data_lines))}
+            )
+    return events
+
+
+def create_conversation(client: TestClient, token: str) -> str:
+    response = client.post(
+        "/api/v1/conversations",
+        headers=headers(token),
+        json={"title": "RAG 注入测试"},
+    )
+    assert response.status_code == 201
+    return response.json()["data"]["conversation_id"]
 
 
 class TestKnowledgeAPI:
@@ -205,3 +257,60 @@ class TestKnowledgeAPI:
         first_count, second_count = asyncio.run(run())
         assert first_count >= 1
         assert second_count == 0
+
+    def test_conversation_injects_retrieved_knowledge(
+        self,
+        client: TestClient,
+        student_token: str,
+    ) -> None:
+        conversation_id = create_conversation(client, student_token)
+        response = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(student_token),
+            json={"content": "雪豹测试语料是什么？"},
+        )
+        assert response.status_code == 200
+        events = parse_sse(response.text)
+        done = next(event for event in events if event["event"] == "text.done")
+        assert "根据知识库资料" in done["data"]["content"]
+        assert "测试训练数据" in done["data"]["content"]
+
+    def test_conversation_skips_retrieval_for_unrelated_question(
+        self,
+        client: TestClient,
+        student_token: str,
+    ) -> None:
+        conversation_id = create_conversation(client, student_token)
+        response = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(student_token),
+            json={"content": "今天天气怎么样？"},
+        )
+        assert response.status_code == 200
+        events = parse_sse(response.text)
+        done = next(event for event in events if event["event"] == "text.done")
+        assert "根据知识库资料" not in done["data"]["content"]
+
+    def test_screen_context_selected_text_boosts_retrieval(
+        self,
+        client: TestClient,
+        student_token: str,
+    ) -> None:
+        conversation_id = create_conversation(client, student_token)
+        response = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(student_token),
+            json={
+                "content": "这是什么？",
+                "screen_context": {
+                    "route": "/learn/ch3",
+                    "page_type": "chapter_reader",
+                    "selected_text": "雪豹测试语料",
+                },
+            },
+        )
+        assert response.status_code == 200
+        events = parse_sse(response.text)
+        done = next(event for event in events if event["event"] == "text.done")
+        assert "根据知识库资料" in done["data"]["content"]
+        assert "测试训练数据" in done["data"]["content"]
