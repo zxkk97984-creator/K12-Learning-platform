@@ -50,7 +50,7 @@
 
 ## Follow-up backlog（跨 Phase 长期）
 ### Phase 2 前（启动时先处理）
-- 后端技术栈落地：FastAPI + SQLAlchemy2 + Alembic + Pydantic，Docker Compose 起 postgres（pgvector/pg16 与架构文档 PG18 版本对齐决策）
+- ~~后端技术栈落地~~：已决策（见「已裁定决策」）
 - docker-compose 默认口令 shuangling123 → 接真实环境前替换
 - 总控文件旧路径引用（§65/203/551）修订（Hermes 决定是否动总控文件）
 ### Phase 1 遗留（不阻塞）
@@ -68,6 +68,10 @@
 
 ## 已裁定决策（长期有效）
 - 级联删除 RESTRICT；Quiz 幂等重放；ProfileInsight 五档；JWT Bearer；GET /teacher-roles 归 Identity；learning_sessions 单一 ACTIVE 部分唯一索引；稳定记忆 ≥2 证据。
+- **Phase 2 三大决策（用户 2026-08-19 裁定）**：
+  1. PostgreSQL 统一 PG18 + pgvector（`pgvector/pgvector:pg18`），不再保留 PG16 双版本；database-design/架构文档已一致为 PG18。
+  2. Python 后端统一 uv 管理：pyproject.toml + uv.lock + 项目级 .venv，Python 3.12，`uv sync`/`uv run`。
+  3. DB 按需在 Phase 2 启动，不在首条任务前常驻；顺序 2-A(骨架)→2-B(起 DB+Migration)→2-C(API 集成)。
 
 ## 执行端
 - Codex：herdr pane `w1:p6`，模型 deepseek-v4-flash max
