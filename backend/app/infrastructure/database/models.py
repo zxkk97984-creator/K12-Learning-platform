@@ -17,8 +17,16 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.types import UserDefinedType
 
 from app.infrastructure.database.base import Base
+
+
+class VECTOR(UserDefinedType):
+    """Minimal pgvector type binding; HNSW index lands in Phase 8."""
+
+    def get_col_spec(self, **kw):  # pragma: no cover - SQLAlchemy DDL helper
+        return "VECTOR"
 
 
 class User(Base):
@@ -711,6 +719,110 @@ class MemoryEvidence(Base):
     last_occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     derived_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     rule_version: Mapped[str] = mapped_column(String(64))
+
+
+class StudentEpisode(Base):
+    """student_episodes（0-E §3.22；情节记忆，embedding Phase 8）。"""
+
+    __tablename__ = "student_episodes"
+    __table_args__ = (
+        CheckConstraint(
+            "importance IN ('LOW','MEDIUM','HIGH')",
+            name="ck_student_episodes_importance",
+        ),
+        Index(
+            "ix_student_episodes_student_occurred",
+            "student_id",
+            text("occurred_at DESC"),
+        ),
+    )
+
+    episode_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    title: Mapped[str] = mapped_column(String(255))
+    summary: Mapped[str] = mapped_column(Text)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    event_ids: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+    book_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="RESTRICT")
+    )
+    chapter_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("chapters.chapter_id", ondelete="RESTRICT"),
+    )
+    knowledge_point_ids: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+    # pgvector 列 Phase 8 才写入；本阶段只建列不建 HNSW 索引。
+    embedding: Mapped[VECTOR | None] = mapped_column(VECTOR)
+    importance: Mapped[str] = mapped_column(String(8))
+    tags: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ProfileInsight(Base):
+    """profile_insights（0-E §3.23；5 档定性画像，禁止数字评分列）。"""
+
+    __tablename__ = "profile_insights"
+    __table_args__ = (
+        CheckConstraint(
+            "insight_type IN ('STRENGTH','WEAKNESS','UNDERSTANDING','HABIT','CHANGE','INTEREST')",
+            name="ck_profile_insights_type",
+        ),
+        CheckConstraint(
+            "level IN ('偏弱','一般','较稳定','较强','仍需观察')",
+            name="ck_profile_insights_level",
+        ),
+        CheckConstraint(
+            "status IN ('ACTIVE','SUPERSEDED')",
+            name="ck_profile_insights_status",
+        ),
+        CheckConstraint(
+            "valid_until IS NULL OR valid_until >= valid_from",
+            name="ck_profile_insights_valid_range",
+        ),
+        Index(
+            "ix_profile_insights_student_status_valid",
+            "student_id",
+            "status",
+            text("valid_from DESC"),
+        ),
+    )
+
+    insight_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    insight_type: Mapped[str] = mapped_column(String(24))
+    dimension: Mapped[str] = mapped_column(String(64))
+    level: Mapped[str] = mapped_column(String(8))
+    description: Mapped[str] = mapped_column(Text)
+    evidence_ids: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'ACTIVE'"))
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rule_version: Mapped[str] = mapped_column(String(64))
+    model_info: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class QuizSession(Base):

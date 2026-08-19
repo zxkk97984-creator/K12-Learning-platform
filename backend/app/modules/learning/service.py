@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -26,6 +27,8 @@ from app.modules.learning.schemas import (
     PatchLearningSessionRequest,
     UpsertBookProgressRequest,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _encode_cursor(occurred_at: datetime, event_id: UUID) -> str:
@@ -196,6 +199,12 @@ class LearningService:
         session.add(event)
         await session.commit()
         await session.refresh(event)
+        try:
+            from app.modules.memory.pipeline import MemoryPipeline
+
+            await MemoryPipeline().process_student(session, student_id)
+        except Exception:  # pragma: no cover - telemetry must not break writes
+            logger.warning("memory pipeline failed after learning event", exc_info=True)
         return LearningEventDTO.model_validate(event)
 
     async def get_progress(self, session: AsyncSession, user_id: UUID) -> list[BookProgressDTO]:

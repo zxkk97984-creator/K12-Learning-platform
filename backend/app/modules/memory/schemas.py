@@ -12,6 +12,12 @@ CandidateStatus = Literal["PENDING", "APPROVED", "REJECTED", "MERGED"]
 EvidenceSourceType = Literal[
     "QUIZ", "LEARNING_SESSION", "CONVERSATION", "BOOK_PROGRESS"
 ]
+InsightType = Literal[
+    "STRENGTH", "WEAKNESS", "UNDERSTANDING", "HABIT", "CHANGE", "INTEREST"
+]
+InsightLevel = Literal["偏弱", "一般", "较稳定", "较强", "仍需观察"]
+InsightStatus = Literal["ACTIVE", "SUPERSEDED"]
+EpisodeImportance = Literal["LOW", "MEDIUM", "HIGH"]
 
 
 class StudentMemoryDTO(BaseModel):
@@ -60,6 +66,42 @@ class MemoryEvidenceDTO(BaseModel):
     last_occurred_at: datetime | None
     derived_at: datetime
     rule_version: str
+
+
+class ProfileInsightDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    insight_id: UUID
+    student_id: UUID
+    insight_type: InsightType
+    dimension: str
+    level: InsightLevel
+    description: str
+    evidence_ids: list
+    status: InsightStatus
+    valid_from: datetime
+    valid_until: datetime | None
+    rule_version: str
+    model_info: dict | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class StudentEpisodeDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    episode_id: UUID
+    student_id: UUID
+    title: str
+    summary: str
+    occurred_at: datetime
+    event_ids: list
+    book_id: UUID | None
+    chapter_id: UUID | None
+    knowledge_point_ids: list
+    importance: EpisodeImportance
+    tags: list
+    created_at: datetime
 
 
 class PatchMemoryRequest(BaseModel):

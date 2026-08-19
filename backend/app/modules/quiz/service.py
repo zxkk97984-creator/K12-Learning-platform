@@ -1,6 +1,7 @@
 import base64
 import binascii
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -34,6 +35,9 @@ from app.modules.quiz.schemas import (
     SubmitQuizAnswerRequest,
 )
 from app.skills.registry import get_skill
+
+
+logger = logging.getLogger(__name__)
 
 
 MAX_ATTEMPTS = 3
@@ -553,6 +557,12 @@ class QuizService:
         quiz_session.updated_at = now
         await session.commit()
         await session.refresh(answer)
+        try:
+            from app.modules.memory.pipeline import MemoryPipeline
+
+            await MemoryPipeline().process_student(session, profile.student_id)
+        except Exception:  # pragma: no cover - grading must not break on telemetry
+            logger.warning("memory pipeline failed after quiz answer", exc_info=True)
         return _answer_dto(answer), False
 
     async def _find_hint_replay(
