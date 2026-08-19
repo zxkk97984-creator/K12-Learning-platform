@@ -110,4 +110,83 @@ describe('conversation store real service lifecycle', () => {
       messages: [expect.objectContaining({ content: '历史回复', role: 'ai' })],
     })
   })
+
+  it('收到 SSE error callback 时追加 error 类型消息', async () => {
+    mocks.conversationService.sendMessage.mockImplementation(
+      async (_id: string, _input: unknown, callbacks?: SendMessageCallbacks) => {
+        callbacks?.onError?.({
+          code: 'AI_PROVIDER_ERROR',
+          message: 'AI provider unavailable',
+          fatal: true,
+        })
+      },
+    )
+
+    await useConversationStore.getState().send('触发错误事件')
+
+    expect(useConversationStore.getState().messages).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: '触发错误事件',
+      }),
+      expect.objectContaining({
+        role: 'ai',
+        kind: 'error',
+        content: expect.stringContaining('AI provider unavailable'),
+      }),
+    ])
+  })
+
+  it('收到 text.done 后以最终正文结束流式消息', async () => {
+    mocks.conversationService.sendMessage.mockImplementation(
+      async (_id: string, _input: unknown, callbacks?: SendMessageCallbacks) => {
+        callbacks?.onStart?.({
+          message_id: 'teacher-done',
+          conversation_id: 'conversation-1',
+          role: 'TEACHER',
+          type: 'TEXT',
+          sequence: 2,
+        })
+        callbacks?.onTextDone?.({
+          message_id: 'teacher-done',
+          content: '最终完整答案',
+        })
+        callbacks?.onDone?.({
+          message_id: 'teacher-done',
+          conversation_id: 'conversation-1',
+          sequence: 2,
+        })
+      },
+    )
+
+    await useConversationStore.getState().send('只发送最终正文')
+
+    expect(useConversationStore.getState().messages).toEqual([
+      expect.objectContaining({ role: 'user', content: '只发送最终正文' }),
+      expect.objectContaining({
+        id: 'teacher-done',
+        role: 'ai',
+        kind: 'text',
+        content: '最终完整答案',
+        streaming: false,
+      }),
+    ])
+  })
+
+  it('发送请求被拒绝时也显示 error 类型消息', async () => {
+    mocks.conversationService.sendMessage.mockRejectedValue(
+      new Error('stream disconnected'),
+    )
+
+    await useConversationStore.getState().send('触发断流')
+
+    expect(useConversationStore.getState().messages).toEqual([
+      expect.objectContaining({ role: 'user', content: '触发断流' }),
+      expect.objectContaining({
+        role: 'ai',
+        kind: 'error',
+        content: 'stream disconnected',
+      }),
+    ])
+  })
 })

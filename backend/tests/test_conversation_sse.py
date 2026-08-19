@@ -136,6 +136,15 @@ class FailingProvider(AIProvider):
             yield ""
 
 
+class OneChunkProvider(AIProvider):
+    provider = "heartbeat-test"
+    model = "heartbeat-test-model"
+
+    async def stream_chat(self, history, system_prompt):
+        del history, system_prompt
+        yield "心跳后内容"
+
+
 class TestConversationSSE:
     def test_stream_order_and_message_persistence(
         self, client: TestClient, token: str
@@ -274,3 +283,61 @@ class TestConversationSSE:
         assert [event["event"] for event in events] == ["message.start", "error"]
         assert events[-1]["data"]["code"] == "AI_PROVIDER_ERROR"
         assert events[-1]["data"]["fatal"] is True
+
+    def test_provider_failure_keeps_student_message_but_not_teacher_message(
+        self, client: TestClient, token: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        conversation_id = create_conversation(client, token)
+        monkeypatch.setattr(
+            "app.modules.conversation.service.get_ai_provider",
+            lambda: FailingProvider(),
+        )
+
+        response = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(token),
+            json={"content": "provider 失败后的落库检查"},
+        )
+
+        assert response.status_code == 200
+        messages = client.get(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(token),
+        )
+        assert messages.status_code == 200
+        rows = messages.json()["data"]
+        assert [(row["role"], row["content"]) for row in rows] == [
+            ("STUDENT", "provider 失败后的落库检查")
+        ]
+
+    def test_provider_chunks_emits_heartbeat_without_waiting_fifteen_seconds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.modules.conversation import service as conversation_service_module
+
+        real_wait_for = conversation_service_module.asyncio.wait_for
+        timed_out = False
+
+        async def wait_for_once(awaitable, timeout):
+            nonlocal timed_out
+            if timeout == 15 and not timed_out:
+                timed_out = True
+                awaitable.close()
+                raise asyncio.TimeoutError
+            return await real_wait_for(awaitable, timeout)
+
+        monkeypatch.setattr(
+            conversation_service_module.asyncio, "wait_for", wait_for_once
+        )
+
+        async def collect_chunks() -> list[str | None]:
+            service = conversation_service_module.ConversationService()
+            return [
+                chunk
+                async for chunk in service._provider_chunks(
+                    OneChunkProvider(), [], ""
+                )
+            ]
+
+        chunks = asyncio.run(collect_chunks())
+        assert chunks == [None, "心跳后内容"]

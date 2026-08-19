@@ -335,6 +335,68 @@ class TestConversationAPI:
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "CONVERSATION_NOT_FOUND"
 
+    def test_patch_is_owner_scoped_and_missing_conversation_is_not_found(
+        self,
+        client: TestClient,
+        token: str,
+        other_token: str,
+    ) -> None:
+        conversation = create_conversation(client, token, {"title": "权限边界"})
+        conversation_id = conversation["conversation_id"]
+
+        forbidden = client.patch(
+            f"/api/v1/conversations/{conversation_id}",
+            headers=headers(other_token),
+            json={"title": "越权修改"},
+        )
+        assert forbidden.status_code == 403
+        assert forbidden.json()["error"]["code"] == "FORBIDDEN"
+
+        missing = client.patch(
+            f"/api/v1/conversations/{uuid4()}",
+            headers=headers(token),
+            json={"title": "不存在"},
+        )
+        assert missing.status_code == 404
+        assert missing.json()["error"]["code"] == "CONVERSATION_NOT_FOUND"
+
+    @pytest.mark.parametrize("suffix", ["/messages", "/summary"])
+    def test_missing_nested_conversation_returns_not_found(
+        self, client: TestClient, token: str, suffix: str
+    ) -> None:
+        response = client.get(
+            f"/api/v1/conversations/{uuid4()}{suffix}", headers=headers(token)
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "CONVERSATION_NOT_FOUND"
+
+    def test_patch_rejects_unknown_status_before_service_call(
+        self, client: TestClient, token: str
+    ) -> None:
+        conversation = create_conversation(client, token)
+        response = client.patch(
+            f"/api/v1/conversations/{conversation['conversation_id']}",
+            headers=headers(token),
+            json={"status": "UNKNOWN"},
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    def test_list_channel_filter_is_scoped_to_requested_channel(
+        self, client: TestClient, token: str
+    ) -> None:
+        voice = create_conversation(client, token, {"channel": "VOICE"})
+        response = client.get(
+            "/api/v1/conversations?channel=VOICE", headers=headers(token)
+        )
+        assert response.status_code == 200
+        rows = response.json()["data"]
+        assert rows
+        assert voice["conversation_id"] in {
+            row["conversation_id"] for row in rows
+        }
+        assert {row["channel"] for row in rows} == {"VOICE"}
+
     @pytest.mark.parametrize(
         "query",
         [

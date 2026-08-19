@@ -106,4 +106,24 @@ describe('ApiMemoryService', () => {
       new ApiError(401, 'UNAUTHENTICATED', 'missing bearer token'),
     )
   })
+
+  it.each([
+    ['CONFIRM', undefined],
+    ['DISPUTE', undefined],
+    ['FORGET', undefined],
+  ] as const)('分别发送 %s 动作', async (action, content) => {
+    const fetchMock = vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(200, { data: memory }),
+    )
+
+    await service.updateMemory('memory-1', action, content)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/me/memories/memory-1',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ action }),
+      }),
+    )
+  })
 })

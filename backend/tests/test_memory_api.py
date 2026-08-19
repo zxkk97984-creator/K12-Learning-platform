@@ -262,6 +262,75 @@ class TestMemoryAPI:
         assert missing.status_code == 404
         assert missing.json()["error"]["code"] == "EVIDENCE_NOT_FOUND"
 
+    def test_evidence_endpoint_requires_authentication(
+        self, client: TestClient, token: str
+    ) -> None:
+        _, evidence_id = _insert_memory(USER_NAME)
+        del token
+        response = client.get(f"/api/v1/me/evidence/{evidence_id}")
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "UNAUTHENTICATED"
+
+    def test_missing_memory_returns_not_found(
+        self, client: TestClient, token: str
+    ) -> None:
+        response = client.patch(
+            f"/api/v1/me/memories/{uuid4()}",
+            headers=headers(token),
+            json={"action": "CONFIRM"},
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "MEMORY_NOT_FOUND"
+
+    @pytest.mark.parametrize(
+        ("action", "payload"),
+        [
+            ("CONFIRM", {}),
+            ("DISPUTE", {}),
+            ("EDIT", {"content": "REMOVED 后不允许新版本"}),
+        ],
+    )
+    def test_removed_memory_rejects_every_mutating_action(
+        self,
+        client: TestClient,
+        token: str,
+        action: str,
+        payload: dict,
+    ) -> None:
+        memory_id, _ = _insert_memory(USER_NAME)
+        endpoint = f"/api/v1/me/memories/{memory_id}"
+        forgotten = client.patch(
+            endpoint, headers=headers(token), json={"action": "FORGET"}
+        )
+        assert forgotten.status_code == 200
+        assert forgotten.json()["data"]["status"] == "REMOVED"
+
+        rejected = client.patch(
+            endpoint,
+            headers=headers(token),
+            json={"action": action, **payload},
+        )
+        assert rejected.status_code == 409
+        assert rejected.json()["error"]["code"] == "MEMORY_INVALID_TRANSITION"
+
+    def test_removed_status_filter_returns_soft_deleted_memory(
+        self, client: TestClient, token: str
+    ) -> None:
+        memory_id, _ = _insert_memory(USER_NAME)
+        forgotten = client.patch(
+            f"/api/v1/me/memories/{memory_id}",
+            headers=headers(token),
+            json={"action": "FORGET"},
+        )
+        assert forgotten.status_code == 200
+
+        response = client.get(
+            "/api/v1/me/memories?status=REMOVED", headers=headers(token)
+        )
+        assert response.status_code == 200
+        rows = response.json()["data"]
+        assert memory_id in {UUID(row["memory_id"]) for row in rows}
+
     def test_invalid_action_and_memory_type_are_validation_errors(
         self, client: TestClient, token: str
     ) -> None:

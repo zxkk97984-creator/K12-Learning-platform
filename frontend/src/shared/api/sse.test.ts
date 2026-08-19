@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { fetchSSE } from './sse'
+import { fetchSSE, parseSSEFrame } from './sse'
 
 function streamResponse(chunks: Uint8Array[]): Response {
   return {
@@ -85,5 +85,63 @@ describe('fetchSSE', () => {
     expect(fetchMock.mock.calls[0][1]).toEqual(
       expect.objectContaining({ signal: controller.signal }),
     )
+  })
+
+  it('支持 CRLF 帧、多个 data 行，并在 JSON 失败时保留原文', () => {
+    const event = parseSSEFrame(
+      'id: plain-1\r\n' +
+        'event: text.delta\r\n' +
+        'data: 第一行\r\n' +
+        'data: 第二行\r\n',
+    )
+
+    expect(event).toEqual({
+      id: 'plain-1',
+      event: 'text.delta',
+      data: '第一行\n第二行',
+      rawData: '第一行\n第二行',
+    })
+  })
+
+  it('忽略单独的心跳注释帧', () => {
+    expect(parseSSEFrame(': ping\r\n')).toBeNull()
+  })
+
+  it('在 UTF-8 中文字符被拆到不同 chunk 时仍能解析完整事件', async () => {
+    const source = 'event: text.delta\ndata: {"delta":"霜铃"}\n\n'
+    const encoder = new TextEncoder()
+    const encoded = encoder.encode(source)
+    const prefixLength = encoder.encode('event: text.delta\ndata: {"delta":"').length
+    const fetchMock = vi.mocked(fetch).mockResolvedValue(
+      streamResponse([encoded.slice(0, prefixLength + 1), encoded.slice(prefixLength + 1)]),
+    )
+    const events: unknown[] = []
+
+    await fetchSSE('/api/v1/conversations/c1/messages', {
+      onEvent: (_eventType, data) => {
+        events.push(data)
+      },
+    })
+
+    expect(events).toEqual([{ delta: '霜铃' }])
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('将非 2xx SSE 响应映射为 ApiError，并通知 onError', async () => {
+    const error = { status: 401, code: 'UNAUTHENTICATED', message: '登录已过期' }
+    const onError = vi.fn()
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: { code: error.code, message: error.message } }),
+    } as Response)
+
+    await expect(
+      fetchSSE('/api/v1/conversations/c1/messages', {
+        onEvent: vi.fn(),
+        onError,
+      }),
+    ).rejects.toMatchObject(error)
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining(error))
   })
 })
