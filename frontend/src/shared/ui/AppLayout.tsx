@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 
+import { useAuth } from '@/features/auth'
 import { Companion } from '@/features/companion'
 import { ToastHost } from '@/features/feedback'
 
@@ -13,6 +14,9 @@ const NAV_ITEMS = [
 ] as const
 
 export function AppLayout() {
+  const { currentUser, logout } = useAuth()
+  const navigate = useNavigate()
+
   // 学段适配恢复（对齐原型 localStorage['shuangling-age']；1-B html[data-age]）
   useEffect(() => {
     const saved = window.localStorage.getItem('shuangling-age')
@@ -20,6 +24,11 @@ export function AppLayout() {
       document.documentElement.dataset.age = saved
     }
   }, [])
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login', { replace: true })
+  }
 
   return (
     <div className="min-h-screen bg-bg font-body text-fg">
@@ -46,6 +55,31 @@ export function AppLayout() {
               </NavLink>
             ))}
           </nav>
+          <div className="flex items-center gap-2.5">
+            {currentUser ? (
+              <>
+                <span className="grid h-[30px] w-[30px] place-items-center rounded-full bg-fg font-display text-sm text-surface">
+                  {currentUser.nickname.slice(0, 1)}
+                </span>
+                <span className="text-sm text-fg">{currentUser.nickname}</span>
+                <button
+                  type="button"
+                  aria-label="退出登录"
+                  className="rounded-[10px] px-2.5 py-1.5 text-xs text-muted hover:bg-fg-soft hover:text-fg"
+                  onClick={() => void handleLogout()}
+                >
+                  退出
+                </button>
+              </>
+            ) : (
+              <Link
+                to="/login"
+                className="rounded-[10px] border border-border bg-surface px-3 py-1.5 text-xs text-fg hover:border-fg"
+              >
+                登录
+              </Link>
+            )}
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-[var(--content)] px-gutter">

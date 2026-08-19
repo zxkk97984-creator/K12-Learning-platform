@@ -6,6 +6,7 @@ import type {
   PreferredSessionLength,
 } from '@/entities/student/types'
 import { deriveStage, type TeacherRole } from '@/entities/student/types'
+import { useAuth } from '@/features/auth'
 import { useToastStore } from '@/features/feedback'
 import { studentService, teacherRoleService } from '@/mocks/services'
 
@@ -32,6 +33,7 @@ function applyAge(age: 'primary' | 'junior' | 'senior'): void {
 
 export default function SettingsPage() {
   const showToast = useToastStore((state) => state.showToast)
+  const { currentUser, refreshMe } = useAuth()
   const [nickname, setNickname] = useState('')
   const [grade, setGrade] = useState(8)
   const [language, setLanguage] = useState('zh-CN')
@@ -45,24 +47,27 @@ export default function SettingsPage() {
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
+    if (!currentUser) {
+      setLoaded(true)
+      return
+    }
     void (async () => {
       try {
-        const [me, prefs, roleList] = await Promise.all([
-          studentService.getMe(),
+        const [prefs, roleList] = await Promise.all([
           studentService.getPreferences(),
           teacherRoleService.getRoles(),
         ])
-        setNickname(me.nickname)
-        setGrade(me.grade)
-        setLanguage(me.language)
-        setLearningGoal(me.learning_goal ?? '')
+        setNickname(currentUser.nickname)
+        setGrade(currentUser.grade)
+        setLanguage(currentUser.language)
+        setLearningGoal(currentUser.learning_goal ?? '')
         setStyle(prefs.preferred_explanation_style)
         setDifficulty(prefs.preferred_difficulty)
         setSessionLength(prefs.preferred_session_length)
-        setRoleId(me.current_teacher_role_id ?? 'role-shuangling')
+        setRoleId(currentUser.current_teacher_role_id ?? 'role-shuangling')
         setRoles(roleList)
       } catch {
-        // 2-D：studentService 已走真实 API，未登录时保留默认表单（保存需登录）
+        // 保留默认表单
       }
       const saved = window.localStorage.getItem('shuangling-age')
       if (saved === 'primary' || saved === 'senior' || saved === 'junior') {
@@ -71,13 +76,28 @@ export default function SettingsPage() {
       }
       setLoaded(true)
     })()
-  }, [])
+  }, [currentUser])
 
   const save = async () => {
-    await studentService.updateMe({ nickname, grade, language, learning_goal: learningGoal || null, current_teacher_role_id: roleId })
-    await studentService.updatePreferences({ preferred_explanation_style: style, preferred_difficulty: difficulty, preferred_session_length: sessionLength })
-    applyAge(age)
-    showToast('设置已保存')
+    try {
+      await studentService.updateMe({
+        nickname,
+        grade,
+        language,
+        learning_goal: learningGoal || null,
+        current_teacher_role_id: roleId,
+      })
+      await studentService.updatePreferences({
+        preferred_explanation_style: style,
+        preferred_difficulty: difficulty,
+        preferred_session_length: sessionLength,
+      })
+      applyAge(age)
+      await refreshMe()
+      showToast('设置已保存')
+    } catch {
+      showToast('保存失败，请重试')
+    }
   }
 
   if (!loaded) {

@@ -2,7 +2,22 @@ import { expect, test } from '@playwright/test'
 
 // 黄金路径（总控 §10.8）：Home → Reader → Companion → 对话 → Mock Quiz → 答题 → History → Profile
 test.describe('黄金路径', () => {
+  let accessToken = ''
+
+  test.beforeAll(async ({ request }) => {
+    // 2-E：受保护路由需登录；用后端 seed 账号换取 token 注入（需后端 + vite proxy 可用）
+    const response = await request.post('/api/v1/auth/login', {
+      data: { username: 'xiaoming', password: 'demo123' },
+    })
+    expect(response.ok()).toBeTruthy()
+    accessToken = (await response.json()).data.access_token
+  })
+
   test('完整学习闭环', async ({ page }) => {
+    await page.addInitScript((token) => {
+      window.localStorage.setItem('shuangling-access-token', token)
+    }, accessToken)
+
     // 1. 首页加载
     await page.goto('/home')
     await expect(page.getByRole('heading', { name: '晚上好，小明。' })).toBeVisible()

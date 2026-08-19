@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import type { ProfileInsight, StudentMemory } from '@/entities/memory/types'
 import type { StudentPreference, StudentProfile } from '@/entities/student/types'
+import { useAuth } from '@/features/auth'
 import { useCompanionStore } from '@/features/companion'
 import { useConversationStore } from '@/features/conversation'
 import { useToastStore } from '@/features/feedback'
@@ -54,6 +56,7 @@ function buildMarkdown(profile: StudentProfile, prefs: StudentPreference, insigh
 export default function ProfilePage() {
   const runIntent = useConversationStore((state) => state.runIntent)
   const showToast = useToastStore((state) => state.showToast)
+  const { currentUser } = useAuth()
   const [profile, setProfile] = useState<StudentProfile | null>(null)
   const [prefs, setPrefs] = useState<StudentPreference | null>(null)
   const [insights, setInsights] = useState<ProfileInsight[]>([])
@@ -65,24 +68,23 @@ export default function ProfilePage() {
 
   const load = useCallback(async () => {
     try {
-      const [me, preference, insightList, memoryList] = await Promise.all([
-        studentService.getMe(),
+      const [preference, insightList, memoryList] = await Promise.all([
         studentService.getPreferences(),
         memoryService.getInsights(),
         memoryService.getMemories(),
       ])
-      setProfile(me)
       setPrefs(preference)
       setInsights(insightList)
       setMemories(memoryList)
     } catch {
-      // 2-D：studentService 已走真实 API，未登录/后端不可用时降级为空态（2-E 登录后恢复）
+      // 后端不可用时降级为空态
     }
   }, [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    setProfile(currentUser)
+    if (currentUser) void load()
+  }, [currentUser, load])
 
   const openArchive = () => {
     setView('archive')
@@ -109,7 +111,14 @@ export default function ProfilePage() {
       <section className="py-10">
         <p className="font-mono text-xs uppercase tracking-widest text-accent">成长 · AI 学习画像</p>
         <h1 className="mt-3 font-display text-4xl text-fg">霜铃眼中的你。</h1>
-        <p className="mt-4 text-sm text-muted">学习画像暂不可用（请先登录，2-E 接入登录页）。</p>
+        <p className="mt-4 text-sm text-muted">
+          学习画像暂不可用
+          {!currentUser ? (
+            <Link to="/login" className="ml-2 text-accent hover:underline">
+              去登录 →
+            </Link>
+          ) : null}
+        </p>
       </section>
     )
   }
