@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+/*
+ * 霜铃设计系统 token（Task 1-B）
+ * 来源：prototypes/shuangling-v3-prototype.html <style> :root（唯一权威）
+ * 说明：oklch / color-mix 值原样保留；color-mix 内部引用改用 --color-* 命名空间，
+ *       并保留 --bg/--fg/--accent/--muted 等原型原始变量作为兼容别名。
+ */
+
+@theme {
+  /* ---- 颜色（原型 :root）---- */
+  --color-bg: oklch(99% 0.002 240);
+  --color-surface: oklch(100% 0 0);
+  --color-fg: oklch(18% 0.012 250);
+  --color-muted: oklch(54% 0.012 250);
+  --color-border: oklch(92% 0.005 250);
+  --color-accent: oklch(58% 0.18 255);
+  --color-accent-soft: color-mix(in oklch, var(--color-accent) 12%, transparent);
+  --color-accent-faint: color-mix(in oklch, var(--color-accent) 6%, transparent);
+  --color-fg-soft: color-mix(in oklch, var(--color-fg) 6%, transparent);
+  --color-muted-soft: color-mix(in oklch, var(--color-muted) 11%, transparent);
+  --color-shadow: 0 18px 50px color-mix(in oklch, var(--color-fg) 11%, transparent);
+
+  /* 原型变量兼容别名（供 color-mix 与后续组件直接引用原型命名） */
+  --bg: var(--color-bg);
+  --surface: var(--color-surface);
+  --fg: var(--color-fg);
+  --muted: var(--color-muted);
+  --border: var(--color-border);
+  --accent: var(--color-accent);
+
+  /* ---- 字体 ---- */
+  --font-display: 'Iowan Old Style', 'Charter', Georgia, 'Times New Roman', serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+  /* ---- 字号 / 间距 / 圆角 / 缓动 ---- */
+  --fs-body: 15px;
+  --text-body: 15px;
+  --spacing-gutter: clamp(20px, 4vw, 56px);
+  --content: 1380px;
+  --radius: 14px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-standard: cubic-bezier(0.23, 1, 0.32, 1);
+
+  /* ---- 阴影 ---- */
+  --shadow-soft: var(--color-shadow);
+
+  /* ---- 断点（原型 max-width 语义；Tailwind 变体为 min-width，max-* 变体近似） ---- */
+  --breakpoint-lg: 1100px;
+  --breakpoint-md: 820px;
+  --breakpoint-sm: 720px;
+  --breakpoint-xs: 560px;
+  /* max-height: 800px 仅记录，不注册为 Tailwind 断点（避免生成宽度变体） */
+  --prototype-max-height: 800px;
+}
+
+/* ---- 基础层（原型 body 规则） ---- */
+:root {
+  font-size: var(--fs-body);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ---- 学段适配（原型 html[data-age=...]）----
+ * primary（小学）：--fs-body 17px；组件级覆盖见注释：
+ *   .btn min-height 48px、.home-title clamp(46px,6.4vw,84px)、.companion-dock scale(1)
+ * senior（高中）：--fs-body 14px；组件级覆盖：
+ *   .companion-dock scale(.8)、.library-all-grid 5 列
+ * junior（初中/默认）：--fs-body 15px（:root 默认）
+ */
+html[data-age="primary"] {
+  --fs-body: 17px;
+}
+
+html[data-age="senior"] {
+  --fs-body: 14px;
+}
+
+/* ---- 断点行为记录（原型源码，组件任务按需以 CSS 媒体查询落地）----
+ * max-width 1100px：reader-layout 2 列、context-rail 隐藏、library-all-grid 2 列、home-hero 间距收窄
+ * max-width 820px：hero/section-grid/home-lower/profile-layout 单列、brand-copy/grade-badge 隐藏、
+ *                  library-grid 2 列、reader 单列 + chapter-nav 横向滚动、quiz-entry 收窄
+ * max-width 720px：companion-panel 底部抽屉（width calc(100vw - 20px)、left 10、bottom 10、height min(72vh,600px)）
+ * max-width 560px：导航 3/4 项隐藏、library-grid 单列、首页按钮全宽、voice-sheet 压缩、桌虫 scale(.87)
+ * max-height 800px：首页 hero 纵向节奏压缩、continue-card 208px、page padding-bottom 64px
+ */
