@@ -1,4 +1,9 @@
-import type { AuthDTO, StudentPreference, StudentProfile } from '@/entities/student/types'
+import type {
+  AuthDTO,
+  StudentPreference,
+  StudentProfile,
+  TeacherRoleDTO,
+} from '@/entities/student/types'
 
 import { clearToken, setToken } from './auth'
 import { apiRequest } from './http'
@@ -44,5 +49,9 @@ export class ApiStudentService implements StudentService {
       method: 'PATCH',
       body: patch,
     })
+  }
+
+  getTeacherRoles(): Promise<TeacherRoleDTO[]> {
+    return apiRequest<TeacherRoleDTO[]>('/teacher-roles?enabled=true')
   }
 }

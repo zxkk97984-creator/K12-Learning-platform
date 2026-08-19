@@ -4,6 +4,7 @@ import type {
   PreferredDifficulty,
   PreferredExplanationStyle,
   PreferredSessionLength,
+  TeacherRoleDTO,
 } from '@/entities/student/types'
 import { deriveStage, type TeacherRole } from '@/entities/student/types'
 import { useAuth } from '@/features/auth'
@@ -49,6 +50,7 @@ export default function SettingsPage() {
   const [speed, setSpeed] = useState(1)
   const [roleId, setRoleId] = useState('role-shuangling')
   const [roles, setRoles] = useState<TeacherRole[]>([])
+  const [teacherRoles, setTeacherRoles] = useState<TeacherRoleDTO[]>([])
   const [age, setAge] = useState<'primary' | 'junior' | 'senior'>('junior')
   const [loaded, setLoaded] = useState(false)
 
@@ -59,9 +61,10 @@ export default function SettingsPage() {
     }
     void (async () => {
       try {
-        const [prefs, roleList] = await Promise.all([
+        const [prefs, roleList, teacherRoleList] = await Promise.all([
           studentService.getPreferences(),
           teacherRoleService.getRoles(),
+          studentService.getTeacherRoles(),
         ])
         setNickname(currentUser.nickname)
         setGrade(currentUser.grade)
@@ -76,6 +79,7 @@ export default function SettingsPage() {
         setSpeed(prefs.voice_preference.speed)
         setRoleId(currentUser.current_teacher_role_id ?? 'role-shuangling')
         setRoles(roleList)
+        setTeacherRoles(teacherRoleList)
       } catch {
         // 保留默认表单
       }
@@ -121,6 +125,20 @@ export default function SettingsPage() {
       showToast('保存失败，请重试')
     }
   }
+
+  const switchTeacher = async (nextRoleId: string) => {
+    try {
+      await studentService.updateMe({ current_teacher_role_id: nextRoleId })
+      await refreshMe()
+      showToast('已切换 AI 教师')
+    } catch {
+      showToast('切换失败，请重试')
+    }
+  }
+
+  const currentTeacher = teacherRoles.find(
+    (role) => role.role_id === currentUser?.current_teacher_role_id,
+  )
 
   if (!loaded) {
     return (
@@ -277,6 +295,46 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
+        </section>
+
+        <section className="rounded-[14px] border border-border bg-surface p-5">
+          <h2 className="font-display text-lg text-fg">我的 AI 教师</h2>
+          <p className="mt-2 text-xs text-muted">
+            当前：{currentTeacher?.name ?? '默认（霜铃）'} · {currentTeacher?.tone ?? ''}
+          </p>
+          {teacherRoles.length === 0 ? (
+            <p className="mt-3 text-xs text-muted">暂无可用教师</p>
+          ) : (
+            <div className="mt-3 grid gap-2">
+              {teacherRoles.map((role) => {
+                const selected = role.role_id === currentUser?.current_teacher_role_id
+                return (
+                  <button
+                    key={role.role_id}
+                    type="button"
+                    aria-pressed={selected}
+                    className={`rounded-[12px] border p-3 text-left ${
+                      selected ? 'border-fg bg-surface' : 'border-border bg-bg hover:border-fg'
+                    }`}
+                    onClick={() => void switchTeacher(role.role_id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <strong className="text-sm text-fg">{role.name}</strong>
+                      {selected ? (
+                        <span className="rounded-full bg-fg-soft px-2 py-0.5 font-mono text-[9px] text-fg">
+                          使用中
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted">{role.description}</p>
+                    <p className="mt-1 text-[11px] text-muted">
+                      {role.tone} · {role.teaching_style}
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </section>
 
         <section className="rounded-[14px] border border-border bg-surface p-5">

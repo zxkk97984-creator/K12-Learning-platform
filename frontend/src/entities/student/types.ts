@@ -93,3 +93,15 @@ export interface TeacherRole {
   enabled: boolean
   version: number
 }
+
+/** 学生端可见的 TeacherRole 展示字段（11-A：不含 persona/sprite/grade_rules 内部配置） */
+export interface TeacherRoleDTO {
+  role_id: string
+  name: string
+  description: string | null
+  tone: string
+  teaching_style: string
+  avatar: string | null
+  voice_id: string | null
+  enabled: boolean
+}

@@ -1,8 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 
 import { useCompanionStore } from '@/features/companion'
+import { useAuth } from '@/features/auth'
 import { useScreenContext } from '@/features/screen-context'
+import { studentService } from '@/mocks/services'
 
 import { ChatComposer } from './ChatComposer'
 import { MessageList } from './MessageList'
@@ -19,16 +21,30 @@ function contextLabel(pathname: string): string {
 }
 
 export function ConversationPanelContent() {
+  const { currentUser } = useAuth()
   const open = useCompanionStore((state) => state.open)
   const load = useConversationStore((state) => state.load)
   const abortCurrent = useConversationStore((state) => state.abortCurrent)
   const location = useLocation()
   const { screenContext } = useScreenContext()
+  const [teacherName, setTeacherName] = useState('霜铃')
 
   useEffect(() => {
     if (open) void load()
     return () => abortCurrent()
   }, [open, load, abortCurrent])
+
+  useEffect(() => {
+    void studentService
+      .getTeacherRoles()
+      .then((roles) => {
+        const current = roles.find(
+          (role) => role.role_id === currentUser?.current_teacher_role_id,
+        )
+        if (current) setTeacherName(current.name)
+      })
+      .catch(() => undefined)
+  }, [currentUser?.current_teacher_role_id])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -43,6 +59,9 @@ export function ConversationPanelContent() {
                 }`
               : contextLabel(location.pathname)}
           </strong>
+        </span>
+        <span className="ml-auto shrink-0 font-mono text-[9px] text-muted">
+          教师：{teacherName}
         </span>
       </div>
       <MessageList />

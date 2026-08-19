@@ -1,4 +1,9 @@
-import type { AuthDTO, StudentPreference, StudentProfile } from '@/entities/student/types'
+import type {
+  AuthDTO,
+  StudentPreference,
+  StudentProfile,
+  TeacherRoleDTO,
+} from '@/entities/student/types'
 
 export type StudentProfilePatch = Partial<
   Pick<
@@ -18,4 +23,5 @@ export interface StudentService {
   updateMe(patch: StudentProfilePatch): Promise<StudentProfile>
   getPreferences(): Promise<StudentPreference>
   updatePreferences(patch: StudentPreferencePatch): Promise<StudentPreference>
+  getTeacherRoles(): Promise<TeacherRoleDTO[]>
 }

@@ -105,4 +105,25 @@ describe('ApiStudentService', () => {
     expect(error).toBeInstanceOf(ApiError)
     expect(error).toMatchObject({ status: 401, code: 'UNAUTHENTICATED' })
   })
+
+  it('getTeacherRoles 请求 enabled 角色列表', async () => {
+    const roles = [
+      {
+        role_id: 'role-1',
+        name: 'shuangling',
+        description: '默认教师',
+        tone: '温暖',
+        teaching_style: '引导',
+        avatar: null,
+        voice_id: null,
+        enabled: true,
+      },
+    ]
+    const fetchMock = vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(200, { data: roles }),
+    )
+
+    await expect(service.getTeacherRoles()).resolves.toEqual(roles)
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/teacher-roles?enabled=true')
+  })
 })

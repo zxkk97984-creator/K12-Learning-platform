@@ -3,7 +3,7 @@ import type {
   StudentPreferencePatch,
   StudentProfilePatch,
 } from '@/shared/api/student-service'
-import type { AuthDTO } from '@/entities/student/types'
+import type { AuthDTO, TeacherRoleDTO } from '@/entities/student/types'
 import { deriveStage } from '@/entities/student/types'
 
 import { delay } from '../delay'
@@ -53,5 +53,33 @@ export class MockStudentService implements StudentService {
   async updatePreferences(patch: StudentPreferencePatch) {
     preference = { ...preference, ...patch, updated_at: new Date().toISOString() }
     return delay({ ...preference }, 150)
+  }
+
+  async getTeacherRoles(): Promise<TeacherRoleDTO[]> {
+    return delay(
+      [
+        {
+          role_id: '00000000-0000-0000-0000-000000000001',
+          name: 'shuangling',
+          description: '默认 AI 教师',
+          tone: '温暖、鼓励',
+          teaching_style: '从生活例子出发，逐步引导',
+          avatar: null,
+          voice_id: null,
+          enabled: true,
+        },
+        {
+          role_id: '00000000-0000-0000-0000-000000000002',
+          name: 'strict-mentor',
+          description: '严谨导师',
+          tone: '严谨、清晰',
+          teaching_style: '强调逻辑与证据',
+          avatar: null,
+          voice_id: null,
+          enabled: true,
+        },
+      ],
+      150,
+    )
   }
 }
