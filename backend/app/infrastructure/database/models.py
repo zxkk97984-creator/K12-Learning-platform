@@ -25,8 +25,11 @@ from app.infrastructure.database.base import Base
 class VECTOR(UserDefinedType):
     """Minimal pgvector type binding; HNSW index lands in Phase 8."""
 
+    def __init__(self, dimensions: int | None = None) -> None:
+        self.dimensions = dimensions
+
     def get_col_spec(self, **kw):  # pragma: no cover - SQLAlchemy DDL helper
-        return "VECTOR"
+        return f"VECTOR({self.dimensions})" if self.dimensions else "VECTOR"
 
 
 class User(Base):
@@ -735,6 +738,12 @@ class StudentEpisode(Base):
             "student_id",
             text("occurred_at DESC"),
         ),
+        Index(
+            "ix_student_episodes_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
     )
 
     episode_id: Mapped[UUID] = mapped_column(
@@ -761,7 +770,7 @@ class StudentEpisode(Base):
         JSONB, server_default=text("'[]'::jsonb")
     )
     # pgvector 列 Phase 8 才写入；本阶段只建列不建 HNSW 索引。
-    embedding: Mapped[VECTOR | None] = mapped_column(VECTOR)
+    embedding: Mapped[VECTOR | None] = mapped_column(VECTOR(64))
     importance: Mapped[str] = mapped_column(String(8))
     tags: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(
@@ -1035,6 +1044,97 @@ class QuizInteraction(Base):
         ForeignKey("quiz_answers.answer_id", ondelete="RESTRICT"),
     )
     sequence: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class KnowledgeResource(Base):
+    """knowledge_resources（0-E §3.25；Admin 上传 Phase 10 接入 HTTP）。"""
+
+    __tablename__ = "knowledge_resources"
+    __table_args__ = (
+        CheckConstraint(
+            "file_type IN ('PDF','MARKDOWN','TXT','HTML')",
+            name="ck_knowledge_resources_file_type",
+        ),
+        CheckConstraint(
+            "status IN ('UPLOADED','PARSING','CHUNKING','INDEXING','READY','FAILED')",
+            name="ck_knowledge_resources_status",
+        ),
+        Index("ix_knowledge_resources_status_created", "status", "created_at"),
+        Index("ix_knowledge_resources_uploaded_by", "uploaded_by"),
+    )
+
+    resource_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    source_name: Mapped[str] = mapped_column(String(255))
+    source_url: Mapped[str] = mapped_column(String(512))
+    author: Mapped[str | None] = mapped_column(String(255))
+    license: Mapped[str] = mapped_column(String(128))
+    copyright_status: Mapped[str] = mapped_column(String(128))
+    storage_key: Mapped[str] = mapped_column(String(512))
+    file_type: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(
+        String(16), server_default=text("'UPLOADED'")
+    )
+    # FK→admins 延迟到 Phase 10 补（0-E 已裁定；本任务不建 admins 表）
+    uploaded_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    error: Mapped[str | None] = mapped_column(Text)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class KnowledgeChunk(Base):
+    """knowledge_chunks（0-E §3.26；D9 溯源保留在 metadata）。"""
+
+    __tablename__ = "knowledge_chunks"
+    __table_args__ = (
+        UniqueConstraint(
+            "resource_id", "chunk_index", name="uq_knowledge_chunks_resource_index"
+        ),
+        CheckConstraint("token_count >= 0", name="ck_knowledge_chunks_token_count"),
+        CheckConstraint(
+            "status IN ('PENDING','READY','FAILED')",
+            name="ck_knowledge_chunks_status",
+        ),
+        Index(
+            "ix_knowledge_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+    chunk_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    resource_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("knowledge_resources.resource_id", ondelete="CASCADE"),
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    content: Mapped[str] = mapped_column(Text)
+    content_type: Mapped[str | None] = mapped_column(String(64))
+    metadata_: Mapped[dict] = mapped_column(
+        "metadata", JSONB, server_default=text("'{}'::jsonb")
+    )
+    knowledge_point_ids: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+    embedding: Mapped[VECTOR | None] = mapped_column(VECTOR(64))
+    token_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    status: Mapped[str] = mapped_column(
+        String(16), server_default=text("'PENDING'")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

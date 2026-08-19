@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     ai_provider: str = "mock"
     ai_model: str = "mock-model"
     ai_max_tokens: int = 512
+    embedding_provider: str = "mock"
+    embedding_dimension: int = 64
 
 
 settings = Settings()
