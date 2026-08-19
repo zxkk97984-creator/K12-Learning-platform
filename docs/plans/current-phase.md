@@ -3,74 +3,54 @@
 > 本文件由 Hermes（总控）维护，是会话恢复的权威进度来源。恢复时先读 `霜铃_V3_Hermes-Codex_多Agent协同开发总路线.md`（Execution Baseline）再读本文件。
 
 ## 当前阶段
-**Phase 11 — 多 AI 教师角色与 Persona 管理**（Phase 10 已完成；9-A 真实 LLM Provider 挂起待密钥后接）
+**Phase 12 — 生产化、E2E、比赛交付**（Phase 11 已完成；9-A 真实 LLM Provider 挂起待接）
 
 ## 已完成 Checkpoint
-- `phase-0-checkpoint` ~ `phase-10-checkpoint`（`d8f4c82`）：Phase 0~10 全部 PASS
-- Phase 10（管理员端与内容管线）：admins + idempotency_keys 表 + 2 延迟 FK 补齐 + 12 Admin 端点（stats/books CRUD/content CRUD）+ 上传端点（md/txt/html→READY，pdf 422）+ Admin 前端 3 页 + TopNav 入口；pytest 201 / Vitest 104 / E2E 7
-- Phase 9 语音部分（9-B/9-C/9-D）已 PASS（`bcfc996`，tag `phase-9-voice-checkpoint`）：WS 语音链路 + 前端交互 + 偏好落地
-- **9-A 真实 LLM Provider 挂起**：密钥已备（DeepSeek 官方 `api.deepseek.com` / `deepseek-chat`，已验证连通，存于 backend/.env，gitignore 保护）；`.env` 当前 `AI_PROVIDER=mock`（避免 provider 未实现时报错）；config.py 需加 `ai_base_url`/`ai_api_key` 字段 + OpenAICompatibleProvider 实现
+- `phase-0-checkpoint` ~ `phase-11-checkpoint`（`f8de0b0`）：Phase 0~11 全部 PASS
+- Phase 11（多 AI 教师角色与 Persona 管理）：teacher_roles 表 + **3 延迟 FK 补齐**（students SET NULL / conversations RESTRICT / quiz_sessions RESTRICT）+ 学生端角色列表/切换（404/409）+ Admin 角色 CRUD（name 冲突 409/version 递增/启停）+ 新会话/测验默认角色 + persona 注入 provider 上下文 + 设置页角色切换前端 + §20.2 隔离（记忆/画像不绑定角色）；pytest 215 / Vitest 106 / E2E 8
+- Phase 9 语音部分（9-B/9-C/9-D）已 PASS（tag `phase-9-voice-checkpoint`）
+- **9-A 真实 LLM Provider 挂起**：密钥已备（DeepSeek 官方 `api.deepseek.com` / `deepseek-chat` / 已验证连通，存于 backend/.env，gitignore 保护）；`.env` 当前 `AI_PROVIDER=mock`；待实现 config.py 字段 + OpenAICompatibleProvider + 4 处 mock→真实切换
 
-## Phase 11 目标（总控 §20）
-多 AI 教师角色与 Persona 管理：
-- teacher_roles 表落地（role_id/name/description/persona/tone/teaching_style/avatar/sprite_manifest/voice_id/grade_rules/enabled）
-- 学生端：GET /teacher-roles（仅 enabled）+ PATCH /me.current_teacher_role_id（设置页角色切换）
-- Admin 端：14.5 骨架实现（列表/创建/更新/启停 + Persona 预览）
-- 关键原则（§20.2）：学生画像属于 Student，不属于某个 AI Teacher；切换教师 Conversation 区分、长期记忆保留
-- 延迟 FK 补齐：current_teacher_role_id（students）、conversations.teacher_role_id、quiz_sessions.teacher_role_id → teacher_roles（Phase 11 兑现）
-- 对话流：当前角色 persona/tone 注入 provider 上下文
+## Phase 12 目标（总控 §21）
+将「功能完成」变成「可稳定比赛演示」：
+- CI（GitHub Actions 或本地脚本：pytest/vitest/build/e2e 全绿门禁）
+- 生产化收尾（JWT 密钥环境化、seed 密码、storage 路径、E2E 稳定、性能优化、文档）
+- 最终全量回归（三端测试 + 黄金路径）
+- 比赛交付检查（总控 §31 Definition of Done：Product/Engineering/AI/UX/CI-E2E/Competition）
+- 隐私脱敏流程细节（Phase 12 前 backlog）
+- PROJECT IMPLEMENTATION COMPLETE 判定 + 最终交付报告
 
-## 已完成 Checkpoint
-- `phase-0-checkpoint` ~ `phase-8-checkpoint`（`eb3637d`）：Phase 0~8 全部 PASS
-- Phase 8（Knowledge Base 与 RAG）：
-  - knowledge_resources/knowledge_chunks 2 表 + 2 处 HNSW 索引（episodes 补）
-  - mock embedding（64 维确定性）+ Ingestion CLI（Parser→Chunk→Embedding→入库，幂等）
-  - 4 端点（resources 列表/详情/chunks ADMIN_ONLY + search STUDENT，D9 source 溯源）
-  - RAG 注入对话流（retrieve + screen_context → TeacherContext → 引用来源回复）
-  - pytest 175 / Vitest 90 / E2E 5 全绿
-  - 修复：golden-path beforeAll 归档遗留 ACTIVE 会话（消除 .last() 偶发失败）
-
-## Phase 9 目标（总控 §18 + 0-D §16）
-语音输入 / TTS：
-- WebSocket 契约定稿实现（/api/v1/voice/ws?conversation_id&token，JSON 帧，audio_chunk/audio_end/cancel/ping ↔ state/partial/final/error/pong）
-- 状态机（IDLE→LISTENING→THINKING→SPEAKING→IDLE，barge-in）
-- STT/TTS provider 抽象 + Mock 实现；voice_preference 落地
-- 真实 LLM Provider（本 Phase 或独立任务：AI provider 接真实模型，Memory/Quiz Skill 换 LLM 生成；注意 mock embedding 检索质量 + 相似度阈值）
-- final 文本写入 Conversation（type=TEXT）走同一 SSE/Agent 流程（架构 §38）
-
-## Phase 9 待拆解（Hermes 规划）
-- 9-A 真实 LLM Provider（settings 配置 + OpenAI 兼容 provider；Memory/Quiz Skill/证据回答换 LLM 生成；search 相似度阈值）——注意 Codex 执行端当前为 deepseek 中转，真实 LLM 接入需用户提供密钥/端点（外部资源，可能触发人工介入）
-- 9-B 语音 WebSocket 定稿（ws 连接/帧/状态机/STT mock + TTS mock；voice_sessions 表）
-- 9-C 前端语音（录音 → WS → STT → 对话；TTS 播放；voice-overlay 状态动画）
-- 9-D 语音偏好落地（voice_preference 设置生效）+ 测试 + Gate
+## Phase 12 待拆解（Hermes 规划）
+- 12-A 真实 LLM Provider（9-A 落地：config 字段 + OpenAICompatibleProvider + 对话/Quiz/记忆/证据引用 4 处切换 + search 相似度阈值）
+- 12-B CI 门禁（GitHub Actions 或本地 make ci：pytest/vitest/build/e2e）
+- 12-C 生产化收尾（JWT 环境化、seed 密码、幂等键全局化、隐私脱敏说明、文档收口）
+- 12-D 最终全量回归 + Gate + PROJECT IMPLEMENTATION COMPLETE 报告
 
 ## 当前 blocker
-无（9-A 若需真实 LLM 密钥属外部资源，届时暂停相关路径并询问）
+无（9-A 密钥已就绪，12-A 直接做）
 
-## Follow-up backlog
-### 跨 Phase 遗留
-- 全局 401 自动登出未接；JWT 默认密钥 dev 占位；seed 密码 demo123/admin123 仅本地
-- 宿主 8000 被 DAI 项目占用，后端联调用 8002 + VITE_API_PROXY_TARGET
-- BookDetailPage 仍是骨架；learning_events 并发 ACTIVE 竞态 500→409 映射待做
-- legacy b1/ch3 别名解析额外请求；tags[1] 顺序耦合 keywords
-- 其余 11 本书仅 1 个占位章节；幂等键全局基建待做
-- SSE 断流学生消息已落库不回滚；sequence max+1 高并发竞争
-- **knowledge search 无相似度阈值**（纯文本无命中仍返回 top-N，9-A 真实 embedding 时加）
-### Phase 10 前
-- books.created_by FK→admins 延迟补；Admin API（书/章/块/知识点 CRUD + 知识资源上传 HTTP 端点 + require_admin 已有）
-### Phase 11 前
-- current_teacher_role_id/conversations.teacher_role_id/quiz_sessions.teacher_role_id FK 延迟补；TeacherRole 系统（角色列表/切换/Persona）
-### Phase 12 前
-- 隐私脱敏流程细节；生产化（CI、部署、监控、比赛交付）
+## Follow-up backlog（Phase 12 收口清单）
+### 生产化
+- JWT 默认密钥 dev 占位 → 环境化；seed 密码 demo123/admin123 仅本地（启动警告）
+- 全局 401 自动登出未接（前端）；SSE 断流不回滚；sequence max+1 竞争
+- BookDetailPage 骨架；其余 11 本书 1 个占位章节
+- knowledge search 无相似度阈值（12-A 真实 embedding 或阈值）
+- Admin 4 偏差（enabled 放行/空文件 422/DRAFT→ARCHIVED 409/source_url 去重）
+- 幂等键全局化（student 写端点；idempotency_keys 表已有）
+- learning_events 并发 ACTIVE 竞态 500→409
+- 宿主 8000 被 DAI 占用 → 联调 8002 + VITE_API_PROXY_TARGET（文档化）
+### 隐私
+- 隐私脱敏流程细节（审计链 RESTRICT + 软删已就位；正式脱敏脚本/文档）
+### 比赛交付
+- 总控 §31 DoD 逐项核对 + 最终交付报告
 
 ## 已裁定决策（长期有效）
 - PG18 + pgvector；uv 后端（Python 3.12）；DB 按需启动
-- 级联删除 RESTRICT；Quiz 幂等重放；ProfileInsight 5 档定性（无数字）；JWT Bearer；bcrypt 直调；PyJWT HS256
-- learning_sessions 单一 ACTIVE 部分唯一索引；稳定记忆 ≥2 证据；测试环境 NullPool
-- teacher_role_id 可空放宽（Phase 11 恢复）；「添加记忆」无 POST（Skill 创建）
-- mock embedding 64 维（Phase 9 换真实）；vitest include *.test.tsx + NODE_ENV=test；E2E workers=1 串行 + golden-path 归档遗留会话
-- **自治模式**：默认继续不询问；普通技术决策自裁决；FAIL 自动修复；只在 6 类人工介入点暂停（真实 LLM 密钥/端点=外部资源类）
+- 级联删除 RESTRICT（审计链）；Quiz 幂等重放；ProfileInsight 5 档定性；JWT Bearer；bcrypt；PyJWT HS256
+- teacher_role_id 3 处 FK 已补齐（Phase 11）；「添加记忆」无 POST（Skill 创建）
+- mock embedding 64 维（12-A 换真实或阈值）；vitest include *.test.tsx + NODE_ENV=test；E2E workers=1 + 会话归档
+- **自治模式**：默认继续不询问；普通技术决策自裁决；FAIL 自动修复；6 类人工介入点（HUMAN_VERIFY 比赛彩排除外）
 
 ## 执行端
-- Codex：herdr pane `w1:p6`，模型 **deepseek-v4-flash max**（gpt-5.6-luna OpenAI 配额 2026-08-19 耗尽后切回；中转站可能不支持部分 tool 调用——遇 400 先报 Hermes 再处理）
+- Codex：herdr pane `w1:p6`，模型 **deepseek-v4-flash max**
 - git commit/tag 由 Hermes 执行（Codex 沙箱 .git 只读）
