@@ -1,10 +1,10 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_student
+from app.api.deps import require_admin, require_student
 from app.api.envelope import ok
 from app.infrastructure.database.models import User
 from app.infrastructure.database.session import get_session
@@ -16,15 +16,6 @@ from app.modules.knowledge.service import KnowledgeService
 
 router = APIRouter(tags=["knowledge"])
 service = KnowledgeService()
-
-
-async def require_admin(user: Annotated[User, Depends(get_current_user)]) -> User:
-    if user.user_type != "ADMIN":
-        raise HTTPException(
-            status_code=403,
-            detail={"code": "ADMIN_ONLY", "message": "admin access required"},
-        )
-    return user
 
 
 @router.get("/knowledge/resources")

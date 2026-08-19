@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from app.infrastructure.database.engine import engine
 from app.infrastructure.database.models import (
+    Admin,
     StudentMemory,
     StudentPreference,
     StudentProfile,
@@ -29,6 +30,33 @@ E2E_MEMORY_CONTENT = "E2E 记忆验证：喜欢通过真实例子学习"
 async def seed() -> None:
     try:
         async with async_session() as session:
+            admin_user = (
+                await session.execute(select(User).where(User.username == "admin"))
+            ).scalar_one_or_none()
+            if admin_user is None:
+                admin_user = User(
+                    username="admin",
+                    password_hash=hash_password("admin123"),
+                    user_type="ADMIN",
+                )
+                session.add(admin_user)
+                await session.flush()
+            admin_row = (
+                await session.execute(
+                    select(Admin).where(Admin.user_id == admin_user.user_id)
+                )
+            ).scalar_one_or_none()
+            if admin_row is None:
+                session.add(
+                    Admin(
+                        user_id=admin_user.user_id,
+                        display_name="系统管理员",
+                        role_level="SUPERVISOR",
+                        enabled=True,
+                    )
+                )
+                print("seed: 已创建 admin 管理账号（admin / admin123）")
+
             result = await session.execute(select(User).where(User.username == "xiaoming"))
             user = result.scalar_one_or_none()
             if user is None:

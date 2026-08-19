@@ -202,8 +202,10 @@ class Book(Base):
     copyright_status: Mapped[str | None] = mapped_column(String(128))
     tags: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     status: Mapped[str] = mapped_column(String(16), server_default=text("'DRAFT'"))
-    # FK→admins 延迟到 Phase 10 补（0-E 已裁定；本任务不建 admins 表）
-    created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    created_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("admins.admin_id", ondelete="RESTRICT"),
+    )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -1079,8 +1081,10 @@ class KnowledgeResource(Base):
     status: Mapped[str] = mapped_column(
         String(16), server_default=text("'UPLOADED'")
     )
-    # FK→admins 延迟到 Phase 10 补（0-E 已裁定；本任务不建 admins 表）
-    uploaded_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    uploaded_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("admins.admin_id", ondelete="RESTRICT"),
+    )
     error: Mapped[str | None] = mapped_column(Text)
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -1138,3 +1142,69 @@ class KnowledgeChunk(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class Admin(Base):
+    """admins（0-E §3.27；1:1 users，内容维护权限）。"""
+
+    __tablename__ = "admins"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_admins_user"),
+        CheckConstraint(
+            "role_level IN ('SUPERVISOR','CONTENT_EDITOR')",
+            name="ck_admins_role_level",
+        ),
+    )
+
+    admin_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        unique=True,
+    )
+    display_name: Mapped[str] = mapped_column(String(128))
+    role_level: Mapped[str] = mapped_column(
+        String(24), server_default=text("'SUPERVISOR'")
+    )
+    permissions: Mapped[dict | None] = mapped_column(JSONB)
+    enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class IdempotencyKey(Base):
+    """idempotency_keys（0-E §3.28；基础设施表，唯一允许物理删除）。"""
+
+    __tablename__ = "idempotency_keys"
+    __table_args__ = (
+        UniqueConstraint(
+            "actor_id",
+            "actor_type",
+            "key",
+            name="uq_idempotency_keys_actor_key",
+        ),
+        CheckConstraint(
+            "actor_type IN ('STUDENT','ADMIN')",
+            name="ck_idempotency_keys_actor_type",
+        ),
+        Index("ix_idempotency_keys_actor_expires", "actor_id", "expires_at"),
+    )
+
+    idempotency_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    actor_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    actor_type: Mapped[str] = mapped_column(String(16))
+    key: Mapped[str] = mapped_column(String(64))
+    request_hash: Mapped[str] = mapped_column(String(64))
+    response: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

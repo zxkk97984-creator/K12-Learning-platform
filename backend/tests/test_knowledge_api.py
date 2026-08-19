@@ -79,13 +79,21 @@ def _ensure_user(username: str, password: str, user_type: str) -> None:
 
 
 def _ingest_test_resource() -> UUID:
+    """幂等：复用已有「测试训练数据」资源（否则每次测试累积污染知识库，检索 top-N 漂移）。"""
+
     async def run() -> UUID:
         async with async_session() as session:
+            existing = await session.execute(
+                select(KnowledgeResource).where(KnowledgeResource.source_name == "测试训练数据").limit(1)
+            )
+            resource = existing.scalar_one_or_none()
+            if resource is not None:
+                return resource.resource_id
             resource_id, _ = await ingest_text(
                 session,
                 text=TEST_TEXT,
                 source_name="测试训练数据",
-                source_url=f"https://test.shuangling.local/training-data-{uuid4()}",
+                source_url="https://test.shuangling.local/training-data-fixed",
                 license="CC-BY-4.0",
                 copyright_status="测试资源",
             )
@@ -320,7 +328,8 @@ class TestKnowledgeAPI:
         events = parse_sse(response.text)
         done = next(event for event in events if event["event"] == "text.done")
         assert "根据知识库资料" in done["data"]["content"]
-        assert "测试训练数据" in done["data"]["content"]
+        # 断言内容而非 source_name：知识库共享，命中哪条含雪豹语料的资源取决于插入顺序
+        assert "雪豹测试语料" in done["data"]["content"]
 
     def test_conversation_skips_retrieval_for_unrelated_question(
         self,
@@ -360,7 +369,8 @@ class TestKnowledgeAPI:
         events = parse_sse(response.text)
         done = next(event for event in events if event["event"] == "text.done")
         assert "根据知识库资料" in done["data"]["content"]
-        assert "测试训练数据" in done["data"]["content"]
+        # 断言内容而非 source_name（共享知识库，命中资源取决于插入顺序）
+        assert "雪豹测试语料" in done["data"]["content"]
 
     def test_search_validation_rejects_empty_query_and_bad_limit(
         self,

@@ -2,6 +2,7 @@ import asyncio
 import base64
 import binascii
 import json
+import logging
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from datetime import datetime, timezone
@@ -37,6 +38,8 @@ from app.modules.quiz.service import QuizService
 
 
 QUIZ_INTENT_KEYWORDS = ("出题", "题目", "测验", "quiz", "考考我")
+
+logger = logging.getLogger(__name__)
 
 
 def _is_quiz_intent(content: str) -> bool:
@@ -692,6 +695,7 @@ class ConversationService:
                     event_id=teacher_message_id,
                 )
             except Exception:
+                logger.exception("AI provider stream failed")
                 await session.rollback()
                 yield _sse_error(
                     request_id,
