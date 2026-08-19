@@ -71,6 +71,39 @@ class User(Base):
     )
 
 
+class TeacherRole(Base):
+    """teacher_roles（0-E §3.4；角色不持有任何学生数据，D2）。"""
+
+    __tablename__ = "teacher_roles"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_teacher_roles_name"),
+        CheckConstraint("version >= 1", name="ck_teacher_roles_version"),
+    )
+
+    role_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    name: Mapped[str] = mapped_column(String(64))
+    description: Mapped[str | None] = mapped_column(Text)
+    persona: Mapped[dict] = mapped_column(JSONB)
+    tone: Mapped[str] = mapped_column(String(128))
+    teaching_style: Mapped[str] = mapped_column(String(128))
+    avatar: Mapped[str | None] = mapped_column(String(512))
+    sprite_manifest: Mapped[dict] = mapped_column(JSONB)
+    voice_id: Mapped[str | None] = mapped_column(String(128))
+    grade_rules: Mapped[dict] = mapped_column(JSONB)
+    prompt_profile: Mapped[dict | None] = mapped_column(JSONB)
+    interaction_style: Mapped[str | None] = mapped_column(String(128))
+    enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class StudentProfile(Base):
     """student_profiles（0-E §3.2）。"""
 
@@ -103,7 +136,10 @@ class StudentProfile(Base):
     language: Mapped[str] = mapped_column(String(16), server_default=text("'zh-CN'"))
     learning_goal: Mapped[str | None] = mapped_column(Text)
     # FK→teacher_roles 延迟到 Phase 11 补（0-E 已裁定；本任务不建 teacher_roles 表）
-    current_teacher_role_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    current_teacher_role_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("teacher_roles.role_id", ondelete="SET NULL"),
+    )
     learning_days: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     total_learning_minutes: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     completed_books: Mapped[int] = mapped_column(Integer, server_default=text("0"))
@@ -495,7 +531,10 @@ class Conversation(Base):
         ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
     )
     # FK→teacher_roles 延迟到 Phase 11；0-E 定义为非空，本任务因角色表尚未落地放宽为可空。
-    teacher_role_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    teacher_role_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("teacher_roles.role_id", ondelete="RESTRICT"),
+    )
     title: Mapped[str | None] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(16), server_default=text("'ACTIVE'"))
     channel: Mapped[str] = mapped_column(String(16), server_default=text("'TEXT'"))
@@ -877,7 +916,10 @@ class QuizSession(Base):
         ForeignKey("conversations.conversation_id", ondelete="RESTRICT"),
     )
     # FK→teacher_roles 延迟到 Phase 11；角色表尚未落地，本列可空且不建 FK。
-    teacher_role_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    teacher_role_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("teacher_roles.role_id", ondelete="RESTRICT"),
+    )
     book_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="RESTRICT")
     )

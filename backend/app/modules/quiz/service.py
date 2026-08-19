@@ -23,6 +23,7 @@ from app.infrastructure.database.models import (
     StudentProfile,
 )
 from app.modules.quiz.skill import QuizGenerationContext, QuizSkill
+from app.modules.identity.service import IdentityService
 from app.modules.quiz.schemas import (
     CreateQuizSessionRequest,
     QuizAnswerDTO,
@@ -204,7 +205,11 @@ class QuizService:
         title = f"{chapter_title} · 随堂测验" if chapter_title else "霜铃随堂测验"
         context = QuizGenerationContext(
             student_id=profile.student_id,
-            teacher_role_id=conversation.teacher_role_id or profile.current_teacher_role_id,
+            teacher_role_id=(
+                conversation.teacher_role_id
+                or profile.current_teacher_role_id
+                or await IdentityService().resolve_default_role_id(session, profile)
+            ),
             conversation_id=request.conversation_id,
             book_id=book_id,
             chapter_id=chapter_id,

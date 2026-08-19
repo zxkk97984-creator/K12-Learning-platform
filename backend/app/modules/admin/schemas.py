@@ -137,3 +137,35 @@ class PatchKnowledgeResourceRequest(BaseModel):
     author: str | None = Field(default=None, max_length=255)
     license: str | None = Field(default=None, min_length=1, max_length=128)
     copyright_status: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class CreateTeacherRoleRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    description: str | None = None
+    persona: dict = Field(default_factory=lambda: {"base_persona": "", "character_persona": ""})
+    tone: str = Field(min_length=1, max_length=128)
+    teaching_style: str = Field(min_length=1, max_length=128)
+    avatar: str | None = Field(default=None, max_length=512)
+    sprite_manifest: dict = Field(default_factory=dict)
+    voice_id: str | None = Field(default=None, max_length=128)
+    grade_rules: dict = Field(
+        default_factory=lambda: {"primary": {}, "junior": {}, "senior": {}}
+    )
+    prompt_profile: dict | None = None
+    interaction_style: str | None = Field(default=None, max_length=128)
+    enabled: bool = True
+
+
+class PatchTeacherRoleRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    description: str | None = None
+    persona: dict | None = None
+    tone: str | None = Field(default=None, min_length=1, max_length=128)
+    teaching_style: str | None = Field(default=None, min_length=1, max_length=128)
+    avatar: str | None = Field(default=None, max_length=512)
+    sprite_manifest: dict | None = None
+    voice_id: str | None = Field(default=None, max_length=128)
+    grade_rules: dict | None = None
+    prompt_profile: dict | None = None
+    interaction_style: str | None = Field(default=None, max_length=128)
+    enabled: bool | None = None

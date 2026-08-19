@@ -20,6 +20,7 @@ from app.infrastructure.database.models import (
     ConversationSummary,
     Message,
     StudentProfile,
+    TeacherRole,
 )
 from app.modules.conversation.schemas import (
     ConversationDTO,
@@ -33,6 +34,7 @@ from app.modules.conversation.schemas import (
 )
 from app.modules.memory.agent_md import build_evidence_reply, is_evidence_question
 from app.modules.knowledge.retrieval import retrieve
+from app.modules.identity.service import IdentityService
 from app.modules.quiz.schemas import CreateQuizSessionRequest
 from app.modules.quiz.service import QuizService
 
@@ -242,11 +244,16 @@ class ConversationService:
         request: CreateConversationRequest,
     ) -> ConversationDTO:
         profile = await self._get_profile(session, user_id)
+        role_id = (
+            request.teacher_role_id
+            or profile.current_teacher_role_id
+            or await IdentityService().resolve_default_role_id(session, profile)
+        )
         conversation = Conversation(
             student_id=profile.student_id,
             # teacher_roles is a Phase 11 table, so this reference is stored
             # without a FK and falls back to the student's current role.
-            teacher_role_id=request.teacher_role_id or profile.current_teacher_role_id,
+            teacher_role_id=role_id,
             title=request.title,
             channel=request.channel,
             current_page_context={},
@@ -373,6 +380,17 @@ class ConversationService:
             "请根据学生的问题循序解释，鼓励学生自己思考。"
             f"当前页面上下文：{json.dumps(current_context, ensure_ascii=False)}"
         )
+        role_id = conversation.teacher_role_id or profile.current_teacher_role_id
+        if role_id is not None:
+            role = await session.get(TeacherRole, role_id)
+            if role is not None:
+                persona = role.persona or {}
+                system_prompt += (
+                    "\n\n【教师人格】\n"
+                    f"base_persona：{persona.get('base_persona', '')}\n"
+                    f"tone：{role.tone}\n"
+                    f"teaching_style：{role.teaching_style}"
+                )
         if reference_block:
             system_prompt += (
                 f"\n\n{reference_block}\n"

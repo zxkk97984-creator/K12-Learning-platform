@@ -159,11 +159,11 @@ class TestConversationAPI:
     def test_create_voice_with_explicit_teacher_role(
         self, client: TestClient, token: str
     ) -> None:
-        role_id = uuid4()
+        role_id = "00000000-0000-0000-0000-000000000001"
         conversation = create_conversation(
             client,
             token,
-            {"teacher_role_id": str(role_id), "channel": "VOICE", "title": "语音会话"},
+            {"teacher_role_id": role_id, "channel": "VOICE", "title": "语音会话"},
         )
         assert conversation["teacher_role_id"] == str(role_id)
         assert conversation["channel"] == "VOICE"

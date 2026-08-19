@@ -64,3 +64,12 @@ async def update_preferences(
     session: Annotated[AsyncSession, Depends(get_session)],
 ):
     return ok(await service.update_preferences(session, user.user_id, body))
+
+
+@router.get("/teacher-roles")
+async def list_teacher_roles(
+    _user: Annotated[User, Depends(require_student)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    enabled: bool = True,
+):
+    return ok(await service.list_teacher_roles(session, enabled_only=enabled))

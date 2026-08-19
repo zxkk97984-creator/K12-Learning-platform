@@ -7,6 +7,7 @@ teacher_roles 表 Phase 11 才建，本脚本不种角色。
 
 import asyncio
 import os
+from uuid import UUID
 
 from sqlalchemy import select
 
@@ -16,6 +17,7 @@ from app.infrastructure.database.models import (
     StudentMemory,
     StudentPreference,
     StudentProfile,
+    TeacherRole,
     User,
 )
 from app.infrastructure.database.session import async_session
@@ -89,6 +91,72 @@ async def seed() -> None:
                 select(StudentProfile).where(StudentProfile.user_id == user.user_id)
             )
             profile = profile_result.scalar_one()
+            default_role = (
+                await session.execute(
+                    select(TeacherRole).where(TeacherRole.name == "shuangling")
+                )
+            ).scalar_one_or_none()
+            if default_role is None:
+                default_role = TeacherRole(
+                    role_id=UUID("00000000-0000-0000-0000-000000000001"),
+                    name="shuangling",
+                    description="默认 AI 教师",
+                    persona={
+                        "base_persona": "温暖耐心的 K12 数字教师",
+                        "character_persona": "霜铃",
+                    },
+                    tone="温暖、鼓励",
+                    teaching_style="从生活例子出发，逐步引导",
+                    sprite_manifest={
+                        "sheet_url": "",
+                        "grid_cols": 7,
+                        "grid_rows": 9,
+                        "states": {},
+                    },
+                    grade_rules={
+                        "primary": "多用比喻",
+                        "junior": "强调理解",
+                        "senior": "引导迁移",
+                    },
+                    prompt_profile={"version": 1},
+                    interaction_style="interactive",
+                    enabled=True,
+                )
+                session.add(default_role)
+            strict_mentor = (
+                await session.execute(
+                    select(TeacherRole).where(TeacherRole.name == "strict-mentor")
+                )
+            ).scalar_one_or_none()
+            if strict_mentor is None:
+                strict_mentor = TeacherRole(
+                    role_id=UUID("00000000-0000-0000-0000-000000000002"),
+                    name="strict-mentor",
+                    description="严谨导师",
+                    persona={
+                        "base_persona": "严谨理性的 K12 导师",
+                        "character_persona": "严谨导师",
+                    },
+                    tone="严谨、清晰",
+                    teaching_style="强调逻辑与证据",
+                    sprite_manifest={
+                        "sheet_url": "",
+                        "grid_cols": 7,
+                        "grid_rows": 9,
+                        "states": {},
+                    },
+                    grade_rules={
+                        "primary": "建立规则",
+                        "junior": "强调推理",
+                        "senior": "批判思考",
+                    },
+                    prompt_profile={"version": 1},
+                    interaction_style="structured",
+                    enabled=True,
+                )
+                session.add(strict_mentor)
+            if profile.current_teacher_role_id is None:
+                profile.current_teacher_role_id = default_role.role_id
             memory_result = await session.execute(
                 select(StudentMemory).where(
                     StudentMemory.student_id == profile.student_id,

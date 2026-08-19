@@ -61,6 +61,19 @@ class StudentProfilePatch(BaseModel):
     current_teacher_role_id: UUID | None = None
 
 
+class TeacherRoleDisplayDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    role_id: UUID
+    name: str
+    description: str | None
+    tone: str
+    teaching_style: str
+    avatar: str | None
+    voice_id: str | None
+    enabled: bool
+
+
 class VoicePreference(BaseModel):
     input_enabled: bool = True
     tts_enabled: bool = True

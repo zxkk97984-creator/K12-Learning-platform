@@ -161,11 +161,11 @@ class TestProfile:
         assert response.status_code == 422
         assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
-    def test_patch_me_current_teacher_role_id_accepted_without_fk(
+    def test_patch_me_current_teacher_role_id_accepted(
         self, client: TestClient, student_token: str
     ) -> None:
-        # teacher_roles 表 Phase 11 才建：本字段只存值、不校验 FK
-        role_id = str(uuid4())
+        # Phase 11：teacher_roles 已建表，使用迁移内置的 strict-mentor 角色。
+        role_id = "00000000-0000-0000-0000-000000000002"
         response = client.patch(
             "/api/v1/me", headers=auth_headers(student_token), json={"current_teacher_role_id": role_id}
         )

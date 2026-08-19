@@ -5,7 +5,12 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.database.models import StudentPreference, StudentProfile, User
+from app.infrastructure.database.models import (
+    StudentPreference,
+    StudentProfile,
+    TeacherRole,
+    User,
+)
 from app.modules.identity.schemas import (
     AuthDTO,
     AuthUser,
@@ -13,6 +18,7 @@ from app.modules.identity.schemas import (
     StudentPreferencePatch,
     StudentProfileDTO,
     StudentProfilePatch,
+    TeacherRoleDisplayDTO,
 )
 from app.modules.identity.security import create_access_token, verify_password
 
@@ -102,6 +108,20 @@ class IdentityService:
     ) -> StudentProfileDTO:
         profile = await self.get_profile(session, user_id)
         nullable_fields = {"avatar_url", "birth_date", "learning_goal", "current_teacher_role_id"}
+        if "current_teacher_role_id" in patch.model_fields_set:
+            role_id = patch.current_teacher_role_id
+            if role_id is not None:
+                role = await session.get(TeacherRole, role_id)
+                if role is None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail={"code": "ROLE_NOT_FOUND", "message": "teacher role not found"},
+                    )
+                if not role.enabled:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": "ROLE_DISABLED", "message": "teacher role is disabled"},
+                    )
         for key, value in patch.model_dump(exclude_unset=True).items():
             if value is None and key not in nullable_fields:
                 continue
@@ -109,6 +129,35 @@ class IdentityService:
         await session.commit()
         await session.refresh(profile)
         return to_profile_dto(profile)
+
+    async def list_teacher_roles(
+        self,
+        session: AsyncSession,
+        *,
+        enabled_only: bool,
+    ) -> list[TeacherRoleDisplayDTO]:
+        query = select(TeacherRole).order_by(TeacherRole.name.asc())
+        if enabled_only:
+            query = query.where(TeacherRole.enabled.is_(True))
+        rows = (await session.execute(query)).scalars().all()
+        return [TeacherRoleDisplayDTO.model_validate(row) for row in rows]
+
+    async def resolve_default_role_id(
+        self,
+        session: AsyncSession,
+        profile: StudentProfile,
+    ) -> UUID | None:
+        if profile.current_teacher_role_id is not None:
+            return profile.current_teacher_role_id
+        default = (
+            await session.execute(
+                select(TeacherRole).where(
+                    TeacherRole.name == "shuangling",
+                    TeacherRole.enabled.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
+        return default.role_id if default is not None else None
 
     async def get_or_create_preference(
         self, session: AsyncSession, profile: StudentProfile

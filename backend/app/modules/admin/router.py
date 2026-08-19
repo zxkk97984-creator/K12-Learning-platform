@@ -24,11 +24,13 @@ from app.modules.admin.schemas import (
     CreateChapterRequest,
     CreateContentBlockRequest,
     CreateKnowledgePointRequest,
+    CreateTeacherRoleRequest,
     PatchBookRequest,
     PatchChapterRequest,
     PatchContentBlockRequest,
     PatchKnowledgePointRequest,
     PatchKnowledgeResourceRequest,
+    PatchTeacherRoleRequest,
 )
 from app.modules.admin.service import (
     AdminService,
@@ -394,3 +396,59 @@ async def _reprocess_knowledge_resource(session, resource_id):
             await service.reprocess_knowledge_resource(session, resource_id)
         )
     )
+
+
+@router.get("/admin/teacher-roles")
+async def list_teacher_roles(
+    _admin: Annotated[AdminPrincipal, Depends(require_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    return ok(await service.list_teacher_roles(session))
+
+
+@router.post("/admin/teacher-roles", status_code=201)
+async def create_teacher_role(
+    _admin: Annotated[AdminPrincipal, Depends(require_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    body: CreateTeacherRoleRequest,
+    key: Annotated[str, Depends(require_idempotency_key)],
+    response: Response,
+):
+    result, replayed = await idempotency.execute(
+        session,
+        actor_id=actor_id(_admin),
+        actor_type="ADMIN",
+        key=key,
+        request_hash=canonical_request_hash(body.model_dump(exclude_unset=True)),
+        handler=lambda: _create_teacher_role(session, body),
+    )
+    if replayed:
+        response.status_code = 200
+    return result
+
+
+async def _create_teacher_role(session, body):
+    return ok(await service.create_teacher_role(session, body))
+
+
+@router.patch("/admin/teacher-roles/{role_id}")
+async def patch_teacher_role(
+    _admin: Annotated[AdminPrincipal, Depends(require_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    role_id: UUID,
+    body: PatchTeacherRoleRequest,
+    key: Annotated[str, Depends(require_idempotency_key)],
+):
+    result, _ = await idempotency.execute(
+        session,
+        actor_id=actor_id(_admin),
+        actor_type="ADMIN",
+        key=key,
+        request_hash=canonical_request_hash(body.model_dump(exclude_unset=True)),
+        handler=lambda: _patch_teacher_role(session, role_id, body),
+    )
+    return result
+
+
+async def _patch_teacher_role(session, role_id, body):
+    return ok(await service.patch_teacher_role(session, role_id, body))

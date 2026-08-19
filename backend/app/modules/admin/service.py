@@ -23,6 +23,7 @@ from app.infrastructure.database.models import (
     KnowledgePoint,
     KnowledgeResource,
     StudentProfile,
+    TeacherRole,
     User,
 )
 from app.modules.admin.schemas import (
@@ -37,6 +38,8 @@ from app.modules.admin.schemas import (
     PatchContentBlockRequest,
     PatchKnowledgePointRequest,
     PatchKnowledgeResourceRequest,
+    CreateTeacherRoleRequest,
+    PatchTeacherRoleRequest,
 )
 from app.modules.knowledge.ingestion import ingest_text
 from app.modules.knowledge.schemas import KnowledgeResourceDTO
@@ -503,3 +506,100 @@ class AdminService:
         resource = await session.get(KnowledgeResource, resource_id)
         await session.refresh(resource)
         return KnowledgeResourceDTO.model_validate(resource)
+
+    async def list_teacher_roles(
+        self, session: AsyncSession
+    ) -> list[dict]:
+        rows = (
+            await session.execute(
+                select(TeacherRole).order_by(TeacherRole.name.asc())
+            )
+        ).scalars().all()
+        return [
+            {
+                "role_id": str(row.role_id),
+                "name": row.name,
+                "description": row.description,
+                "persona": row.persona,
+                "tone": row.tone,
+                "teaching_style": row.teaching_style,
+                "avatar": row.avatar,
+                "sprite_manifest": row.sprite_manifest,
+                "voice_id": row.voice_id,
+                "grade_rules": row.grade_rules,
+                "prompt_profile": row.prompt_profile,
+                "interaction_style": row.interaction_style,
+                "enabled": row.enabled,
+                "version": row.version,
+            }
+            for row in rows
+        ]
+
+    async def create_teacher_role(
+        self,
+        session: AsyncSession,
+        request: CreateTeacherRoleRequest,
+    ) -> dict:
+        conflict = (
+            await session.execute(
+                select(TeacherRole).where(TeacherRole.name == request.name)
+            )
+        ).scalar_one_or_none()
+        if conflict is not None:
+            raise _error(409, "ROLE_NAME_CONFLICT", "teacher role name already exists")
+        role = TeacherRole(
+            role_id=uuid4(),
+            name=request.name,
+            description=request.description,
+            persona=request.persona,
+            tone=request.tone,
+            teaching_style=request.teaching_style,
+            avatar=request.avatar,
+            sprite_manifest=request.sprite_manifest,
+            voice_id=request.voice_id,
+            grade_rules=request.grade_rules,
+            prompt_profile=request.prompt_profile,
+            interaction_style=request.interaction_style,
+            enabled=request.enabled,
+            version=1,
+        )
+        session.add(role)
+        await session.flush()
+        return {
+            "role_id": str(role.role_id),
+            "name": role.name,
+            "enabled": role.enabled,
+            "version": role.version,
+        }
+
+    async def patch_teacher_role(
+        self,
+        session: AsyncSession,
+        role_id: UUID,
+        request: PatchTeacherRoleRequest,
+    ) -> dict:
+        role = await session.get(TeacherRole, role_id)
+        if role is None:
+            raise _error(404, "ROLE_NOT_FOUND", "teacher role not found")
+        if "name" in request.model_fields_set and request.name is not None:
+            conflict = (
+                await session.execute(
+                    select(TeacherRole).where(
+                        TeacherRole.name == request.name,
+                        TeacherRole.role_id != role_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if conflict is not None:
+                raise _error(409, "ROLE_NAME_CONFLICT", "teacher role name already exists")
+        for key, value in request.model_dump(exclude_unset=True).items():
+            setattr(role, key, value)
+        role.version += 1
+        role.updated_at = datetime.now(timezone.utc)
+        await session.flush()
+        return {
+            "role_id": str(role.role_id),
+            "name": role.name,
+            "enabled": role.enabled,
+            "version": role.version,
+        }
