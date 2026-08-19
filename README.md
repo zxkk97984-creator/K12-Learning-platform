@@ -35,3 +35,22 @@
 - 默认分支：`master`；本地开发仓库，不设置 remote、不 push。
 - 真实密钥只写入 `.env`（已被 `.gitignore` 排除）；`docker-compose.yml` 仅使用占位/默认值。
 - Phase 0 结束前禁止实现业务代码（Domain Model / API Contract / Database Schema 等均属后续任务）。
+
+## 一键验证
+
+本地质量门禁（后端 migration + pytest + 前端 Vitest/build + E2E）：
+
+```bash
+bash scripts/ci.sh
+```
+
+脚本会自动：
+
+- 使用 `AI_PROVIDER=mock`（不接真实 LLM）；
+- 在无 `backend/.env` 时从 `.env.example` 生成默认环境；
+- 通过 Docker Compose 确保 Postgres 可用（已有本机 DB 则沿用）；
+- 执行 `alembic upgrade head` 与 `uv run pytest -q`；
+- 执行 `pnpm install --frozen-lockfile`、`pnpm test`、`pnpm build`；
+- 由 `scripts/ci-e2e.sh` 自动在 `:8002` 起 mock 后端、执行 seed，再串行运行 Playwright E2E，结束后自动清理后端进程。
+
+任一步失败会立即以非 0 退出码停止。
