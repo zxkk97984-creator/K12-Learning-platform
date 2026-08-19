@@ -3,7 +3,22 @@
 > 本文件由 Hermes（总控）维护，是会话恢复的权威进度来源。恢复时先读 `霜铃_V3_Hermes-Codex_多Agent协同开发总路线.md`（Execution Baseline）再读本文件。
 
 ## 当前阶段
-**Phase 9 — 语音输入 / TTS + 真实 LLM Provider**（Phase 8 已完成，自动进入）
+**Phase 11 — 多 AI 教师角色与 Persona 管理**（Phase 10 已完成；9-A 真实 LLM Provider 挂起待密钥后接）
+
+## 已完成 Checkpoint
+- `phase-0-checkpoint` ~ `phase-10-checkpoint`（`d8f4c82`）：Phase 0~10 全部 PASS
+- Phase 10（管理员端与内容管线）：admins + idempotency_keys 表 + 2 延迟 FK 补齐 + 12 Admin 端点（stats/books CRUD/content CRUD）+ 上传端点（md/txt/html→READY，pdf 422）+ Admin 前端 3 页 + TopNav 入口；pytest 201 / Vitest 104 / E2E 7
+- Phase 9 语音部分（9-B/9-C/9-D）已 PASS（`bcfc996`，tag `phase-9-voice-checkpoint`）：WS 语音链路 + 前端交互 + 偏好落地
+- **9-A 真实 LLM Provider 挂起**：密钥已备（DeepSeek 官方 `api.deepseek.com` / `deepseek-chat`，已验证连通，存于 backend/.env，gitignore 保护）；`.env` 当前 `AI_PROVIDER=mock`（避免 provider 未实现时报错）；config.py 需加 `ai_base_url`/`ai_api_key` 字段 + OpenAICompatibleProvider 实现
+
+## Phase 11 目标（总控 §20）
+多 AI 教师角色与 Persona 管理：
+- teacher_roles 表落地（role_id/name/description/persona/tone/teaching_style/avatar/sprite_manifest/voice_id/grade_rules/enabled）
+- 学生端：GET /teacher-roles（仅 enabled）+ PATCH /me.current_teacher_role_id（设置页角色切换）
+- Admin 端：14.5 骨架实现（列表/创建/更新/启停 + Persona 预览）
+- 关键原则（§20.2）：学生画像属于 Student，不属于某个 AI Teacher；切换教师 Conversation 区分、长期记忆保留
+- 延迟 FK 补齐：current_teacher_role_id（students）、conversations.teacher_role_id、quiz_sessions.teacher_role_id → teacher_roles（Phase 11 兑现）
+- 对话流：当前角色 persona/tone 注入 provider 上下文
 
 ## 已完成 Checkpoint
 - `phase-0-checkpoint` ~ `phase-8-checkpoint`（`eb3637d`）：Phase 0~8 全部 PASS
