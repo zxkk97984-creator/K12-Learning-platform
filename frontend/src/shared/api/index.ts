@@ -14,3 +14,5 @@ export type {
 } from './quiz-service'
 export type { MemoryService, MemoryAction } from './memory-service'
 export type { TeacherRoleService } from './teacher-role-service'
+export { ApiStudentService } from './api-student-service'
+export { ApiError, apiRequest } from './http'

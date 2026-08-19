@@ -5,7 +5,8 @@ import type { QuizService } from '@/shared/api/quiz-service'
 import type { MemoryService } from '@/shared/api/memory-service'
 import type { TeacherRoleService } from '@/shared/api/teacher-role-service'
 
-import { MockStudentService } from './services/student-service'
+import { ApiStudentService } from '@/shared/api/api-student-service'
+
 import { MockContentService } from './services/content-service'
 import { MockConversationService } from './services/conversation-service'
 import { MockQuizService } from './services/quiz-service'
@@ -15,9 +16,9 @@ import { MockTeacherRoleService } from './services/teacher-role-service'
 /**
  * 统一 Mock Service 注册表（总控 §10.5 / §27）。
  * 替换边界：Phase 2 起逐个把实例替换为 ApiXxxService（接口不变，只改这里）。
- * Mock 直接返回领域数据（0-D 信封 { data, meta } 由未来 Api 实现内部解包）。
+ * 2-D：StudentService 已切真实后端；其余 5 个 Service 保持 Mock。
  */
-export const studentService: StudentService = new MockStudentService()
+export const studentService: StudentService = new ApiStudentService()
 export const contentService: ContentService = new MockContentService()
 export const conversationService: ConversationService = new MockConversationService()
 export const quizService: QuizService = new MockQuizService()

@@ -46,20 +46,24 @@ export default function SettingsPage() {
 
   useEffect(() => {
     void (async () => {
-      const [me, prefs, roleList] = await Promise.all([
-        studentService.getMe(),
-        studentService.getPreferences(),
-        teacherRoleService.getRoles(),
-      ])
-      setNickname(me.nickname)
-      setGrade(me.grade)
-      setLanguage(me.language)
-      setLearningGoal(me.learning_goal ?? '')
-      setStyle(prefs.preferred_explanation_style)
-      setDifficulty(prefs.preferred_difficulty)
-      setSessionLength(prefs.preferred_session_length)
-      setRoleId(me.current_teacher_role_id ?? 'role-shuangling')
-      setRoles(roleList)
+      try {
+        const [me, prefs, roleList] = await Promise.all([
+          studentService.getMe(),
+          studentService.getPreferences(),
+          teacherRoleService.getRoles(),
+        ])
+        setNickname(me.nickname)
+        setGrade(me.grade)
+        setLanguage(me.language)
+        setLearningGoal(me.learning_goal ?? '')
+        setStyle(prefs.preferred_explanation_style)
+        setDifficulty(prefs.preferred_difficulty)
+        setSessionLength(prefs.preferred_session_length)
+        setRoleId(me.current_teacher_role_id ?? 'role-shuangling')
+        setRoles(roleList)
+      } catch {
+        // 2-D：studentService 已走真实 API，未登录时保留默认表单（保存需登录）
+      }
       const saved = window.localStorage.getItem('shuangling-age')
       if (saved === 'primary' || saved === 'senior' || saved === 'junior') {
         setAge(saved)
@@ -77,7 +81,13 @@ export default function SettingsPage() {
   }
 
   if (!loaded) {
-    return <p className="py-10 text-center text-sm text-muted">正在加载设置…</p>
+    return (
+      <section className="py-10">
+        <p className="font-mono text-xs uppercase tracking-widest text-accent">设置</p>
+        <h1 className="mt-3 font-display text-4xl text-fg">设置</h1>
+        <p className="mt-4 text-sm text-muted">正在加载设置…</p>
+      </section>
+    )
   }
 
   return (

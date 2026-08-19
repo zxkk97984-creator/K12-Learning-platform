@@ -64,16 +64,20 @@ export default function ProfilePage() {
   const [userEdited, setUserEdited] = useState(false)
 
   const load = useCallback(async () => {
-    const [me, preference, insightList, memoryList] = await Promise.all([
-      studentService.getMe(),
-      studentService.getPreferences(),
-      memoryService.getInsights(),
-      memoryService.getMemories(),
-    ])
-    setProfile(me)
-    setPrefs(preference)
-    setInsights(insightList)
-    setMemories(memoryList)
+    try {
+      const [me, preference, insightList, memoryList] = await Promise.all([
+        studentService.getMe(),
+        studentService.getPreferences(),
+        memoryService.getInsights(),
+        memoryService.getMemories(),
+      ])
+      setProfile(me)
+      setPrefs(preference)
+      setInsights(insightList)
+      setMemories(memoryList)
+    } catch {
+      // 2-D：studentService 已走真实 API，未登录/后端不可用时降级为空态（2-E 登录后恢复）
+    }
   }, [])
 
   useEffect(() => {
@@ -101,7 +105,13 @@ export default function ProfilePage() {
   }
 
   if (!profile || !prefs) {
-    return <p className="py-10 text-center text-sm text-muted">正在加载学习画像…</p>
+    return (
+      <section className="py-10">
+        <p className="font-mono text-xs uppercase tracking-widest text-accent">成长 · AI 学习画像</p>
+        <h1 className="mt-3 font-display text-4xl text-fg">霜铃眼中的你。</h1>
+        <p className="mt-4 text-sm text-muted">学习画像暂不可用（请先登录，2-E 接入登录页）。</p>
+      </section>
+    )
   }
 
   const overview = insights.find((item) => item.dimension === 'explanation_preference')

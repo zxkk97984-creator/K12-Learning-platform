@@ -23,18 +23,33 @@ export default function HomePage() {
 
   useEffect(() => {
     void (async () => {
-      const [me, bookProgress, episodeList, memoryList, sessionList] = await Promise.all([
-        studentService.getMe(),
-        contentService.getBookProgress('b1'),
-        memoryService.getEpisodes(),
-        memoryService.getMemories(),
-        quizService.getQuizSessions(),
-      ])
-      setNickname(me.nickname)
-      setProgress(bookProgress)
-      setEpisodes(episodeList)
-      setMemories(memoryList)
-      setQuizzes(sessionList)
+      // 2-D：studentService 已走真实后端；单调用容错，保证其余 Mock 数据在断网/后端未起时仍可展示
+      try {
+        const me = await studentService.getMe()
+        setNickname(me.nickname)
+      } catch {
+        // 保持默认昵称「小明」
+      }
+      try {
+        setProgress(await contentService.getBookProgress('b1'))
+      } catch {
+        setProgress(null)
+      }
+      try {
+        setEpisodes(await memoryService.getEpisodes())
+      } catch {
+        setEpisodes([])
+      }
+      try {
+        setMemories(await memoryService.getMemories())
+      } catch {
+        setMemories([])
+      }
+      try {
+        setQuizzes(await quizService.getQuizSessions())
+      } catch {
+        setQuizzes([])
+      }
     })()
   }, [])
 

@@ -30,6 +30,20 @@ export interface StudentProfile {
   updated_at: string
 }
 
+export interface AuthUser {
+  user_id: string
+  username: string
+  user_type: 'STUDENT' | 'ADMIN'
+}
+
+/** 0-D AuthDTO */
+export interface AuthDTO {
+  access_token: string
+  token_type: string
+  expires_at: string
+  user: AuthUser
+}
+
 export type PreferredExplanationStyle =
   | 'EXAMPLE_BASED'
   | 'VISUAL'
