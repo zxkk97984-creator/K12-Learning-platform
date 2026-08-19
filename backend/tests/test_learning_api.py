@@ -122,6 +122,50 @@ def _ensure_user() -> None:
     asyncio.run(run())
 
 
+def _ensure_other_user() -> None:
+    async def run() -> None:
+        async with async_session() as session:
+            result = await session.execute(
+                select(User).where(User.username == "other_learning_user")
+            )
+            user = result.scalar_one_or_none()
+            if user is None:
+                user = User(
+                    username="other_learning_user",
+                    password_hash=hash_password("otherlearningpass"),
+                    user_type="STUDENT",
+                )
+                session.add(user)
+                await session.flush()
+            profile_result = await session.execute(
+                select(StudentProfile).where(StudentProfile.user_id == user.user_id)
+            )
+            profile = profile_result.scalar_one_or_none()
+            if profile is None:
+                profile = StudentProfile(
+                    user_id=user.user_id, nickname="其他学习测试", grade=8, language="zh-CN"
+                )
+                session.add(profile)
+                await session.flush()
+            pref_result = await session.execute(
+                select(StudentPreference).where(
+                    StudentPreference.student_id == profile.student_id
+                )
+            )
+            if pref_result.scalar_one_or_none() is None:
+                session.add(
+                    StudentPreference(
+                        student_id=profile.student_id,
+                        preferred_explanation_style="EXAMPLE_BASED",
+                        preferred_difficulty="MEDIUM",
+                        preferred_session_length="SHORT",
+                    )
+                )
+            await session.commit()
+
+    asyncio.run(run())
+
+
 @pytest.fixture(scope="module")
 def client() -> TestClient:
     _ensure_content()
@@ -133,6 +177,17 @@ def client() -> TestClient:
 def token(client: TestClient) -> str:
     response = client.post(
         "/api/v1/auth/login", json={"username": "test_learning_user", "password": "learningpass"}
+    )
+    assert response.status_code == 200
+    return response.json()["data"]["access_token"]
+
+
+@pytest.fixture(scope="module")
+def other_token(client: TestClient) -> str:
+    _ensure_other_user()
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "other_learning_user", "password": "otherlearningpass"},
     )
     assert response.status_code == 200
     return response.json()["data"]["access_token"]
@@ -211,6 +266,68 @@ class TestLearningAPI:
         )
         assert response.status_code == 422
 
+    def test_session_rejects_missing_chapter(self, client: TestClient, token: str) -> None:
+        missing_chapter_id = UUID("c9999999-0000-0000-0000-000000000009")
+        response = client.post(
+            "/api/v1/learning-sessions",
+            headers=headers(token),
+            json={"book_id": str(BOOK1_ID), "chapter_id": str(missing_chapter_id)},
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "CHAPTER_NOT_FOUND"
+
+    def test_patch_session_rejects_non_owner(
+        self, client: TestClient, token: str, other_token: str
+    ) -> None:
+        created = client.post(
+            "/api/v1/learning-sessions",
+            headers=headers(token),
+            json={"book_id": str(BOOK1_ID), "chapter_id": str(CH1_ID)},
+        )
+        assert created.status_code == 201
+        session_id = created.json()["data"]["session_id"]
+
+        forbidden = client.patch(
+            f"/api/v1/learning-sessions/{session_id}",
+            headers=headers(other_token),
+            json={"status": "ENDED"},
+        )
+        assert forbidden.status_code == 403
+        assert forbidden.json()["error"]["code"] == "FORBIDDEN"
+
+        ended = client.patch(
+            f"/api/v1/learning-sessions/{session_id}",
+            headers=headers(token),
+            json={"status": "ENDED"},
+        )
+        assert ended.status_code == 200
+
+    def test_patch_ended_session_rejects_second_close(
+        self, client: TestClient, token: str
+    ) -> None:
+        created = client.post(
+            "/api/v1/learning-sessions",
+            headers=headers(token),
+            json={"book_id": str(BOOK1_ID), "chapter_id": str(CH1_ID)},
+        )
+        assert created.status_code == 201
+        session_id = created.json()["data"]["session_id"]
+
+        first_close = client.patch(
+            f"/api/v1/learning-sessions/{session_id}",
+            headers=headers(token),
+            json={"status": "ENDED"},
+        )
+        assert first_close.status_code == 200
+
+        second_close = client.patch(
+            f"/api/v1/learning-sessions/{session_id}",
+            headers=headers(token),
+            json={"status": "ENDED"},
+        )
+        assert second_close.status_code == 409
+        assert second_close.json()["error"]["code"] == "LEARNING_SESSION_INVALID_STATUS"
+
     def test_create_event_and_append_only(self, client: TestClient, token: str) -> None:
         response = client.post(
             "/api/v1/learning-events",
@@ -237,6 +354,21 @@ class TestLearningAPI:
             },
         )
         assert response.status_code == 422
+
+    def test_create_event_rejects_non_object_payload(
+        self, client: TestClient, token: str
+    ) -> None:
+        response = client.post(
+            "/api/v1/learning-events",
+            headers=headers(token),
+            json={
+                "event_type": "TEXT_SELECTED",
+                "occurred_at": "2026-08-19T08:00:00Z",
+                "payload": "must be an object",
+            },
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
     def test_get_progress_empty_list(self, client: TestClient, token: str) -> None:
         response = client.get("/api/v1/me/progress", headers=headers(token))

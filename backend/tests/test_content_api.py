@@ -220,6 +220,14 @@ class TestContentAPI:
         chapters = response.json()["data"]
         assert [chapter["chapter_order"] for chapter in chapters] == [1, 2]
 
+    def test_list_chapters_missing_book(self, client: TestClient, token: str) -> None:
+        missing_book_id = UUID("b9999999-0000-0000-0000-000000000009")
+        response = client.get(
+            f"/api/v1/books/{missing_book_id}/chapters", headers=headers(token)
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "BOOK_NOT_FOUND"
+
     def test_chapter_detail_includes_blocks_and_knowledge_points(
         self, client: TestClient, token: str
     ) -> None:
@@ -230,12 +238,35 @@ class TestContentAPI:
         names = {point["name"] for point in data["knowledge_points"]}
         assert names == {"训练数据", "标签"}
 
+    def test_chapter_detail_missing_chapter(self, client: TestClient, token: str) -> None:
+        missing_chapter_id = UUID("c9999999-0000-0000-0000-000000000009")
+        response = client.get(
+            f"/api/v1/chapters/{missing_chapter_id}", headers=headers(token)
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "CHAPTER_NOT_FOUND"
+
     def test_knowledge_point_detail(self, client: TestClient, token: str) -> None:
         response = client.get(f"/api/v1/knowledge-points/{KP1_ID}", headers=headers(token))
         assert response.status_code == 200
         assert response.json()["data"]["slug"] == "training_data"
 
+    def test_knowledge_point_missing(self, client: TestClient, token: str) -> None:
+        missing_point_id = UUID("19999999-0000-0000-0000-000000000009")
+        response = client.get(
+            f"/api/v1/knowledge-points/{missing_point_id}", headers=headers(token)
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "KNOWLEDGE_POINT_NOT_FOUND"
+
     def test_grade_filter(self, client: TestClient, token: str) -> None:
         response = client.get("/api/v1/books?grade_min=10", headers=headers(token))
         assert response.status_code == 200
         assert all(book["grade_min"] >= 10 for book in response.json()["data"])
+
+    def test_list_books_rejects_invalid_cursor(self, client: TestClient, token: str) -> None:
+        response = client.get(
+            "/api/v1/books?cursor=not-a-valid-cursor", headers=headers(token)
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
