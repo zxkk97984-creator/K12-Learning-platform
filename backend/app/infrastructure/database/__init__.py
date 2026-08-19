@@ -1,6 +1,23 @@
 """基础设施层：database（engine/session/Base/models）、cache（后续接线）。"""
 
 from app.infrastructure.database.base import Base
-from app.infrastructure.database.models import StudentPreference, StudentProfile, User
+from app.infrastructure.database.models import (
+    Book,
+    Chapter,
+    ContentBlock,
+    KnowledgePoint,
+    StudentPreference,
+    StudentProfile,
+    User,
+)
 
-__all__ = ["Base", "User", "StudentProfile", "StudentPreference"]
+__all__ = [
+    "Base",
+    "User",
+    "StudentProfile",
+    "StudentPreference",
+    "Book",
+    "Chapter",
+    "ContentBlock",
+    "KnowledgePoint",
+]

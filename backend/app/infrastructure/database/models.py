@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -150,6 +151,148 @@ class StudentPreference(Base):
     )
     evidence_ids: Mapped[list] = mapped_column(
         JSONB, server_default=text("'[]'::jsonb")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class Book(Base):
+    """books（0-E §3.5）。"""
+
+    __tablename__ = "books"
+    __table_args__ = (
+        CheckConstraint("grade_min BETWEEN 1 AND 12", name="ck_books_grade_min"),
+        CheckConstraint("grade_max BETWEEN 1 AND 12", name="ck_books_grade_max"),
+        CheckConstraint("grade_min <= grade_max", name="ck_books_grade_range"),
+        CheckConstraint("estimated_minutes > 0", name="ck_books_estimated_minutes"),
+        CheckConstraint(
+            "difficulty IN ('EASY','MEDIUM','HARD')", name="ck_books_difficulty"
+        ),
+        CheckConstraint(
+            "status IN ('DRAFT','PUBLISHED','ARCHIVED')", name="ck_books_status"
+        ),
+        Index("ix_books_grade_min_max", "grade_min", "grade_max"),
+    )
+
+    book_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    title: Mapped[str] = mapped_column(String(255))
+    cover_url: Mapped[str | None] = mapped_column(String(512))
+    description: Mapped[str | None] = mapped_column(Text)
+    grade_min: Mapped[int] = mapped_column(Integer)
+    grade_max: Mapped[int] = mapped_column(Integer)
+    difficulty: Mapped[str] = mapped_column(String(16))
+    estimated_minutes: Mapped[int] = mapped_column(Integer)
+    author: Mapped[str | None] = mapped_column(String(255))
+    source_ids: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    license: Mapped[str | None] = mapped_column(String(128))
+    copyright_status: Mapped[str | None] = mapped_column(String(128))
+    tags: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'DRAFT'"))
+    # FK→admins 延迟到 Phase 10 补（0-E 已裁定；本任务不建 admins 表）
+    created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class Chapter(Base):
+    """chapters（0-E §3.6）。"""
+
+    __tablename__ = "chapters"
+    __table_args__ = (
+        CheckConstraint("estimated_minutes > 0", name="ck_chapters_estimated_minutes"),
+        CheckConstraint(
+            "status IN ('DRAFT','PUBLISHED','ARCHIVED')", name="ck_chapters_status"
+        ),
+        UniqueConstraint("book_id", "chapter_order", name="uq_chapters_book_order"),
+    )
+
+    chapter_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    book_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("books.book_id", ondelete="CASCADE"),
+    )
+    title: Mapped[str] = mapped_column(String(255))
+    chapter_order: Mapped[int] = mapped_column(Integer)
+    summary: Mapped[str | None] = mapped_column(Text)
+    estimated_minutes: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'DRAFT'"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ContentBlock(Base):
+    """content_blocks（0-E §3.7）。"""
+
+    __tablename__ = "content_blocks"
+    __table_args__ = (
+        CheckConstraint(
+            "block_type IN ('TITLE','PARAGRAPH','IMAGE','FIGURE','KNOWLEDGE_CARD',"
+            "'EXAMPLE','CALLOUT','HIGHLIGHT')",
+            name="ck_content_blocks_type",
+        ),
+        UniqueConstraint("chapter_id", "block_order", name="uq_content_blocks_chapter_order"),
+    )
+
+    block_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    chapter_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("chapters.chapter_id", ondelete="CASCADE"),
+    )
+    block_type: Mapped[str] = mapped_column(String(32))
+    content: Mapped[dict] = mapped_column(JSONB)
+    block_order: Mapped[int] = mapped_column(Integer)
+    section_key: Mapped[str | None] = mapped_column(String(128))
+    knowledge_point_ids: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class KnowledgePoint(Base):
+    """knowledge_points（0-E §3.8；禁止 mastery/score/percent 数字列）。"""
+
+    __tablename__ = "knowledge_points"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ACTIVE','ARCHIVED')", name="ck_knowledge_points_status"
+        ),
+    )
+
+    knowledge_point_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    name: Mapped[str] = mapped_column(String(128))
+    slug: Mapped[str] = mapped_column(String(128), unique=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    topic: Mapped[str | None] = mapped_column(String(64))
+    parent_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("knowledge_points.knowledge_point_id", ondelete="SET NULL"),
+    )
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'ACTIVE'"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
