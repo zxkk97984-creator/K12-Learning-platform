@@ -119,7 +119,14 @@ class IdentityService:
         preference = result.scalar_one_or_none()
         if preference is not None:
             return preference
-        preference = StudentPreference(student_id=profile.student_id)
+        # 3 个枚举列 NOT NULL 且无 server_default，必须显式赋默认值
+        # （与 seed、0-E 枚举一致；voice/active/daily/evidence 走 server_default）
+        preference = StudentPreference(
+            student_id=profile.student_id,
+            preferred_explanation_style="EXAMPLE_BASED",
+            preferred_difficulty="MEDIUM",
+            preferred_session_length="SHORT",
+        )
         session.add(preference)
         await session.commit()
         await session.refresh(preference)

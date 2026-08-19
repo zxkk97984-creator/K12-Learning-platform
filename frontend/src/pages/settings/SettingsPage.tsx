@@ -80,13 +80,19 @@ export default function SettingsPage() {
 
   const save = async () => {
     try {
-      await studentService.updateMe({
+      // Mock 角色 id（role-shuangling）不是 UUID；仅在合法 UUID 时提交，
+      // 否则省略（真实 teacher_roles 数据 Phase 11 接入）
+      const roleIdValid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        roleId,
+      )
+      const profilePatch = {
         nickname,
         grade,
         language,
         learning_goal: learningGoal || null,
-        current_teacher_role_id: roleId,
-      })
+        ...(roleIdValid ? { current_teacher_role_id: roleId } : {}),
+      }
+      await studentService.updateMe(profilePatch)
       await studentService.updatePreferences({
         preferred_explanation_style: style,
         preferred_difficulty: difficulty,
