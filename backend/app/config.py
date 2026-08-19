@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # asyncpg 驱动（架构 §42 AsyncSession）；真实值在 .env
     database_url: str = "postgresql+asyncpg://shuangling:***@localhost:5432/shuangling"
     # 2-C 认证使用（JWT Bearer，0-D §1.2）
-    jwt_secret: str = "change-me"
+    jwt_secret: str = "dev-only-change-me-32bytes-secret"
     jwt_expire_minutes: int = 60 * 24 * 7
 
 

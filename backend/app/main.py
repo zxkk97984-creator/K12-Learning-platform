@@ -7,6 +7,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.envelope import error_response, ok
 from app.config import settings
+from app.modules.identity.router import router as identity_router
 
 
 @asynccontextmanager
@@ -16,6 +17,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+app.include_router(identity_router, prefix="/api/v1")
 
 
 @app.get("/health")
@@ -32,7 +34,13 @@ async def ping() -> dict[str, Any]:
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(_request: Request, exc: StarletteHTTPException):
-    # 骨架：完整业务错误码映射（401/403/404/409/422 等）2-C 落地
+    if isinstance(exc.detail, dict) and "code" in exc.detail:
+        return error_response(
+            exc.status_code,
+            exc.detail["code"],
+            exc.detail["message"],
+            exc.detail.get("details"),
+        )
     return error_response(exc.status_code, "HTTP_ERROR", str(exc.detail))
 
 
