@@ -1,0 +1,28 @@
+[project]
+name = "shuangling-backend"
+version = "0.1.0"
+description = "霜铃 · K12 AI 数字教师 V3 后端（FastAPI Modular Monolith）"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "alembic>=1.19.1",
+    "asyncpg>=0.31.0",
+    "fastapi>=0.141.1",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.15.0",
+    "sqlalchemy>=2.0.52",
+    "uvicorn[standard]>=0.52.4",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "psycopg2-binary>=2.9.12",
+    "pytest>=9.1.1",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
