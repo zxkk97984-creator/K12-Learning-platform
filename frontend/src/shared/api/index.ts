@@ -15,9 +15,10 @@ export type {
   SubmitAnswerInput,
   HintResult,
 } from './quiz-service'
-export type { MemoryService, MemoryAction } from './memory-service'
+export type { MemoryService, MemoryAction, MemoryListParams } from './memory-service'
 export type { TeacherRoleService } from './teacher-role-service'
 export { ApiStudentService } from './api-student-service'
 export { ApiConversationService } from './api-conversation-service'
+export { ApiMemoryService } from './api-memory-service'
 export { fetchSSE, parseSSEFrame } from './sse'
 export { ApiError, apiRequest } from './http'
