@@ -6,6 +6,9 @@ from app.infrastructure.database.models import (
     Chapter,
     ContentBlock,
     KnowledgePoint,
+    LearningEvent,
+    LearningSession,
+    BookProgress,
     StudentPreference,
     StudentProfile,
     User,
@@ -20,4 +23,7 @@ __all__ = [
     "Chapter",
     "ContentBlock",
     "KnowledgePoint",
+    "LearningSession",
+    "LearningEvent",
+    "BookProgress",
 ]

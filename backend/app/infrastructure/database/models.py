@@ -297,3 +297,157 @@ class KnowledgePoint(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class LearningSession(Base):
+    """learning_sessions（0-E §3.9）。"""
+
+    __tablename__ = "learning_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ACTIVE','ENDED','ABANDONED')", name="ck_learning_sessions_status"
+        ),
+        CheckConstraint(
+            "duration_seconds >= 0", name="ck_learning_sessions_duration"
+        ),
+        CheckConstraint(
+            "ended_at IS NULL OR ended_at >= started_at",
+            name="ck_learning_sessions_ended_after_started",
+        ),
+        Index(
+            "uq_learning_sessions_one_active",
+            "student_id",
+            unique=True,
+            postgresql_where=text("status = 'ACTIVE'"),
+        ),
+        Index(
+            "ix_learning_sessions_student_started",
+            "student_id",
+            text("started_at DESC"),
+        ),
+    )
+
+    session_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    book_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="RESTRICT")
+    )
+    chapter_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("chapters.chapter_id", ondelete="RESTRICT")
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    duration_seconds: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'ACTIVE'"))
+    entry_route: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class LearningEvent(Base):
+    """learning_events（0-E §3.10；append-only，应用层只 INSERT）。"""
+
+    __tablename__ = "learning_events"
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('CHAPTER_STARTED','CHAPTER_FINISHED','SECTION_READ',"
+            "'KNOWLEDGE_CARD_VIEWED','HELP_REQUESTED','EXPLAIN_REQUESTED',"
+            "'SUMMARY_REQUESTED','QUIZ_CREATED','QUIZ_ANSWERED','ANSWER_CORRECT',"
+            "'ANSWER_WRONG','HINT_REQUESTED','QUESTION_ASKED','BOOK_STARTED',"
+            "'BOOK_FINISHED','VOICE_SESSION_STARTED','ROLE_SWITCHED','TEXT_SELECTED')",
+            name="ck_learning_events_type",
+        ),
+        Index(
+            "ix_learning_events_student_occurred",
+            "student_id",
+            text("occurred_at DESC"),
+        ),
+        Index("ix_learning_events_student_type", "student_id", "event_type"),
+        Index("ix_learning_events_quiz_session", "quiz_session_id"),
+        Index("ix_learning_events_conversation", "conversation_id"),
+        Index("ix_learning_events_session", "session_id"),
+    )
+
+    event_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    session_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("learning_sessions.session_id", ondelete="RESTRICT"),
+    )
+    event_type: Mapped[str] = mapped_column(String(48))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    book_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="RESTRICT")
+    )
+    chapter_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("chapters.chapter_id", ondelete="RESTRICT")
+    )
+    block_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("content_blocks.block_id", ondelete="RESTRICT")
+    )
+    knowledge_point_ids: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+    # FK→conversations 延迟到 Phase 4 补（0-E 已裁定）
+    conversation_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    # FK→quiz_sessions 延迟到 Phase 6 补（0-E 已裁定）
+    quiz_session_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    payload: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class BookProgress(Base):
+    """book_progress（0-E §3.11）。"""
+
+    __tablename__ = "book_progress"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('NOT_STARTED','READING','COMPLETED')",
+            name="ck_book_progress_status",
+        ),
+        CheckConstraint(
+            "position_percent BETWEEN 0 AND 100", name="ck_book_progress_position"
+        ),
+        CheckConstraint("total_seconds >= 0", name="ck_book_progress_total_seconds"),
+        UniqueConstraint("student_id", "book_id", name="uq_book_progress_student_book"),
+    )
+
+    progress_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    book_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="RESTRICT")
+    )
+    chapter_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("chapters.chapter_id", ondelete="RESTRICT")
+    )
+    block_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("content_blocks.block_id", ondelete="SET NULL"),
+    )
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'NOT_STARTED'"))
+    position_percent: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    total_seconds: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
