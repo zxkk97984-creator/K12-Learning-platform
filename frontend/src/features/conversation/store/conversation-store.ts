@@ -3,7 +3,6 @@ import { create } from 'zustand'
 import type { Message } from '@/entities/conversation/types'
 import { useCompanionStore } from '@/features/companion'
 import { conversationService } from '@/mocks/services'
-import { quizService } from '@/mocks/services'
 import type { SendMessageCallbacks, StreamErrorEvent } from '@/shared/api/conversation-service'
 import type { ScreenContext } from '@/features/screen-context/types'
 
@@ -19,6 +18,22 @@ function nextId(): string {
 function toChatMessage(message: Message): ChatMessage {
   if (message.type === 'TOOL_STATUS') {
     return { id: message.message_id, role: 'ai', kind: 'tool', content: message.content, meta: '' }
+  }
+  // 5-B：出题工具结束后，教师消息以 TEXT 落库并携带 quiz_session_id 元数据。
+  // 历史加载时还原为对话内 QuizCard，避免刷新后卡片消失。
+  if (
+    message.type === 'TEXT' &&
+    message.metadata?.tool === 'quiz' &&
+    typeof message.metadata.quiz_session_id === 'string'
+  ) {
+    return {
+      id: message.message_id,
+      role: 'ai',
+      kind: 'quiz',
+      content: message.content,
+      meta: 'Quiz Skill 已创建 · 正式测验已记录',
+      quiz: { sessionId: message.metadata.quiz_session_id },
+    }
   }
   if (message.type === 'QUIZ') {
     return {
@@ -100,8 +115,6 @@ interface ConversationStore {
   appendAiText: (content: string, meta: string) => void
   /** 内部：逐字流式输出（22ms/字），组件不直接调用 */
   pushStreaming: (text: string, meta: string) => void
-  /** 内部：quiz intent 的 tool 状态流（900ms 后创建），quiz 卡由 1-H 渲染 */
-  runQuizToolFlow: () => Promise<void>
 }
 
 export const useConversationStore = create<ConversationStore>()((set, get) => ({
@@ -233,6 +246,9 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
         }
       })
     }
+    const toolMessageId = (toolRunId: string) => `tool-${toolRunId}`
+    const isRecord = (value: unknown): value is Record<string, unknown> =>
+      typeof value === 'object' && value !== null
 
     try {
       const input = screenContext
@@ -256,11 +272,26 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
           upsertAssistant(assistantId, { content: assistantContent, streaming: true })
         },
         onToolStart: (event) => {
+          if (event.tool === 'quiz') {
+            set((state) => ({
+              messages: [
+                ...state.messages,
+                {
+                  id: toolMessageId(event.tool_run_id),
+                  role: 'ai',
+                  kind: 'tool',
+                  content: '正在生成题目…',
+                  meta: '',
+                },
+              ],
+            }))
+            return
+          }
           set((state) => ({
             messages: [
               ...state.messages,
               {
-                id: `tool-${event.tool_run_id}`,
+                id: toolMessageId(event.tool_run_id),
                 role: 'ai',
                 kind: 'tool',
                 content: `${event.tool} · 正在处理中…`,
@@ -270,9 +301,30 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
           }))
         },
         onToolResult: (event) => {
+          if (event.tool === 'quiz') {
+            const payload = isRecord(event.payload) ? event.payload : {}
+            const sessionId =
+              typeof payload.quiz_session_id === 'string' ? payload.quiz_session_id : null
+            set((state) => ({
+              messages: state.messages.map((message) =>
+                message.id === toolMessageId(event.tool_run_id)
+                  ? {
+                      ...message,
+                      kind: event.status === 'success' ? 'quiz' : 'tool',
+                      content:
+                        event.status === 'success'
+                          ? 'Quiz Skill 已创建 · 正式测验已记录'
+                          : 'Quiz Skill 生成失败，请稍后再试',
+                      quiz: sessionId ? { sessionId } : null,
+                    }
+                  : message,
+              ),
+            }))
+            return
+          }
           set((state) => ({
             messages: state.messages.map((message) =>
-              message.id === `tool-${event.tool_run_id}`
+              message.id === toolMessageId(event.tool_run_id)
                 ? {
                     ...message,
                     content:
@@ -308,10 +360,9 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     useCompanionStore.getState().setAiState(INTENT_AI_STATE[intent] ?? 'speaking')
     const text = intentPrompt(intent, selectedText)
     if (intent === 'quiz') {
-      void get()
-        .send(text)
-        .then(() => get().runQuizToolFlow())
-        .catch(() => undefined)
+      // 5-D：真实链路——「给我出题」只发文本，后端 SSE 返回 tool.start/tool.result，
+      // store 用 tool.result 的 quiz_session_id 渲染真实 QuizCard（不再走 Mock 创建）。
+      void get().send(text).catch(() => undefined)
       return
     }
     void get().send(text)
@@ -339,7 +390,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     }))
   },
 
-  // 以下两个内部方法挂到 store（保持单一数据源；组件不直接调用）
+  // 以下内部方法挂到 store（保持单一数据源；组件不直接调用）
   pushStreaming: (text: string, meta: string) => {
     if (get().messages.some((message) => message.content === text)) return
     if (streamTimer !== undefined) window.clearInterval(streamTimer)
@@ -368,47 +419,5 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
         useCompanionStore.getState().setAiState('speaking')
       }
     }, 22)
-  },
-
-  runQuizToolFlow: async () => {
-    useCompanionStore.getState().setAiState('encouraging')
-    const toolId = nextId()
-    set((state) => ({
-      messages: [
-        ...state.messages,
-        { id: toolId, role: 'ai', kind: 'tool', content: 'Quiz Skill · 正在生成测验…', meta: '' },
-      ],
-    }))
-    // 1-H：真正创建 q-live 会话（对齐原型 unshift q-live；失败回退历史 q1）
-    let sessionId = 'q1'
-    try {
-      const session = await quizService.createQuizSession({
-        conversation_id: get().conversationId ?? 'conv-1',
-        quiz_kind: 'AI_QUIZ',
-      })
-      sessionId = session.quiz_session_id
-    } catch {
-      sessionId = 'q1'
-    }
-    window.setTimeout(() => {
-      set((state) => ({
-        messages: state.messages.map((message) =>
-          message.id === toolId ? { ...message, content: 'Quiz Skill 已创建 · 正式测验已记录' } : message,
-        ),
-      }))
-      set((state) => ({
-        messages: [
-          ...state.messages,
-          {
-            id: nextId(),
-            role: 'ai',
-            kind: 'quiz',
-            content: '根据这一段内容，试一道小题。',
-            meta: '第 1 题 / 共 3 题',
-            quiz: { sessionId },
-          },
-        ],
-      }))
-    }, 900)
   },
 }))

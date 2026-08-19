@@ -189,4 +189,90 @@ describe('conversation store real service lifecycle', () => {
       }),
     ])
   })
+
+  it('quiz tool 事件：tool.start 显示生成中，tool.result 渲染真实 QuizCard', async () => {
+    mocks.conversationService.sendMessage.mockImplementation(
+      async (_id: string, _input: unknown, callbacks?: SendMessageCallbacks) => {
+        callbacks?.onStart?.({
+          message_id: 'teacher-1',
+          conversation_id: 'conversation-1',
+          role: 'TEACHER',
+          type: 'TEXT',
+          sequence: 2,
+        })
+        callbacks?.onToolStart?.({
+          tool_run_id: 'tool-run-1',
+          tool: 'quiz',
+          state: 'running',
+          payload: { quiz_session_id: null },
+        })
+        callbacks?.onToolResult?.({
+          tool_run_id: 'tool-run-1',
+          tool: 'quiz',
+          status: 'success',
+          payload: { quiz_session_id: 'quiz-uuid-1', skill_version: 'quiz-v1' },
+        })
+        callbacks?.onDone?.({
+          message_id: 'teacher-1',
+          conversation_id: 'conversation-1',
+          sequence: 2,
+        })
+      },
+    )
+
+    await useConversationStore.getState().send('给我出题')
+
+    expect(useConversationStore.getState().messages).toEqual([
+      expect.objectContaining({ role: 'user', content: '给我出题' }),
+      expect.objectContaining({ id: 'teacher-1', role: 'ai', kind: 'text' }),
+      expect.objectContaining({
+        id: 'tool-tool-run-1',
+        role: 'ai',
+        kind: 'quiz',
+        content: 'Quiz Skill 已创建 · 正式测验已记录',
+        quiz: { sessionId: 'quiz-uuid-1' },
+      }),
+    ])
+  })
+
+  it('「给我出题」只发送文本，不再触发 Mock 的 createQuizSession', async () => {
+    mocks.conversationService.sendMessage.mockResolvedValue(undefined)
+
+    useConversationStore.getState().runIntent('quiz')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(mocks.conversationService.sendMessage).toHaveBeenCalledWith(
+      'conversation-1',
+      { content: '给我出题' },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(mocks.quizService.createQuizSession).not.toHaveBeenCalled()
+  })
+
+  it('历史加载时把带 quiz 元数据的 TEXT 消息还原为 QuizCard', async () => {
+    mocks.conversationService.getConversations.mockResolvedValue([conversation])
+    mocks.conversationService.getMessages.mockResolvedValue([
+      {
+        message_id: 'message-quiz-1',
+        conversation_id: 'conversation-1',
+        role: 'TEACHER',
+        type: 'TEXT',
+        content: '好的，我来出一道题，请听题～',
+        metadata: { tool: 'quiz', quiz_session_id: 'quiz-uuid-1' },
+        sequence: 2,
+        model_info: { provider: 'quiz-bank', model: 'quiz-bank-v1' },
+        created_at: '2026-08-19T08:00:00Z',
+      },
+    ])
+
+    await useConversationStore.getState().load()
+
+    expect(useConversationStore.getState().messages).toEqual([
+      expect.objectContaining({
+        kind: 'quiz',
+        content: '好的，我来出一道题，请听题～',
+        quiz: { sessionId: 'quiz-uuid-1' },
+      }),
+    ])
+  })
 })
