@@ -1,7 +1,8 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query, Response
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +10,8 @@ from app.api.deps import require_student
 from app.api.envelope import ok
 from app.infrastructure.database.models import User
 from app.infrastructure.database.session import get_session
+from app.modules.admin.router import require_idempotency_key
+from app.modules.admin.service import IdempotencyService, canonical_request_hash
 from app.modules.conversation.schemas import (
     ConversationChannel,
     ConversationStatus,
@@ -20,6 +23,7 @@ from app.modules.conversation.service import ConversationService
 
 router = APIRouter(tags=["conversations"])
 service = ConversationService()
+idempotency = IdempotencyService()
 
 
 @router.get("/conversations")
@@ -47,9 +51,30 @@ async def create_conversation(
     user: Annotated[User, Depends(require_student)],
     session: Annotated[AsyncSession, Depends(get_session)],
     body: CreateConversationRequest,
+    key: Annotated[str, Depends(require_idempotency_key)],
+    response: Response,
 ):
+    result, replayed = await idempotency.execute(
+        session,
+        actor_id=user.user_id,
+        actor_type="STUDENT",
+        key=key,
+        request_hash=canonical_request_hash(body.model_dump(exclude_unset=True)),
+        handler=lambda: _create_conversation(session, user, body),
+    )
+    if replayed:
+        response.status_code = 200
+        response.headers["Idempotency-Replayed"] = "true"
+    return result
+
+
+async def _create_conversation(
+    session: AsyncSession,
+    user: User,
+    body: CreateConversationRequest,
+) -> dict:
     conversation = await service.create_conversation(session, user.user_id, body)
-    return ok(conversation)
+    return ok(jsonable_encoder(conversation))
 
 
 @router.post("/conversations/{conversation_id}/messages")

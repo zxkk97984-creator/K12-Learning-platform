@@ -294,7 +294,10 @@ class TestTeacherRoles:
 
         conversation = client.post(
             "/api/v1/conversations",
-            headers=headers(student_token),
+            headers=headers(
+                student_token,
+                **{"Idempotency-Key": f"conv-{uuid4()}"},
+            ),
             json={"title": "角色会话"},
         )
         assert conversation.status_code == 201
@@ -389,7 +392,10 @@ class TestTeacherRoles:
         )
         conversation = client.post(
             "/api/v1/conversations",
-            headers=headers(student_token),
+            headers=headers(
+                student_token,
+                **{"Idempotency-Key": f"conv-{uuid4()}"},
+            ),
             json={"title": "默认角色会话"},
         )
         assert conversation.status_code == 201
@@ -421,7 +427,10 @@ class TestTeacherRoles:
         )
         conversation = client.post(
             "/api/v1/conversations",
-            headers=headers(student_token),
+            headers=headers(
+                student_token,
+                **{"Idempotency-Key": f"conv-{uuid4()}"},
+            ),
             json={"title": "Persona 注入"},
         )
         conversation_id = conversation.json()["data"]["conversation_id"]

@@ -82,8 +82,8 @@ def other_token(client: TestClient) -> str:
     return response.json()["data"]["access_token"]
 
 
-def headers(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
+def headers(token: str, **extra: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}", **extra}
 
 
 def create_conversation(
@@ -91,7 +91,7 @@ def create_conversation(
 ) -> dict:
     response = client.post(
         "/api/v1/conversations",
-        headers=headers(token),
+        headers=headers(token, **{"Idempotency-Key": f"conv-{uuid4()}"}),
         json=payload or {},
     )
     assert response.status_code == 201
@@ -155,6 +155,59 @@ class TestConversationAPI:
         )
         assert detail.status_code == 200
         assert detail.json()["data"]["conversation_id"] == conversation["conversation_id"]
+
+    def test_create_conversation_requires_idempotency_key(
+        self, client: TestClient, token: str
+    ) -> None:
+        response = client.post(
+            "/api/v1/conversations",
+            headers=headers(token),
+            json={"title": "缺幂等键"},
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    def test_create_conversation_idempotent_replay(
+        self, client: TestClient, token: str
+    ) -> None:
+        idempotency_key = f"conv-{uuid4()}"
+        first = client.post(
+            "/api/v1/conversations",
+            headers=headers(token, **{"Idempotency-Key": idempotency_key}),
+            json={"title": "幂等会话"},
+        )
+        assert first.status_code == 201
+
+        replay = client.post(
+            "/api/v1/conversations",
+            headers=headers(token, **{"Idempotency-Key": idempotency_key}),
+            json={"title": "幂等会话"},
+        )
+        assert replay.status_code == 200
+        assert replay.headers["Idempotency-Replayed"] == "true"
+        assert (
+            replay.json()["data"]["conversation_id"]
+            == first.json()["data"]["conversation_id"]
+        )
+
+    def test_create_conversation_idempotency_conflict(
+        self, client: TestClient, token: str
+    ) -> None:
+        idempotency_key = f"conv-{uuid4()}"
+        first = client.post(
+            "/api/v1/conversations",
+            headers=headers(token, **{"Idempotency-Key": idempotency_key}),
+            json={"title": "原请求"},
+        )
+        assert first.status_code == 201
+
+        conflict = client.post(
+            "/api/v1/conversations",
+            headers=headers(token, **{"Idempotency-Key": idempotency_key}),
+            json={"title": "不同请求"},
+        )
+        assert conflict.status_code == 409
+        assert conflict.json()["error"]["code"] == "IDEMPOTENCY_KEY_REUSED"
 
     def test_create_voice_with_explicit_teacher_role(
         self, client: TestClient, token: str

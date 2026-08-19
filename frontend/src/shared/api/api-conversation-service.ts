@@ -161,6 +161,13 @@ function apiScreenContext(context: ScreenContext): Record<string, unknown> {
   return result
 }
 
+function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `conv-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
 function isCallbacks(value: ScreenContext | SendMessageCallbacks | undefined): value is SendMessageCallbacks {
   return (
     isRecord(value) &&
@@ -211,6 +218,7 @@ export class ApiConversationService implements ConversationService {
       await apiRequest<ApiConversationDTO>('/conversations', {
         method: 'POST',
         body: input ?? {},
+        headers: { 'Idempotency-Key': newIdempotencyKey() },
       }),
     )
   }

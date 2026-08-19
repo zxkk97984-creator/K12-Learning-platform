@@ -18,6 +18,7 @@ export class ApiError extends Error {
 interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   body?: unknown
+  headers?: Record<string, string>
 }
 
 /** 轻量 fetch 封装：自动带 Authorization、解析 0-D 信封、非 2xx 抛结构化 ApiError */
@@ -28,6 +29,7 @@ export async function apiRequest<T>(
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
+  Object.assign(headers, options.headers)
 
   const response = await fetch(`${API_BASE}${path}`, {
     method: options.method ?? 'GET',

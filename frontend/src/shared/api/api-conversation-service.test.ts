@@ -103,6 +103,10 @@ describe('ApiConversationService', () => {
       ['/api/v1/conversations/conversation-1/messages?limit=10&sort=desc', 'GET', undefined],
       ['/api/v1/conversations/conversation-1/summary', 'GET', undefined],
     ])
+    const firstInit = fetchMock.mock.calls[0][1] as
+      | { headers?: Record<string, string> }
+      | undefined
+    expect(firstInit?.headers?.['Idempotency-Key']).toBeTruthy()
   })
 
   it('发送 screen_context 并按 SSE 顺序回调消息事件', async () => {

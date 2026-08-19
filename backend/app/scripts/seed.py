@@ -7,6 +7,7 @@ teacher_roles 表 Phase 11 才建，本脚本不种角色。
 
 import asyncio
 import os
+import sys
 from uuid import UUID
 
 from sqlalchemy import select
@@ -29,7 +30,19 @@ SEED_PASSWORD = os.getenv("SEED_PASSWORD", "demo123")
 E2E_MEMORY_CONTENT = "E2E 记忆验证：喜欢通过真实例子学习"
 
 
+def _print_demo_warning() -> None:
+    message = (
+        "⚠️ 演示账号 xiaoming/demo123 + admin/admin123，仅本地开发使用；"
+        "生产环境必须修改默认密码并配置强 JWT_SECRET。"
+    )
+    if sys.stdout.isatty():
+        print(f"\033[33m{message}\033[0m")
+    else:
+        print(message)
+
+
 async def seed() -> None:
+    _print_demo_warning()
     try:
         async with async_session() as session:
             admin_user = (

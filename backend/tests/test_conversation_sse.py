@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -82,17 +82,18 @@ def other_token(client: TestClient) -> str:
     return response.json()["data"]["access_token"]
 
 
-def headers(token: str) -> dict[str, str]:
+def headers(token: str, **extra: str) -> dict[str, str]:
     return {
         "Authorization": f"Bearer {token}",
         "Accept": "text/event-stream",
+        **extra,
     }
 
 
 def create_conversation(client: TestClient, token: str) -> str:
     response = client.post(
         "/api/v1/conversations",
-        headers=headers(token),
+        headers=headers(token, **{"Idempotency-Key": f"conv-{uuid4()}"}),
         json={"title": "SSE 测试会话"},
     )
     assert response.status_code == 201

@@ -76,7 +76,13 @@ def _decode_cursor(cursor: str) -> tuple[datetime, UUID]:
 
 
 def canonical_request_hash(body: Any) -> str:
-    raw = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    raw = json.dumps(
+        body,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 

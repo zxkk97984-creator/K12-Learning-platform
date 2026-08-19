@@ -156,8 +156,8 @@ def empty_token(client: TestClient) -> str:
     return response.json()["data"]["access_token"]
 
 
-def headers(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
+def headers(token: str, **extra: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}", **extra}
 
 
 def parse_sse(raw: str) -> list[dict]:
@@ -180,7 +180,7 @@ def parse_sse(raw: str) -> list[dict]:
 def create_conversation(client: TestClient, token: str) -> str:
     response = client.post(
         "/api/v1/conversations",
-        headers=headers(token),
+        headers=headers(token, **{"Idempotency-Key": f"conv-{uuid4()}"}),
         json={"title": "证据引用测试"},
     )
     assert response.status_code == 201

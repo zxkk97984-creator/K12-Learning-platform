@@ -129,7 +129,7 @@ def headers(token: str, **extra: str) -> dict[str, str]:
 def create_conversation(client: TestClient, token: str) -> dict:
     response = client.post(
         "/api/v1/conversations",
-        headers=headers(token),
+        headers=headers(token, **{"Idempotency-Key": f"conv-{uuid4()}"}),
         json={"title": "测验发起会话"},
     )
     assert response.status_code == 201

@@ -1,5 +1,6 @@
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,7 +19,8 @@ class Settings(BaseSettings):
     # asyncpg 驱动（架构 §42 AsyncSession）；真实值在 .env
     database_url: str = "postgresql+asyncpg://shuangling:***@localhost:5432/shuangling"
     # 2-C 认证使用（JWT Bearer，0-D §1.2）
-    jwt_secret: str = "dev-only-change-me-32bytes-secret"
+    # 无默认值：生产/测试/本地都必须通过 .env 或环境变量显式提供，禁止静默使用 dev 占位。
+    jwt_secret: str
     jwt_expire_minutes: int = 60 * 24 * 7
     ai_provider: str = "mock"
     ai_model: str = "mock-model"
@@ -28,6 +30,18 @@ class Settings(BaseSettings):
     embedding_provider: str = "mock"
     embedding_dimension: int = 64
     voice_provider: str = "mock"
+
+    @model_validator(mode="after")
+    def _reject_placeholder_secret_in_prod(self) -> "Settings":
+        if self.environment == "prod" and (
+            not self.jwt_secret
+            or self.jwt_secret.startswith("dev-")
+            or self.jwt_secret == "change-me"
+        ):
+            raise ValueError(
+                "JWT_SECRET must be set to a strong non-placeholder value in prod"
+            )
+        return self
 
 
 settings = Settings()

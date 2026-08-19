@@ -24,6 +24,7 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql+asyncpg://shuangling:shuangling@localhost:5432/shuangling
+      JWT_SECRET: ci-only-32bytes-jwt-secret-0123456789
       AI_PROVIDER: mock
       AI_MODEL: mock-model
       EMBEDDING_PROVIDER: mock
@@ -81,6 +82,7 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql+asyncpg://shuangling:shuangling@localhost:5432/shuangling
+      JWT_SECRET: ci-only-32bytes-jwt-secret-0123456789
       AI_PROVIDER: mock
       AI_MODEL: mock-model
       EMBEDDING_PROVIDER: mock

@@ -137,8 +137,8 @@ def resource_id() -> UUID:
     return _ingest_test_resource()
 
 
-def headers(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
+def headers(token: str, **extra: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}", **extra}
 
 
 def parse_sse(raw: str) -> list[dict]:
@@ -163,7 +163,7 @@ def parse_sse(raw: str) -> list[dict]:
 def create_conversation(client: TestClient, token: str) -> str:
     response = client.post(
         "/api/v1/conversations",
-        headers=headers(token),
+        headers=headers(token, **{"Idempotency-Key": f"conv-{uuid4()}"}),
         json={"title": "RAG 注入测试"},
     )
     assert response.status_code == 201
