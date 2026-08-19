@@ -248,3 +248,69 @@ def test_evidence_question_without_data_falls_back_honestly(
     events = parse_sse(response.text)
     done = next(event for event in events if event["event"] == "text.done")
     assert "我还在观察中" in done["data"]["content"]
+
+
+def test_agent_md_without_data_renders_gracefully(
+    client: TestClient, empty_token: str
+) -> None:
+    response = client.get("/api/v1/me/agent.md", headers=headers(empty_token))
+
+    assert response.status_code == 200
+    assert "渲染视图，不是数据事实源" in response.text
+    assert "暂无画像判断" in response.text
+    assert "暂无稳定记忆" in response.text
+    assert "暂无情节记录" in response.text
+
+
+def test_agent_md_requires_authentication(client: TestClient) -> None:
+    response = client.get("/api/v1/me/agent.md")
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "UNAUTHENTICATED"
+
+
+@pytest.mark.xfail(
+    reason="known bug: is_evidence_question only matches 为什么, missing 怎么看出/凭什么判断 (reported to Hermes)",
+    strict=False,
+)
+@pytest.mark.parametrize(
+    "question",
+    [
+        "怎么看出我比较喜欢通过例子学习？",
+        "凭什么判断我喜欢通过例子学习？",
+    ],
+)
+def test_evidence_reply_intent_variants(
+    client: TestClient, token: str, question: str
+) -> None:
+    student_id = _ensure_user(USER_NAME, USER_PASSWORD, "AgentMD 测试")
+    _insert_material(student_id)
+    conversation_id = create_conversation(client, token)
+
+    response = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=headers(token),
+        json={"content": question},
+    )
+
+    assert response.status_code == 200
+    events = parse_sse(response.text)
+    done = next(event for event in events if event["event"] == "text.done")
+    assert "我观察到" in done["data"]["content"]
+    assert "证据：" in done["data"]["content"]
+
+
+def test_non_evidence_question_uses_generic_reply(
+    client: TestClient, token: str
+) -> None:
+    conversation_id = create_conversation(client, token)
+    response = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=headers(token),
+        json={"content": "为什么出错？"},
+    )
+
+    assert response.status_code == 200
+    events = parse_sse(response.text)
+    done = next(event for event in events if event["event"] == "text.done")
+    assert "错误" in done["data"]["content"]
+    assert "我还在观察中" not in done["data"]["content"]

@@ -81,10 +81,12 @@ def _insert_events(student_id: UUID, event_types: list[str]) -> None:
     asyncio.run(run())
 
 
-def _run_pipeline(student_id: UUID) -> dict:
+def _run_pipeline(student_id: UUID, *, force_insights: bool = False) -> dict:
     async def run() -> dict:
         async with async_session() as session:
-            return await MemoryPipeline().process_student(session, student_id)
+            return await MemoryPipeline().process_student(
+                session, student_id, force_insights=force_insights
+            )
 
     return asyncio.run(run())
 
@@ -246,3 +248,49 @@ def test_new_evidence_supersedes_old_insight(student_id: UUID) -> None:
     active_count, superseded_count = asyncio.run(run())
     assert active_count >= 1
     assert superseded_count >= 1
+
+
+def test_force_rebuild_does_not_reprocess_events_but_versions_insights(
+    student_id: UUID,
+) -> None:
+    _insert_events(student_id, ["ANSWER_CORRECT", "ANSWER_CORRECT"])
+    _run_pipeline(student_id)
+    evidence_before = _count(MemoryEvidence, student_id)
+    insight_before = _count(ProfileInsight, student_id)
+
+    result = _run_pipeline(student_id, force_insights=True)
+
+    assert result["processed_events"] == 0
+    assert result["groups"] == 0
+    assert _count(MemoryEvidence, student_id) == evidence_before
+    assert _count(ProfileInsight, student_id) > insight_before
+
+
+def test_incremental_rebuild_creates_one_evidence_and_keeps_event_ids_unique(
+    student_id: UUID,
+) -> None:
+    _insert_events(student_id, ["ANSWER_CORRECT", "ANSWER_CORRECT"])
+    _run_pipeline(student_id)
+    evidence_before = _count(MemoryEvidence, student_id)
+
+    _insert_events(student_id, ["ANSWER_WRONG"])
+    result = _run_pipeline(student_id)
+
+    assert result["processed_events"] == 1
+    assert _count(MemoryEvidence, student_id) == evidence_before + 1
+
+    async def check_unique() -> bool:
+        async with async_session() as session:
+            rows = (
+                await session.execute(
+                    select(MemoryEvidence).where(
+                        MemoryEvidence.student_id == student_id
+                    )
+                )
+            ).scalars().all()
+            event_ids = [
+                str(item) for row in rows for item in (row.event_ids or [])
+            ]
+            return len(event_ids) == len(set(event_ids))
+
+    assert asyncio.run(check_unique())

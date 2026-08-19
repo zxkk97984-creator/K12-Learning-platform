@@ -13,7 +13,7 @@ test.describe('黄金路径', () => {
     accessToken = (await response.json()).data.access_token
   })
 
-  test('完整学习闭环', async ({ page }) => {
+  test('完整学习闭环', async ({ page, request }) => {
     await page.addInitScript((token) => {
       window.localStorage.setItem('shuangling-access-token', token)
     }, accessToken)
@@ -38,6 +38,32 @@ test.describe('黄金路径', () => {
     await expect(page.getByText(/遇到错误时，可以先复现问题/).last()).toBeVisible({
       timeout: 10_000,
     })
+
+    // 等教师消息真正落库后再刷新，避免流式完成前 reload 丢失历史。
+    const conversationsResponse = await request.get(
+      '/api/v1/conversations?limit=1&status=ACTIVE',
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    )
+    expect(conversationsResponse.ok()).toBeTruthy()
+    const conversationId = (await conversationsResponse.json()).data[0].conversation_id
+    await expect
+      .poll(
+        async () => {
+          const messagesResponse = await request.get(
+            `/api/v1/conversations/${conversationId}/messages?sort=desc&limit=1`,
+            { headers: { Authorization: `Bearer ${accessToken}` } },
+          )
+          if (!messagesResponse.ok()) return false
+          const messages = (await messagesResponse.json()).data
+          return messages.some(
+            (message: { role: string; content: string }) =>
+              message.role === 'TEACHER' &&
+              message.content.includes('遇到错误时，可以先复现问题'),
+          )
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true)
 
     // 4-D：刷新后重新从真实会话历史加载消息
     await page.reload()

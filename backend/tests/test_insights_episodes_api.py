@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.infrastructure.database.models import (
     MemoryEvidence,
@@ -115,6 +116,46 @@ def _insert_data(username: str) -> tuple[UUID, UUID, UUID]:
             )
             await session.commit()
             return insight_id, evidence_id, episode_id
+
+    return asyncio.run(run())
+
+
+def _insert_insight(
+    username: str,
+    *,
+    dimension: str = "example_learning",
+    status: str = "ACTIVE",
+    level: str = "较稳定",
+) -> UUID:
+    async def run() -> UUID:
+        async with async_session() as session:
+            user = (
+                await session.execute(select(User).where(User.username == username))
+            ).scalar_one()
+            profile = (
+                await session.execute(
+                    select(StudentProfile).where(StudentProfile.user_id == user.user_id)
+                )
+            ).scalar_one()
+            now = datetime.now(timezone.utc)
+            insight_id = uuid4()
+            session.add(
+                ProfileInsight(
+                    insight_id=insight_id,
+                    student_id=profile.student_id,
+                    insight_type="HABIT",
+                    dimension=dimension,
+                    level=level,
+                    description="测试画像。",
+                    evidence_ids=[],
+                    status=status,
+                    valid_from=now,
+                    valid_until=now if status == "SUPERSEDED" else None,
+                    rule_version="profile-rule-v1",
+                )
+            )
+            await session.commit()
+            return insight_id
 
     return asyncio.run(run())
 
@@ -286,3 +327,106 @@ class TestInsightsEpisodesAPI:
         )
         assert response.status_code == 201
         assert _count_evidence(USER_NAME, "CONVERSATION") > before
+
+    def test_invalid_insight_level_is_rejected_by_database_check(
+        self, client: TestClient, token: str
+    ) -> None:
+        async def insert_invalid() -> None:
+            async with async_session() as session:
+                user = (
+                    await session.execute(select(User).where(User.username == USER_NAME))
+                ).scalar_one()
+                profile = (
+                    await session.execute(
+                        select(StudentProfile).where(
+                            StudentProfile.user_id == user.user_id
+                        )
+                    )
+                ).scalar_one()
+                now = datetime.now(timezone.utc)
+                session.add(
+                    ProfileInsight(
+                        insight_id=uuid4(),
+                        student_id=profile.student_id,
+                        insight_type="HABIT",
+                        dimension="invalid_level",
+                        level="强",
+                        description="非法档位。",
+                        evidence_ids=[],
+                        status="ACTIVE",
+                        valid_from=now,
+                        valid_until=None,
+                        rule_version="profile-rule-v1",
+                    )
+                )
+                await session.commit()
+
+        with pytest.raises(IntegrityError):
+            asyncio.run(insert_invalid())
+
+    def test_invalid_insight_type_and_episode_importance_query_rejected(
+        self, client: TestClient, token: str
+    ) -> None:
+        bad_insight = client.get(
+            "/api/v1/me/insights?insight_type=UNKNOWN",
+            headers=headers(token),
+        )
+        assert bad_insight.status_code == 422
+
+        bad_episode = client.get(
+            "/api/v1/me/episodes?importance=URGENT",
+            headers=headers(token),
+        )
+        assert bad_episode.status_code == 422
+
+    def test_insight_status_filter_returns_superseded_history(
+        self, client: TestClient, token: str
+    ) -> None:
+        active_id = _insert_insight(USER_NAME, dimension="history_dimension")
+        superseded_id = _insert_insight(
+            USER_NAME,
+            dimension="history_dimension",
+            status="SUPERSEDED",
+            level="一般",
+        )
+
+        active = client.get(
+            "/api/v1/me/insights?status=ACTIVE",
+            headers=headers(token),
+        )
+        superseded = client.get(
+            "/api/v1/me/insights?status=SUPERSEDED",
+            headers=headers(token),
+        )
+        assert str(active_id) in {row["insight_id"] for row in active.json()["data"]}
+        assert str(superseded_id) in {
+            row["insight_id"] for row in superseded.json()["data"]
+        }
+
+    def test_insights_list_cursor_pagination_has_no_overlap(
+        self, client: TestClient, token: str
+    ) -> None:
+        _insert_insight(USER_NAME, dimension="page_dimension_a")
+        _insert_insight(USER_NAME, dimension="page_dimension_b")
+
+        first = client.get(
+            "/api/v1/me/insights?limit=1",
+            headers=headers(token),
+        )
+        assert first.status_code == 200
+        first_rows = first.json()["data"]
+        assert len(first_rows) == 1
+        assert first.json()["meta"]["has_more"] is True
+        next_cursor = first.json()["meta"]["next_cursor"]
+        assert next_cursor
+
+        second = client.get(
+            f"/api/v1/me/insights?limit=1&cursor={next_cursor}",
+            headers=headers(token),
+        )
+        assert second.status_code == 200
+        second_rows = second.json()["data"]
+        assert second_rows
+        assert {
+            row["insight_id"] for row in first_rows
+        }.isdisjoint({row["insight_id"] for row in second_rows})
