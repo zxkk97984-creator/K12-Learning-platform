@@ -1,0 +1,1798 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>霜铃 · K12 AI 数字教师 V3</title>
+  <style>
+    :root {
+      --bg:      oklch(99% 0.002 240);
+      --surface: oklch(100% 0 0);
+      --fg:      oklch(18% 0.012 250);
+      --muted:   oklch(54% 0.012 250);
+      --border:  oklch(92% 0.005 250);
+      --accent:  oklch(58% 0.18 255);
+
+      --accent-soft: color-mix(in oklch, var(--accent) 12%, transparent);
+      --accent-faint: color-mix(in oklch, var(--accent) 6%, transparent);
+      --fg-soft: color-mix(in oklch, var(--fg) 6%, transparent);
+      --muted-soft: color-mix(in oklch, var(--muted) 11%, transparent);
+      --shadow-soft: 0 18px 50px color-mix(in oklch, var(--fg) 11%, transparent);
+
+      --font-display: 'Iowan Old Style', 'Charter', Georgia, 'Times New Roman', serif;
+      --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+      --font-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+      --fs-body: 15px;
+      --gutter: clamp(20px, 4vw, 56px);
+      --content: 1380px;
+      --radius: 14px;
+      --radius-lg: 22px;
+      --ease: cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: var(--fs-body);
+      line-height: 1.55;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    a { color: inherit; text-decoration: none; }
+    h1, h2, h3, h4, p { margin: 0; }
+    h1, h2, h3, h4 { text-wrap: balance; }
+    p { text-wrap: pretty; }
+    svg { display: block; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+    .container { width: min(var(--content), calc(100% - var(--gutter) * 2)); margin-inline: auto; }
+    .mono { font-family: var(--font-mono); font-size: 11px; letter-spacing: .055em; text-transform: uppercase; }
+    .muted { color: var(--muted); }
+    .display { font-family: var(--font-display); letter-spacing: -.025em; }
+    .rule { border: 0; border-top: 1px solid var(--border); }
+    .icon { width: 18px; height: 18px; flex: 0 0 auto; }
+
+    .topnav {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: color-mix(in oklch, var(--bg) 90%, transparent);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(16px);
+    }
+    .topnav-inner { min-height: 68px; display: flex; align-items: center; gap: 28px; }
+    .brand { display: inline-flex; align-items: center; gap: 11px; min-width: 182px; }
+    .brand-seal { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--fg); border-radius: 50%; font-family: var(--font-display); font-size: 16px; }
+    .brand-copy { display: grid; gap: 1px; }
+    .brand-name { font-family: var(--font-display); font-size: 18px; line-height: 1; }
+    .brand-sub { font-family: var(--font-mono); color: var(--muted); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
+    .nav-links { display: flex; gap: 5px; align-items: center; flex: 1; }
+    .nav-link, .profile-trigger { min-height: 44px; border: 1px solid transparent; background: transparent; color: var(--muted); padding: 0 14px; border-radius: 10px; transition: color .15s var(--ease), background .15s var(--ease), border-color .15s var(--ease); }
+    .nav-link:hover, .profile-trigger:hover { color: var(--fg); background: var(--fg-soft); }
+    .nav-link[aria-current="page"] { color: var(--fg); border-color: var(--border); background: var(--surface); box-shadow: 0 3px 12px color-mix(in oklch, var(--fg) 4%, transparent); }
+    .nav-right { display: flex; align-items: center; gap: 10px; }
+    .grade-badge { padding: 7px 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; }
+    .profile-trigger { display: inline-flex; align-items: center; gap: 9px; padding-inline: 7px 12px; color: var(--fg); }
+    .avatar { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--fg); color: var(--surface); font-family: var(--font-display); font-size: 15px; }
+
+    .view { display: none; }
+    .view.is-active { display: block; }
+    .page { padding: 46px 0 110px; }
+    .page-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding-bottom: 28px; border-bottom: 1px solid var(--fg); }
+    .page-kicker { color: var(--accent); margin-bottom: 12px; }
+    .page-title { font-size: clamp(32px, 4vw, 58px); line-height: 1.04; }
+    .page-intro { max-width: 36ch; color: var(--muted); font-size: 16px; }
+
+    .btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; border-radius: 10px; border: 1px solid transparent; font-size: 14px; transition: transform .15s var(--ease), background .15s var(--ease), border-color .15s var(--ease), color .15s var(--ease); }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+    .btn-primary:hover { background: color-mix(in oklch, var(--accent) 86%, var(--fg)); }
+    .btn-secondary { background: var(--surface); color: var(--fg); border-color: var(--border); }
+    .btn-secondary:hover { border-color: var(--fg); background: var(--fg-soft); }
+    .btn-ghost { background: transparent; color: var(--muted); border-color: transparent; padding-inline: 7px; }
+    .btn-ghost:hover { color: var(--fg); background: var(--fg-soft); }
+    .btn-small { min-height: 36px; padding: 7px 11px; font-size: 12px; }
+
+    .home-hero { padding: 64px 0 44px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); gap: clamp(40px, 8vw, 130px); align-items: center; }
+    .home-eyebrow { color: var(--accent); margin-bottom: 20px; }
+    .home-title { max-width: 12ch; font-size: clamp(46px, 6vw, 88px); line-height: .98; }
+    .home-lead { max-width: 49ch; color: var(--muted); margin-top: 24px; font-size: 17px; }
+    .home-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
+    .home-note { display: flex; align-items: center; gap: 9px; color: var(--muted); margin-top: 22px; font-size: 12px; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+    .presence { width: min(318px, 100%); padding: 18px; }
+    .presence-head { display: flex; align-items: center; gap: 12px; }
+    .presence-avatar { width: 58px; height: 58px; flex: 0 0 auto; display: grid; place-items: center; background: var(--fg-soft); border-radius: 50%; overflow: hidden; }
+    .presence-avatar .chat-mini-sprite { transform: translateX(-9px) translateY(-6px); }
+    .presence-kicker { color: var(--muted); }
+    .presence-head strong { display: block; font-family: var(--font-display); font-size: 19px; line-height: 1.1; margin-top: 3px; }
+    .presence-rows { margin: 14px 0 0; display: grid; gap: 0; }
+    .presence-rows > div { display: grid; grid-template-columns: 62px 1fr; gap: 10px; padding-top: 9px; margin-top: 9px; border-top: 1px solid var(--border); align-items: baseline; }
+    .presence-rows dt { color: var(--muted); font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; }
+    .presence-rows dd { margin: 0; font-size: 13px; line-height: 1.5; }
+    .presence-rows dd .status-dot { display: inline-block; margin-right: 7px; vertical-align: 1px; }
+    .presence-actions { margin-top: 14px; display: flex; }
+
+    .section-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(290px, .6fr); gap: 22px; }
+    .section-label { padding-bottom: 12px; border-bottom: 1px solid var(--fg); margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+    .section-label h2 { font-family: var(--font-display); font-size: 24px; line-height: 1.1; }
+    .section-label .mono { color: var(--muted); }
+    .surface { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+    .continue-card { min-height: 260px; display: grid; grid-template-columns: 190px minmax(0, 1fr); overflow: hidden; }
+    .book-cover { position: relative; min-height: 260px; padding: 22px; background: var(--fg); color: var(--surface); display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
+    .book-cover::after { content: 'AI'; position: absolute; right: -9px; bottom: -40px; font-family: var(--font-display); font-size: 168px; line-height: 1; color: color-mix(in oklch, var(--surface) 12%, transparent); }
+    .book-cover-top { position: relative; z-index: 1; color: color-mix(in oklch, var(--surface) 72%, transparent); }
+    .book-cover-title { position: relative; z-index: 1; max-width: 8ch; font-family: var(--font-display); font-size: 28px; line-height: 1.02; }
+    .book-cover-meta { position: relative; z-index: 1; color: color-mix(in oklch, var(--surface) 66%, transparent); font-size: 11px; }
+    .continue-body { padding: 26px 28px; display: flex; flex-direction: column; justify-content: space-between; gap: 20px; }
+    .continue-kicker { color: var(--muted); margin-bottom: 10px; }
+    .continue-title { font-family: var(--font-display); font-size: 27px; line-height: 1.08; max-width: 18ch; }
+    .continue-copy { color: var(--muted); font-size: 13px; max-width: 48ch; }
+    .continue-bottom { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
+    .chapter-progress { display: grid; gap: 7px; min-width: 180px; }
+    .progress-line { height: 4px; background: var(--border); overflow: hidden; }
+    .progress-line span { display: block; width: 44%; height: 100%; background: var(--fg); }
+    .progress-caption { color: var(--muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; }
+    .recommend-card { padding: 23px 24px; display: flex; flex-direction: column; justify-content: space-between; min-height: 260px; }
+    .recommend-card .mono { color: var(--accent); }
+    .recommend-title { font-family: var(--font-display); font-size: 23px; line-height: 1.08; max-width: 16ch; margin-top: 18px; }
+    .recommend-copy { color: var(--muted); font-size: 13px; margin-top: 12px; }
+    .evidence { padding-top: 16px; margin-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+    .evidence strong { display: block; color: var(--fg); font-weight: 600; margin-bottom: 4px; }
+
+    .home-lower { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; margin-top: 22px; }
+    .mini-panel { padding: 22px 23px; min-height: 175px; }
+    .mini-panel h3 { font-family: var(--font-display); font-size: 21px; line-height: 1.1; margin-top: 19px; }
+    .mini-panel p { color: var(--muted); font-size: 13px; margin-top: 10px; }
+    .mini-panel-link { margin-top: 16px; color: var(--fg); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .mini-panel-link:hover { color: var(--accent); }
+    .history-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 14px; margin-top: 14px; border-top: 1px solid var(--border); }
+    .history-row strong { font-size: 13px; }
+    .history-row span { color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+
+    .library-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; margin-top: 32px; }
+    .library-card { min-height: 310px; display: flex; flex-direction: column; overflow: hidden; }
+    .library-card-cover { min-height: 160px; padding: 20px; display: flex; align-items: end; background: color-mix(in oklch, var(--fg) 92%, var(--accent)); color: var(--surface); }
+    .library-card:nth-child(2) .library-card-cover { background: var(--fg-soft); color: var(--fg); }
+    .library-card:nth-child(3) .library-card-cover { background: color-mix(in oklch, var(--accent) 10%, var(--surface)); color: var(--fg); }
+    .library-card-cover strong { max-width: 12ch; font-family: var(--font-display); font-size: 27px; line-height: 1.02; }
+    .library-card-body { padding: 19px 20px 20px; display: flex; flex-direction: column; flex: 1; }
+    .library-card-body p { color: var(--muted); font-size: 12px; margin-top: 8px; }
+    .library-card-meta { margin-top: auto; padding-top: 16px; display: flex; justify-content: space-between; color: var(--muted); font-family: var(--font-mono); font-size: 10px; }
+
+    .reader-page { padding-top: 24px; }
+    .reader-topbar { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--border); }
+    .breadcrumbs { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; }
+    .breadcrumbs strong { color: var(--fg); font-weight: 600; }
+    .reader-actions { display: flex; align-items: center; gap: 4px; }
+    .reader-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr) 260px; gap: 34px; padding-top: 32px; align-items: start; }
+    .chapter-nav { position: sticky; top: 99px; }
+    .chapter-nav-title { color: var(--muted); margin-bottom: 14px; }
+    .chapter-item { width: 100%; text-align: left; display: grid; grid-template-columns: 24px 1fr; gap: 9px; padding: 10px 0; border: 0; border-top: 1px solid var(--border); color: var(--muted); background: transparent; font-size: 12px; }
+    .chapter-item:hover { color: var(--fg); }
+    .chapter-item[aria-current="page"] { color: var(--fg); }
+    .chapter-item[aria-current="page"] .chapter-number { color: var(--accent); }
+    .chapter-number { font-family: var(--font-mono); font-size: 10px; }
+    .reader-copy { max-width: 700px; }
+    .reader-kicker { color: var(--accent); margin-bottom: 15px; }
+    .reader-title { font-size: clamp(34px, 4.6vw, 58px); line-height: 1.18; max-width: 12ch; }
+    .reader-dek { max-width: 57ch; color: var(--muted); font-size: 16px; margin-top: 19px; }
+    .reader-body { margin-top: 38px; font-size: 16px; line-height: 1.85; }
+    .reader-body p + p { margin-top: 18px; }
+    .reader-body mark { color: var(--fg); background: var(--accent-soft); padding: 2px 4px; border-radius: 4px; }
+    .knowledge-card { margin: 34px 0; padding: 23px 24px; border-top: 2px solid var(--fg); border-bottom: 1px solid var(--border); background: var(--surface); }
+    .knowledge-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .knowledge-card-title { font-family: var(--font-display); font-size: 24px; }
+    .knowledge-card p { color: var(--muted); font-size: 14px; margin-top: 14px; max-width: 62ch; }
+    .example-block { margin-top: 20px; padding: 16px 17px; background: var(--fg-soft); border-left: 2px solid var(--fg); }
+    .example-block strong { display: block; font-size: 12px; margin-bottom: 5px; }
+    .example-block span { color: var(--muted); font-size: 13px; }
+    .reader-footer { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-top: 46px; padding-top: 19px; border-top: 1px solid var(--fg); }
+    .reader-footer span { color: var(--muted); font-size: 12px; }
+    .context-rail { position: sticky; top: 99px; padding: 19px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+    .context-rail h3 { font-family: var(--font-display); font-size: 21px; margin-top: 12px; }
+    .context-row { display: grid; gap: 5px; padding: 14px 0; border-top: 1px solid var(--border); margin-top: 15px; }
+    .context-row span { color: var(--muted); font-size: 12px; }
+    .context-row strong { font-size: 13px; font-weight: 600; }
+    .context-actions { display: grid; gap: 7px; margin-top: 18px; }
+    .context-actions .btn { justify-content: flex-start; width: 100%; }
+    .selection-popover { position: fixed; z-index: 34; display: none; align-items: center; gap: 7px; padding: 7px; background: var(--fg); color: var(--surface); border-radius: 9px; box-shadow: var(--shadow-soft); }
+    .selection-popover.is-visible { display: flex; }
+    .selection-popover span { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; padding-inline: 5px; }
+    .selection-popover button { min-height: 30px; padding: 5px 9px; border: 0; border-radius: 6px; background: var(--surface); color: var(--fg); font-size: 11px; }
+
+    .quiz-timeline { margin-top: 26px; border-top: 1px solid var(--fg); }
+    .quiz-entry { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 20px; padding: 22px 4px; border-bottom: 1px solid var(--border); }
+    .quiz-date { position: relative; color: var(--muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; }
+    .quiz-date i { position: absolute; left: -4px; top: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 3px var(--bg); }
+    .quiz-date::after { content: ''; position: absolute; left: -1px; top: 14px; bottom: -46px; width: 1px; background: var(--border); }
+    .quiz-entry:last-child .quiz-date::after { display: none; }
+    .quiz-score { font-family: var(--font-mono); font-size: 12px; }
+    .companion-dock { position: fixed; z-index: 40; width: 122px; height: 148px; touch-action: none; user-select: none; transform: scale(.85); transform-origin: bottom right; transition: transform .3s var(--ease); }
+    .companion-dock:hover, .companion-dock[data-open="true"], .companion-dock[data-active="true"], .companion-dock[data-suggest="true"] { transform: scale(1); }
+    .companion-trigger { position: relative; width: 100%; height: 100%; display: grid; place-items: end center; border: 0; background: transparent; padding: 0; }
+    .companion-trigger::before { content: ''; position: absolute; width: 76px; height: 22px; bottom: 6px; border-radius: 50%; background: color-mix(in oklch, var(--fg) 13%, transparent); filter: blur(5px); }
+    .companion-trigger:hover .companion-sprite { transform: translateY(-4px) scale(1.02); }
+    .companion-sprite { position: relative; z-index: 1; width: 122px; height: 132px; background-image: url('spritesheet-extended.webp'); background-repeat: no-repeat; background-size: 976px 1452px; background-position: 0 0; transition: transform .28s var(--ease); }
+    .companion-state { position: absolute; top: -4px; left: 50%; transform: translateX(-50%); padding: 4px 10px; background: var(--fg); color: var(--surface); border-radius: 999px; font-size: 10px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .18s var(--ease), transform .18s var(--ease); }
+    .companion-dock[data-active="true"] .companion-state, .companion-dock[data-suggest="true"] .companion-state { opacity: 1; transform: translateX(-50%) translateY(-2px); }
+
+    .companion-panel { position: fixed; z-index: 35; width: min(392px, calc(100vw - 32px)); height: min(640px, calc(100vh - 32px)); display: none; flex-direction: column; background: var(--surface); border: 1px solid var(--fg); border-radius: 18px; box-shadow: var(--shadow-soft); overflow: hidden; }
+    .companion-panel.is-open { display: flex; animation: panel-in .22s var(--ease) both; }
+    @keyframes panel-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .chat-header { min-height: 67px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 15px 12px 18px; border-bottom: 1px solid var(--border); }
+    .chat-identity { display: flex; align-items: center; gap: 10px; }
+    .chat-mini-avatar { width: 33px; height: 33px; border-radius: 50%; background: var(--fg-soft); overflow: hidden; }
+    .chat-mini-sprite { width: 53px; height: 58px; margin-top: 1px; transform: translateX(-10px) translateY(-7px); background-image: url('spritesheet-extended.webp'); background-repeat: no-repeat; background-size: 424px 638px; }
+    .chat-name { display: grid; gap: 2px; }
+    .chat-name strong { font-size: 13px; }
+    .chat-name span { color: var(--muted); font-size: 10px; }
+    .chat-head-actions { display: flex; gap: 2px; }
+    .icon-btn { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--muted); }
+    .icon-btn:hover { color: var(--fg); background: var(--fg-soft); }
+    .chat-context { display: flex; align-items: center; gap: 7px; padding: 10px 17px; border-bottom: 1px solid var(--border); background: var(--fg-soft); color: var(--muted); font-size: 10px; }
+    .chat-context strong { color: var(--fg); font-weight: 600; }
+    .chat-feed { flex: 1; overflow: auto; padding: 17px; display: flex; flex-direction: column; gap: 13px; }
+    .message { max-width: 89%; display: grid; gap: 5px; }
+    .message.user { align-self: end; justify-items: end; }
+    .message-bubble { padding: 11px 13px; border: 1px solid var(--border); border-radius: 13px 13px 13px 4px; background: var(--surface); font-size: 13px; line-height: 1.6; }
+    .message.user .message-bubble { border-color: var(--fg); border-radius: 13px 13px 4px 13px; background: var(--fg); color: var(--surface); }
+    .message-meta { color: var(--muted); font-family: var(--font-mono); font-size: 9px; letter-spacing: .03em; }
+    .message.user .message-meta { text-align: right; }
+    .tool-message { align-self: center; display: flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-family: var(--font-mono); font-size: 9px; }
+    .tool-message b { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+    .typing { display: inline-flex; gap: 3px; align-items: center; min-width: 48px; }
+    .typing i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); animation: typing 1s infinite var(--ease); }
+    .typing i:nth-child(2) { animation-delay: .12s; }
+    .typing i:nth-child(3) { animation-delay: .24s; }
+    @keyframes typing { 0%, 80%, 100% { transform: translateY(0); opacity: .4; } 40% { transform: translateY(-3px); opacity: 1; } }
+    .quiz-card { margin-top: 2px; padding: 13px; background: var(--fg-soft); border: 1px solid var(--border); border-radius: 13px; }
+    .quiz-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-family: var(--font-mono); font-size: 9px; }
+    .quiz-card h4 { font-size: 13px; line-height: 1.45; margin-top: 10px; }
+    .quiz-options { display: grid; gap: 6px; margin-top: 11px; }
+    .quiz-option { display: flex; align-items: start; gap: 8px; width: 100%; padding: 8px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); text-align: left; font-size: 11px; color: var(--fg); }
+    .quiz-option:hover, .quiz-option.is-selected { border-color: var(--fg); background: var(--surface); }
+    .quiz-option.is-correct { border-color: var(--fg); background: var(--fg-soft); }
+    .quiz-option.is-wrong { border-color: var(--muted); color: var(--muted); }
+    .quiz-option em { width: 17px; height: 17px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid var(--border); border-radius: 50%; color: var(--muted); font-style: normal; font-family: var(--font-mono); font-size: 9px; }
+    .quiz-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 11px; }
+    .quiz-footer span { color: var(--muted); font-size: 10px; }
+    .chat-quick { display: flex; gap: 6px; overflow-x: auto; padding: 0 15px 10px; }
+    .quick-btn { flex: 0 0 auto; min-height: 31px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 10px; }
+    .quick-btn:hover { color: var(--fg); border-color: var(--fg); }
+    .chat-composer { display: flex; align-items: end; gap: 7px; padding: 10px 12px 12px; border-top: 1px solid var(--border); }
+    .chat-input { flex: 1; min-height: 42px; max-height: 88px; padding: 10px 11px; resize: none; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--fg); outline: 0; font-size: 13px; }
+    .chat-input:focus { border-color: var(--fg); }
+    .send-btn { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--fg); border-radius: 10px; background: var(--fg); color: var(--surface); }
+    .send-btn:hover { background: color-mix(in oklch, var(--fg) 84%, var(--accent)); }
+
+    .voice-overlay { position: fixed; inset: 0; z-index: 60; display: none; place-items: center; padding: 20px; background: color-mix(in oklch, var(--fg) 88%, transparent); }
+    .voice-overlay.is-open { display: grid; }
+    .voice-sheet { width: min(660px, 100%); min-height: 560px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 30px; background: var(--bg); border: 1px solid color-mix(in oklch, var(--surface) 30%, transparent); border-radius: 24px; box-shadow: var(--shadow-soft); }
+    .voice-top { width: 100%; display: flex; justify-content: space-between; align-items: center; }
+    .voice-top strong { font-family: var(--font-display); font-size: 20px; }
+    .voice-stage { display: grid; justify-items: center; gap: 18px; }
+    .voice-stage .sprite { width: 190px; height: 206px; background-image: url('spritesheet-extended.webp'); background-repeat: no-repeat; background-size: 1520px 2266px; }
+    .voice-status { text-align: center; }
+    .voice-status strong { display: block; font-family: var(--font-display); font-size: 31px; }
+    .voice-status span { display: block; color: var(--muted); font-size: 13px; margin-top: 5px; }
+    .waveform { height: 38px; display: flex; align-items: center; gap: 4px; }
+    .waveform i { width: 3px; height: 12px; background: var(--fg); border-radius: 4px; animation: wave 1s infinite var(--ease); }
+    .waveform i:nth-child(2n) { animation-delay: -.2s; }
+    .waveform i:nth-child(3n) { animation-delay: -.45s; }
+    @keyframes wave { 0%, 100% { height: 9px; opacity: .35; } 50% { height: 30px; opacity: 1; } }
+    .voice-transcript { max-width: 45ch; text-align: center; color: var(--muted); font-size: 14px; }
+    .voice-actions { display: flex; gap: 9px; align-items: center; }
+
+    .toast { position: fixed; z-index: 90; left: 50%; bottom: 24px; transform: translate(-50%, 20px); padding: 10px 14px; background: var(--fg); color: var(--surface); border-radius: 9px; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .18s var(--ease), transform .18s var(--ease); }
+    .toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+
+    @media (max-width: 1100px) {
+      .reader-layout { grid-template-columns: 180px minmax(0, 1fr); }
+      .context-rail { display: none; }
+      .home-hero { gap: 45px; }
+    }
+    @media (max-width: 820px) {
+      .topnav-inner { gap: 10px; }
+      .brand { min-width: auto; }
+      .brand-copy, .grade-badge { display: none; }
+      .nav-links { justify-content: center; }
+      .nav-link { padding-inline: 9px; font-size: 12px; }
+      .home-hero, .section-grid, .home-lower, .profile-layout { grid-template-columns: 1fr; }
+      .presence { width: 100%; }
+      .home-title { max-width: 13ch; }
+      .recommend-card { min-height: auto; }
+      .library-grid { grid-template-columns: 1fr 1fr; }
+      .reader-layout { grid-template-columns: 1fr; }
+      .chapter-nav { position: static; display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+      .chapter-nav-title { display: none; }
+      .chapter-item { min-width: 150px; border: 1px solid var(--border); border-radius: 9px; padding: 10px; }
+      .chapter-item[aria-current="page"] { border-color: var(--fg); }
+      .reader-copy { max-width: none; }
+      .quiz-entry { grid-template-columns: 56px minmax(0, 1fr); gap: 12px; padding-inline: 0; }
+    }
+    @media (max-width: 560px) {
+      .page { padding-top: 30px; }
+      .nav-links { gap: 0; }
+      .nav-link { padding-inline: 6px; font-size: 11px; }
+      .nav-link:nth-child(3), .nav-link:nth-child(4) { display: none; }
+      .nav-right { margin-left: auto; }
+      .home-hero { padding-top: 42px; }
+      .home-title { font-size: clamp(43px, 15vw, 70px); }
+      .home-actions { flex-direction: column; align-items: stretch; }
+      .home-actions .btn { width: 100%; }
+      .continue-card { grid-template-columns: 112px minmax(0, 1fr); }
+      .book-cover { min-height: 260px; padding: 16px; }
+      .book-cover-title { font-size: 23px; }
+      .continue-body { padding: 20px 17px; }
+      .continue-title { font-size: 22px; }
+      .continue-bottom { align-items: stretch; flex-direction: column; }
+      .chapter-progress { min-width: 0; }
+      .library-grid { grid-template-columns: 1fr; }
+      .reader-topbar { align-items: start; flex-direction: column; padding-bottom: 10px; }
+      .reader-title { font-size: 42px; }
+      .reader-footer { align-items: start; flex-direction: column; }
+      .voice-sheet { min-height: min(560px, calc(100vh - 40px)); padding: 22px 17px; }
+      .voice-stage .sprite { width: 155px; height: 168px; background-size: 1240px 1848px; }
+      .voice-status strong { font-size: 26px; }
+      .companion-dock { transform: scale(.87); transform-origin: bottom right; }
+    }
+  </style>
+  <style id="product-optimization-overrides">
+    /* Product pass: tighter cockpit rhythm, clearer hierarchy, quieter surfaces. */
+    .page { padding-top: 32px; padding-bottom: 78px; }
+    .home-hero { padding: 34px 0 28px; grid-template-columns: minmax(0, 1.05fr) minmax(280px, .72fr); gap: clamp(28px, 5vw, 72px); align-items: end; border-bottom: 1px solid var(--border); }
+    .home-title { max-width: 15ch; font-size: clamp(38px, 4.6vw, 66px); line-height: 1; }
+    .home-lead { margin-top: 17px; font-size: 15px; max-width: 52ch; }
+    .home-actions { margin-top: 22px; }
+    .home-note { margin-top: 16px; }
+    .presence { padding: 16px 17px; }
+    .section-grid { gap: 18px; margin-top: 24px; }
+    .continue-card { min-height: 232px; grid-template-columns: 164px minmax(0, 1fr); }
+    .book-cover { min-height: 232px; }
+    .continue-body { padding: 22px 24px; }
+    .continue-title { font-size: 24px; }
+    .recommend-card { min-height: 232px; padding: 21px 22px; }
+    .recommend-title { font-size: 21px; margin-top: 13px; }
+    .recommend-copy { margin-top: 8px; }
+    .evidence { padding-top: 12px; margin-top: 14px; }
+    .home-lower { grid-template-columns: 1.1fr .95fr .95fr; gap: 18px; margin-top: 18px; }
+    .mini-panel { min-height: 152px; padding: 18px 19px; }
+    .mini-panel h3 { font-size: 19px; margin-top: 12px; }
+    .mini-panel p { margin-top: 7px; font-size: 12px; }
+    .mini-panel-link { margin-top: 12px; }
+    .mini-panel--timeline { background: color-mix(in oklch, var(--accent) 5%, var(--surface)); }
+    .mini-panel--timeline h3 { max-width: 16ch; }
+    .timeline-note { display: grid; grid-template-columns: 8px 1fr; gap: 9px; margin-top: 12px; color: var(--muted); font-size: 11px; }
+    .timeline-note::before { content: ''; width: 6px; height: 6px; margin-top: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+    .mini-panel--history .history-row { margin-top: 11px; padding-top: 11px; }
+    .mini-panel--memory { background: var(--fg); color: var(--surface); border-color: var(--fg); }
+    .mini-panel--memory .muted, .mini-panel--memory p { color: color-mix(in oklch, var(--surface) 66%, transparent); }
+    .mini-panel--memory h3 { max-width: 15ch; font-weight: 500; }
+    .mini-panel--memory .mini-panel-link { color: var(--surface); }
+
+    .library-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 25px; }
+    .library-search { min-width: 220px; flex: 1; height: 42px; padding: 0 13px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--fg); font-size: 13px; }
+    .library-search:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+    .filter-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+    .filter-chip { min-height: 36px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .filter-chip:hover, .filter-chip[aria-pressed="true"] { border-color: var(--fg); color: var(--fg); background: var(--surface); }
+    .library-section-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 28px; padding-bottom: 10px; border-bottom: 1px solid var(--fg); }
+    .library-section-heading h2 { font-family: var(--font-display); font-size: 24px; }
+    .library-section-heading span { color: var(--muted); font-family: var(--font-mono); font-size: 10px; }
+    .library-grid { margin-top: 15px; gap: 18px; }
+    .library-card { min-height: 280px; border-radius: var(--radius); }
+    .library-card-cover { min-height: 132px; }
+    .library-card-cover { position: relative; overflow: hidden; isolation: isolate; }
+    .library-card-cover::before { content: ''; position: absolute; width: 132px; height: 132px; right: -22px; top: -58px; border: 1px solid currentColor; border-radius: 50%; opacity: .32; transform: rotate(-24deg); }
+    .library-card-cover::after { content: '01'; position: absolute; right: 13px; bottom: -21px; font-family: var(--font-display); font-size: 104px; line-height: 1; opacity: .12; }
+    .library-card:nth-child(2) .library-card-cover::before { width: 90px; height: 152px; right: 18px; top: -32px; border-radius: 48% 52% 30% 70%; transform: rotate(32deg); }
+    .library-card:nth-child(2) .library-card-cover::after { content: '02'; }
+    .library-card:nth-child(3) .library-card-cover::before { width: 112px; height: 112px; right: -10px; top: -34px; border-radius: 12px; transform: rotate(45deg); }
+    .library-card:nth-child(3) .library-card-cover::after { content: '03'; }
+    .library-card-cover strong { position: relative; z-index: 1; }
+    .library-card-body { padding: 16px 18px 17px; }
+    .library-card-body p { line-height: 1.5; }
+    .library-card-meta { padding-top: 11px; font-size: 9px; }
+    .library-card-status { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; color: var(--muted); font-size: 11px; }
+    .library-card-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+    /* 书库 · 书籍数据网格 + 书系身份系统 */
+    .library-all-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+    .grade-filter { display: flex; gap: 2px; padding: 3px; background: var(--fg-soft); border-radius: 10px; }
+    .grade-btn { min-height: 32px; padding: 6px 14px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 12px; transition: color .15s var(--ease), background .15s var(--ease); }
+    .grade-btn:hover { color: var(--fg); }
+    .grade-btn[aria-pressed="true"] { color: var(--fg); background: var(--surface); box-shadow: 0 2px 10px color-mix(in oklch, var(--fg) 6%, transparent); }
+    .topic-filters { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+    .topic-filters > .mono { flex: 0 0 auto; }
+    .book-card { --tint: oklch(80% 0.06 250); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: border-color .15s var(--ease), transform .15s var(--ease); }
+    .book-card:hover { border-color: var(--fg); transform: translateY(-2px); }
+    .book-tint-1 { --tint: oklch(80% 0.07 250); }
+    .book-tint-2 { --tint: oklch(80% 0.07 160); }
+    .book-tint-3 { --tint: oklch(81% 0.06 55); }
+    .book-tint-4 { --tint: oklch(80% 0.07 330); }
+    .book-card-cover { position: relative; height: 54px; background: color-mix(in oklch, var(--tint) 36%, var(--surface)); border-bottom: 1px solid var(--border); overflow: hidden; }
+    .book-card-cover::before { content: ''; position: absolute; width: 74px; height: 74px; right: -16px; top: -38px; border: 1px solid var(--fg); border-radius: 50%; opacity: .16; }
+    .book-card-cover::after { content: ''; position: absolute; left: 14px; bottom: -14px; width: 64px; height: 2px; background: var(--fg); opacity: .12; transform: rotate(-14deg); }
+    .book-num { position: relative; z-index: 1; display: block; padding: 12px 0 0 15px; font-family: var(--font-display); font-size: 26px; line-height: 1; }
+    .book-card-body { padding: 13px 15px 14px; }
+    .book-card-body h3 { margin-top: 7px; font-family: var(--font-display); font-size: 17px; line-height: 1.12; }
+    .book-keywords { margin-top: 5px; color: var(--muted); font-size: 11px; }
+    .book-card-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; color: var(--muted); font-family: var(--font-mono); font-size: 9px; }
+    .book-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border); min-height: 30px; }
+    .book-status { color: var(--muted); font-size: 11px; }
+    .book-status.is-reading { color: var(--fg); }
+    .book-reco { display: inline-flex; align-items: center; gap: 6px; color: var(--fg); font-size: 11px; }
+    .book-reco em { padding: 2px 7px; border-radius: 999px; background: var(--fg); color: var(--surface); font-style: normal; font-size: 10px; }
+    .book-why { padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 11px; }
+    .book-why:hover { color: var(--fg); text-decoration: underline; }
+    .library-cover-num { position: absolute; z-index: 1; top: 13px; left: 18px; font-family: var(--font-display); font-size: 14px; opacity: .6; }
+    .library-cover-keywords { position: relative; z-index: 1; align-self: start; margin-top: 52px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .05em; opacity: .65; }
+
+    .empty-state { margin-top: 18px; padding: 46px 20px; text-align: center; border: 1px dashed var(--border); border-radius: 12px; }
+    .empty-state h3 { font-family: var(--font-display); font-size: 21px; }
+    .empty-state p { color: var(--muted); font-size: 13px; margin-top: 8px; max-width: 40ch; margin-inline: auto; }
+    .empty-state .btn { margin-top: 16px; }
+
+    /* 测验 · 时间线 + 答卷详情 */
+    .quiz-filter-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 25px; }
+    .quiz-filter-row .filter-strip { flex: 1; }
+    .quiz-evidence { color: var(--muted); font-size: 11px; }
+    .quiz-entry-body { min-width: 0; }
+    .quiz-entry-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .quiz-type { color: var(--muted); font-family: var(--font-mono); font-size: 9px; letter-spacing: .05em; }
+    .quiz-entry-head strong { font-family: var(--font-display); font-size: 21px; }
+    .quiz-entry-head .quiz-score { margin-left: auto; }
+    .quiz-entry-src { color: var(--muted); font-size: 12px; margin-top: 5px; }
+    .quiz-entry-meta { color: var(--muted); font-size: 11px; margin-top: 3px; }
+    .quiz-ai-note { margin: 12px 0 0; padding: 0 0 0 14px; border-left: 2px solid var(--fg); font-family: var(--font-display); font-size: 15px; line-height: 1.55; }
+    .quiz-entry-actions { margin-top: 13px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .quiz-detail-top { padding: 8px 0 26px; border-bottom: 1px solid var(--fg); }
+    .quiz-detail-top .page-title { margin-top: 16px; font-size: clamp(30px, 3.6vw, 48px); }
+    .quiz-detail-top .page-intro { margin-top: 10px; max-width: none; }
+    .quiz-detail-score { display: flex; align-items: center; gap: 18px; margin-top: 20px; flex-wrap: wrap; }
+    .quiz-detail-score .quiz-score { font-size: 15px; }
+    .quiz-detail-score .quiz-ai-note { margin: 0; flex: 1; min-width: 260px; }
+    .question-list { list-style: none; margin: 0; padding: 0; }
+    .question-item { padding: 26px 0; border-bottom: 1px solid var(--border); }
+    .question-head { display: flex; align-items: center; gap: 12px; }
+    .result-tag { padding: 2px 8px; border-radius: 999px; font-size: 10px; font-family: var(--font-mono); }
+    .result-ok { background: var(--fg-soft); color: var(--fg); }
+    .result-wrong { border: 1px solid var(--muted); color: var(--muted); }
+    .question-stem { margin-top: 12px; font-family: var(--font-display); font-size: 20px; line-height: 1.45; max-width: 60ch; }
+    .question-answer, .question-correct { display: grid; grid-template-columns: 84px 28px minmax(0, 1fr); gap: 12px; align-items: baseline; margin-top: 10px; }
+    .question-answer > span, .question-correct > span { color: var(--muted); font-family: var(--font-mono); font-size: 10px; }
+    .question-answer strong, .question-correct strong { font-family: var(--font-mono); font-size: 13px; }
+    .question-answer p, .question-correct p { margin: 0; font-size: 13px; color: var(--muted); }
+    .question-answer p { color: var(--fg); }
+    .question-interactions { margin-top: 14px; padding: 14px 16px; background: var(--fg-soft); border-radius: 10px; display: grid; gap: 8px; justify-items: start; }
+    .interaction-note { font-size: 12px; color: var(--muted); }
+    .interaction-note b, .interaction-note q { color: var(--fg); font-weight: 600; }
+    .quiz-detail-foot { margin-top: 18px; }
+
+    /* 成长 · 学生视图 + 记忆细粒度操作 */
+    .profile-main { display: grid; gap: 18px; align-content: start; }
+    .student-intro { padding: 24px 26px; }
+    .student-quote { margin: 14px 0 0; font-family: var(--font-display); font-size: 26px; line-height: 1.35; max-width: 24ch; }
+    .student-quote-sub { color: var(--muted); font-size: 14px; line-height: 1.75; margin-top: 12px; max-width: 60ch; }
+    .student-section { padding: 0 2px; }
+    .student-h2 { font-family: var(--font-display); font-size: 22px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+    .habit-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+    .habit-item { padding: 13px 15px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+    .habit-item span { display: block; color: var(--muted); font-family: var(--font-mono); font-size: 9px; letter-spacing: .05em; }
+    .habit-item strong { display: block; margin-top: 6px; font-size: 14px; }
+    .student-rows { list-style: none; margin: 14px 0 0; padding: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+    .student-row { padding: 15px 18px; border-top: 1px solid var(--border); }
+    .student-row:first-child { border-top: 0; }
+    .student-row-head { display: flex; align-items: center; gap: 9px; }
+    .student-row-head strong { font-size: 14px; font-weight: 600; }
+    .student-row p { color: var(--muted); font-size: 13px; margin-top: 5px; }
+    .student-section .md-quote { margin-top: 14px; }
+    .memory-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 12px; }
+    .memory-item { padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; }
+    .memory-item p { font-size: 12px; line-height: 1.55; }
+    .memory-actions { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 9px; }
+    .memory-actions button { min-height: 24px; padding: 3px 7px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 10px; }
+    .memory-actions button:hover { color: var(--fg); background: var(--fg-soft); }
+    .memory-item.is-confirmed { border-color: var(--fg); }
+    .memory-item.is-confirmed .memory-actions { display: none; }
+    .memory-confirmed { display: none; margin-top: 9px; color: var(--fg); font-family: var(--font-mono); font-size: 10px; }
+    .memory-item.is-confirmed .memory-confirmed { display: block; }
+
+    /* 首页 · 三式信息区 + 继续学习强化 */
+    .timeline-nodes { margin-top: 12px; padding-left: 14px; border-left: 1px solid var(--border); display: grid; gap: 12px; }
+    .tnode { position: relative; }
+    .tnode::before { content: ''; position: absolute; left: -18px; top: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 3px var(--bg); }
+    .tnode time { font-family: var(--font-mono); font-size: 9px; color: var(--muted); letter-spacing: .04em; }
+    .tnode p { margin-top: 2px; font-size: 12px; color: var(--fg); }
+    .history-list .history-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 10px; }
+    .history-list .history-row strong { font-size: 13px; }
+    .memory-quote { margin: 12px 0 0; font-family: var(--font-display); font-size: 21px; line-height: 1.4; max-width: 20ch; font-weight: 500; }
+    .memory-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .memory-chip { padding: 3px 9px; border: 1px solid color-mix(in oklch, var(--surface) 32%, transparent); border-radius: 999px; color: var(--surface); font-size: 10px; }
+    .continue-position { margin-top: 8px; }
+    .continue-signal { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--muted); font-size: 11px; }
+    .continue-signal::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--fg); }
+
+    /* 阅读页 · 沉浸排版 + 记忆信号 + 目录状态 */
+    .memory-signal { display: inline-flex; align-items: center; gap: 7px; margin-top: 14px; padding-top: 10px; border-top: 1px dashed var(--border); color: var(--muted); }
+    .memory-signal::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--fg); }
+    .reader-callout { margin: 30px 0; padding: 18px 20px; background: var(--surface); border: 1px solid var(--border); border-left: 2px solid var(--fg); border-radius: 0 10px 10px 0; }
+    .reader-callout strong { display: block; font-family: var(--font-display); font-size: 17px; }
+    .reader-callout p { color: var(--muted); font-size: 14px; margin-top: 7px; }
+    .reader-figure { margin: 34px 0; }
+    .reader-figure svg { width: 100%; height: auto; }
+    .reader-figure figcaption { margin-top: 10px; color: var(--muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; }
+    .chapter-collapse { width: 100%; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; padding: 7px 2px; border: 0; background: transparent; color: var(--muted); font-size: 11px; text-align: left; }
+    .chapter-collapse:hover { color: var(--fg); }
+    .chapter-nav.is-collapsed .chapter-item { display: none; }
+    .chapter-item { grid-template-columns: 24px 1fr auto; }
+    .chapter-item.is-done::after { content: '✓'; grid-column: 3; color: var(--muted); font-family: var(--font-mono); font-size: 10px; }
+    .chapter-item.is-done .chapter-number { color: var(--muted); }
+
+    /* 对话 · 流式输出 + 异常状态 */
+    .stream-caret { display: inline-block; width: 1px; height: 1em; margin-left: 2px; vertical-align: -.15em; background: var(--fg); animation: caret-blink 1s steps(2) infinite; }
+    @keyframes caret-blink { 50% { opacity: 0; } }
+    .message-bubble.is-error { background: color-mix(in oklch, var(--muted) 9%, var(--surface)); border-color: var(--muted); }
+    .error-actions { display: flex; gap: 8px; margin-top: 9px; }
+    .error-actions button { min-height: 28px; padding: 4px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--fg); font-size: 11px; }
+    .error-actions button:hover { border-color: var(--fg); }
+    .message-bubble.is-refuse p { color: var(--muted); font-size: 12px; margin-top: 7px; }
+
+    /* 全局 · 头像菜单 + 学段 Tokens + 演示状态 */
+    .menu-toggle { width: 34px; min-height: 44px; display: grid; place-items: center; border: 0; background: transparent; color: var(--muted); }
+    .menu-toggle:hover { color: var(--fg); }
+    .user-menu { position: absolute; z-index: 50; right: 0; top: 54px; width: 224px; padding: 14px; background: var(--surface); border: 1px solid var(--fg); border-radius: 12px; box-shadow: var(--shadow-soft); display: grid; gap: 12px; }
+    .user-menu[hidden] { display: none; }
+    .user-menu-title { color: var(--muted); }
+    .user-menu-row { display: flex; gap: 4px; }
+    .user-menu-row button { flex: 1; min-height: 32px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--muted); font-size: 11px; }
+    .user-menu-row button:hover { color: var(--fg); border-color: var(--fg); }
+    .user-menu-row button[aria-pressed="true"] { color: var(--fg); border-color: var(--fg); background: var(--fg-soft); }
+    html[data-age="primary"] { --fs-body: 17px; }
+    html[data-age="primary"] .btn { min-height: 48px; }
+    html[data-age="primary"] .home-title { font-size: clamp(46px, 6.4vw, 84px); }
+    html[data-age="primary"] .companion-dock { transform: scale(1); }
+    html[data-age="senior"] { --fs-body: 14px; }
+    html[data-age="senior"] .companion-dock { transform: scale(.8); }
+    html[data-age="senior"] .library-all-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    body.demo-new .normal-only { display: none !important; }
+    .empty-only { display: none; }
+    body.demo-new .empty-only { display: block; }
+    .empty-continue { padding: 34px 20px; text-align: center; }
+    .empty-continue h3 { font-family: var(--font-display); font-size: 22px; }
+    .empty-continue p { color: var(--muted); font-size: 13px; margin-top: 8px; max-width: 42ch; margin-inline: auto; }
+    .empty-continue .btn { margin-top: 16px; }
+
+    @media (max-height: 800px) {
+      .home-hero { padding-top: 16px; padding-bottom: 16px; }
+      .home-title { font-size: clamp(36px, 4vw, 54px); }
+      .home-lead { margin-top: 12px; }
+      .presence { padding: 13px 14px; }
+      .presence-rows > div { padding-top: 7px; margin-top: 7px; }
+      .continue-card { min-height: 208px; }
+      .page { padding-bottom: 64px; }
+    }
+    @media (max-width: 720px) {
+      .companion-panel { width: calc(100vw - 20px); max-width: none; left: 10px !important; top: auto !important; bottom: 10px; height: min(72vh, 600px); }
+    }
+
+    /* 成长页 · agent.md 文档视图 */
+    .profile-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 18px; margin-top: 24px; align-items: start; }
+    .doc-shell { border-radius: var(--radius); overflow: hidden; }
+    .doc-bar { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 18px; border-bottom: 1px solid var(--border); }
+    .doc-file { display: flex; align-items: center; gap: 9px; min-width: 0; flex-wrap: wrap; }
+    .doc-icon { width: 16px; height: 16px; color: var(--muted); }
+    .doc-filename { font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: .01em; }
+    .doc-updated { color: var(--muted); font-size: 11px; }
+    .doc-badge { padding: 2px 7px; border: 1px solid var(--border); border-radius: 999px; background: var(--fg-soft); font-family: var(--font-mono); font-size: 9px; letter-spacing: .04em; }
+    .doc-tabs { display: flex; gap: 2px; padding: 3px; background: var(--fg-soft); border-radius: 10px; }
+    .doc-tab { min-height: 30px; padding: 5px 13px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 12px; transition: color .15s var(--ease), background .15s var(--ease); }
+    .doc-tab:hover { color: var(--fg); }
+    .doc-tab[aria-selected="true"] { color: var(--fg); background: var(--surface); box-shadow: 0 2px 10px color-mix(in oklch, var(--fg) 6%, transparent); }
+    .doc-view[hidden] { display: none; }
+    .md-frontmatter { padding: 14px 26px 12px; background: var(--fg-soft); border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 12px; line-height: 1.9; }
+    .fm-dash { display: block; color: var(--muted); opacity: .55; line-height: 1.2; }
+    .fm-row { display: flex; gap: 14px; align-items: baseline; }
+    .fm-key { min-width: 208px; color: var(--muted); }
+    .fm-val { color: var(--fg); }
+    .fm-note { color: var(--muted); font-size: 11px; }
+    .md-body { padding: 26px 30px 28px; }
+    .md-h2 { display: flex; align-items: baseline; gap: 9px; margin: 30px 0 0; font-family: var(--font-display); font-size: 23px; line-height: 1.15; }
+    .md-h2:first-child { margin-top: 0; }
+    .md-h2::before { content: '##'; font-family: var(--font-mono); font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+    .md-p { color: var(--muted); font-size: 14px; line-height: 1.75; margin-top: 12px; max-width: 60ch; }
+    .md-evidence { margin-top: 9px; font-family: var(--font-mono); font-size: 11px; line-height: 1.7; color: var(--muted); }
+    .md-evidence::before { content: '> '; }
+    .md-judgments { list-style: none; margin: 12px 0 0; padding: 0; }
+    .md-judgment { padding: 14px 0; border-top: 1px solid var(--border); }
+    .md-judgment:first-child { border-top: 0; }
+    .md-judgment-head { display: flex; align-items: center; gap: 9px; }
+    .md-judgment-head strong { font-size: 14px; font-weight: 600; }
+    .level-tag { padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .02em; }
+    .md-judgment p { color: var(--muted); font-size: 13px; margin-top: 5px; }
+    .md-ask { margin-left: auto; min-height: 26px; padding: 3px 2px; border: 0; background: transparent; color: var(--muted); font-size: 11px; }
+    .md-ask:hover { color: var(--fg); text-decoration: underline; }
+    .md-quote { margin: 13px 0 0; padding: 0 0 0 16px; border-left: 2px solid var(--fg); font-family: var(--font-display); font-size: 20px; line-height: 1.55; max-width: 54ch; }
+    .md-ask-row { margin-top: 10px; }
+    .md-editor { padding: 18px 22px 22px; }
+    .md-editor-hint { color: var(--muted); font-size: 12px; line-height: 1.65; max-width: 64ch; }
+    .md-editor-wrap { display: flex; margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .md-editor-wrap:focus-within { border-color: var(--fg); }
+    .md-gutter { width: 46px; flex: 0 0 auto; padding: 13px 0; overflow: hidden; background: var(--fg-soft); color: var(--muted); font-family: var(--font-mono); font-size: 12.5px; line-height: 1.75; text-align: right; user-select: none; }
+    .md-gutter span { display: block; padding-right: 13px; }
+    .md-source { flex: 1; min-width: 0; min-height: 460px; padding: 13px 16px; border: 0; outline: 0; resize: vertical; background: var(--surface); color: var(--fg); font-family: var(--font-mono); font-size: 12.5px; line-height: 1.75; white-space: pre; overflow: auto; }
+    .md-editor-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+    .profile-rail { position: sticky; top: 92px; display: grid; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .rail-block { padding: 16px 18px; border-bottom: 1px solid var(--border); }
+    .rail-block:last-child { border-bottom: 0; }
+    .rail-block .mono { color: var(--muted); }
+    .rail-copy { color: var(--muted); font-size: 12px; line-height: 1.65; margin-top: 8px; }
+    .changelog { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 9px; }
+    .changelog li { display: grid; grid-template-columns: 40px 1fr; gap: 9px; align-items: baseline; }
+    .changelog time { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
+    .changelog span { font-size: 12px; }
+    .changelog li.is-new span { font-weight: 600; }
+    .rail-actions { display: grid; gap: 8px; }
+    .rail-actions .btn { width: 100%; }
+    .doc-bar-right { display: flex; align-items: center; gap: 8px; }
+    .doc-meta-strip { padding: 14px 18px 16px; border-top: 1px solid var(--border); display: grid; gap: 10px; justify-items: start; }
+    .nav-right { position: relative; }
+    .library-grid[hidden], .library-section-heading[hidden], .topic-filters[hidden], .quiz-timeline[hidden], .empty-state[hidden], .question-list[hidden], .quiz-detail-foot[hidden], .student-view[hidden], .archive-view[hidden] { display: none; }
+
+    .reader-topbar { min-height: 42px; }
+    .reader-layout { grid-template-columns: 196px minmax(0, 1fr) 248px; gap: 28px; padding-top: 26px; }
+    .reader-copy { max-width: 660px; }
+    .reader-body { margin-top: 30px; line-height: 1.78; }
+    .context-rail { padding: 17px 16px; border-radius: var(--radius); }
+    .context-rail h3 { font-size: 19px; }
+
+    .companion-dock { width: 140px; height: 168px; }
+    .companion-trigger::before { width: 86px; height: 24px; }
+    .companion-sprite { width: 140px; height: 152px; }
+    .companion-state { top: -6px; }
+    .companion-status-chip { position: absolute; z-index: 2; left: 50%; bottom: 4px; display: flex; align-items: center; gap: 5px; padding: 4px 8px; transform: translateX(-50%); border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--muted); font-family: var(--font-mono); font-size: 8px; white-space: nowrap; box-shadow: 0 4px 14px color-mix(in oklch, var(--fg) 8%, transparent); opacity: 0; pointer-events: none; transition: opacity .18s var(--ease); }
+    .companion-dock[data-active="true"] .companion-status-chip, .companion-dock[data-suggest="true"] .companion-status-chip { opacity: 1; }
+    .companion-status-chip i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+    .chat-context { padding-block: 9px; font-size: 10px; }
+    .chat-context-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .quiz-card { padding: 12px; }
+    .quiz-footer { flex-wrap: wrap; }
+    .quiz-footer-actions { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+    .quiz-hint-btn { min-height: 30px; padding: 5px 8px; border: 0; background: transparent; color: var(--muted); font-size: 10px; }
+    .quiz-hint-btn:hover { color: var(--fg); text-decoration: underline; }
+    .chat-feed { padding: 15px; }
+
+    @media (max-width: 1100px) {
+      .library-all-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .reader-layout { grid-template-columns: 178px minmax(0, 1fr); }
+    }
+    @media (max-width: 820px) {
+      .home-hero { padding-top: 28px; }
+      .library-all-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .quiz-entry { grid-template-columns: 56px minmax(0, 1fr); gap: 12px; padding-inline: 0; }
+      .profile-layout { grid-template-columns: 1fr; }
+      .profile-rail { position: static; }
+    }
+    @media (max-width: 560px) {
+      .page { padding-top: 24px; }
+      .home-hero { padding-top: 22px; }
+      .home-title { font-size: clamp(36px, 13vw, 58px); }
+      .continue-card { grid-template-columns: 112px minmax(0, 1fr); }
+      .library-all-grid { grid-template-columns: 1fr; }
+      .quiz-filter-row { align-items: start; flex-direction: column; }
+      .md-frontmatter { padding: 12px 16px 10px; }
+      .md-body { padding: 20px 17px 22px; }
+      .fm-row { flex-wrap: wrap; gap: 2px 14px; }
+      .fm-key { flex: 1 1 100%; min-width: 0; }
+      .md-editor { padding: 14px 14px 16px; }
+      .md-gutter { width: 38px; }
+      .md-source { min-height: 380px; padding-inline: 12px; }
+      .habit-list { grid-template-columns: 1fr; }
+      .student-intro { padding: 20px 17px; }
+      .question-answer, .question-correct { grid-template-columns: 70px 26px minmax(0, 1fr); gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topnav" data-od-id="topnav">
+    <div class="container topnav-inner">
+      <a class="brand" href="#home" data-route="home" data-od-id="brand-home">
+        <span class="brand-seal">霜</span>
+        <span class="brand-copy"><span class="brand-name">霜铃</span><span class="brand-sub">AI teacher · v3</span></span>
+      </a>
+      <nav class="nav-links" aria-label="主导航">
+        <button class="nav-link" data-route="home" aria-current="page" data-od-id="nav-home">首页</button>
+        <button class="nav-link" data-route="library" data-od-id="nav-library">学习</button>
+        <button class="nav-link" data-route="quizzes" data-od-id="nav-quizzes">测验</button>
+        <button class="nav-link" data-route="profile" data-od-id="nav-profile">成长</button>
+      </nav>
+      <div class="nav-right">
+        <span class="grade-badge">初二 · 8 年级</span>
+        <button class="profile-trigger" data-route="profile" data-od-id="profile-trigger"><span class="avatar">明</span><span>小明</span></button>
+        <button class="menu-toggle" data-user-menu="true" aria-label="打开个人菜单" aria-expanded="false" data-od-id="user-menu-toggle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 9 6 6 6-6"></path></svg></button>
+        <div class="user-menu" id="user-menu" hidden="" data-od-id="user-menu">
+          <p class="mono user-menu-title">界面适配 · 学段</p>
+          <div class="user-menu-row" role="group" aria-label="学段选择"><button data-age-set="junior" aria-pressed="true">初中</button><button data-age-set="primary" aria-pressed="false">小学</button><button data-age-set="senior" aria-pressed="false">高中</button></div>
+          <p class="mono user-menu-title">演示</p>
+          <div class="user-menu-row" role="group" aria-label="演示身份"><button data-demo-new="true" aria-pressed="false" id="demo-new-btn">新同学视角</button></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="content">
+    <section id="view-home" class="view is-active" data-view="home" data-od-id="home-screen">
+      <div class="container page">
+        <div class="home-hero">
+          <div>
+            <p class="mono home-eyebrow">周二 19:42</p>
+            <h1 class="display home-title">晚上好，小明。</h1>
+            <p class="home-lead"><strong>昨天我们停在「训练数据」。</strong> 今天继续把这个难点讲明白。霜铃记得，你更喜欢先看生活里的例子，再回到概念本身。</p>
+            <div class="home-actions">
+              <button class="btn btn-primary" data-route="reader" data-od-id="home-continue">继续学习 <span>→</span></button>
+              <button class="btn btn-secondary" data-open-companion="check-in" data-od-id="home-talk">和霜铃聊两句</button>
+            </div>
+            <div class="home-note"><span class="status-dot"></span><span>霜铃正在陪你学习</span></div>
+          </div>
+          <aside class="surface presence" data-od-id="home-ai-presence" style="transform: translate(102px, -3px);">
+            <div class="presence-head">
+              <div class="presence-avatar"><span class="chat-mini-sprite" data-sprite-state="idle" role="img" aria-label="霜铃"></span></div>
+              <div><p class="mono presence-kicker">AI 教师 · 在线</p><strong>霜铃正在陪你学习</strong></div>
+            </div>
+            <dl class="presence-rows">
+              <div><dt>当前关注</dt><dd>训练数据</dd></div>
+              <div><dt>最近发现</dt><dd>昨天你两次追问了“标签”的定义。</dd></div>
+              <div><dt>状态</dt><dd><span class="status-dot"></span>正在参考最近学习记录</dd></div>
+            </dl>
+            <div class="presence-actions"><button class="btn btn-secondary btn-small" data-open-companion="presence-ask" data-od-id="presence-ask">问问霜铃</button></div>
+          </aside>
+        </div>
+
+        <div class="section-grid" data-od-id="home-learning-overview">
+          <div>
+            <div class="section-label"><h2>继续学习</h2></div>
+            <article class="surface continue-card normal-only" data-od-id="continue-learning-card">
+              <div class="book-cover"><span class="book-cover-top mono">AI 通识 · 初中</span><span class="book-cover-title">AI 不是魔法</span><span class="book-cover-meta">从好奇开始，理解机器如何学习</span></div>
+              <div class="continue-body">
+                <div><p class="mono continue-kicker">继续第 3 章 · 训练数据</p><h3 class="continue-title">机器为什么需要先看很多例子？</h3><p class="continue-copy">这一节会从“教小狗认识球”的例子开始，再把它拆成训练数据、标签和预测。</p><p class="continue-signal">上次你在这里问过类似问题，霜铃会接着上次的对话继续讲。</p></div>
+                <div class="continue-bottom"><div class="chapter-progress"><div class="progress-line"><span></span></div><span class="progress-caption">阅读位置 62% · 昨天 20:18 · 预计还需 12 分钟</span></div><button class="btn btn-primary btn-small" data-route="reader" data-od-id="continue-action">继续第 3 章 →</button></div>
+              </div>
+            </article>
+            <article class="surface continue-card empty-only" data-od-id="home-empty-continue">
+              <div class="empty-continue"><p class="mono muted">还没有开始学习</p><h3>让霜铃推荐第一本书</h3><p>霜铃会根据你的年级和兴趣，从 12 本书里挑一本最合适的。</p><button class="btn btn-primary btn-small" data-open-companion="today-learn" data-od-id="home-empty-cta">问问霜铃</button></div>
+            </article>
+          </div>
+          <aside class="surface recommend-card" data-od-id="home-recommendation">
+            <div><p class="mono">霜铃的下一步建议</p><h2 class="recommend-title">先复习“训练数据”，再进入算法偏见。</h2><p class="recommend-copy">这样你会更容易理解：机器学到的，不只取决于算法，还取决于它看过什么。</p></div>
+            <div class="evidence"><strong>为什么推荐？</strong><span>你昨天在测验里两次回到“标签”的定义，说明这个连接值得再巩固一次。</span></div>
+          </aside>
+        </div>
+
+        <div class="home-lower" data-od-id="home-insights">
+          <article class="surface mini-panel mini-panel--timeline normal-only" data-od-id="home-weekly-change"><span class="mono muted">最近变化 · 时间线</span><div class="timeline-nodes"><div class="tnode"><time>08-12</time><p>问“这是什么”</p></div><div class="tnode"><time>08-18</time><p>开始追问“为什么会这样”</p></div></div><button class="mini-panel-link btn-ghost" data-route="profile">查看完整变化 <span>→</span></button></article>
+          <article class="surface mini-panel mini-panel--history normal-only" data-od-id="home-quiz-entry"><span class="mono muted">最近测验</span><div class="history-list"><div class="history-row"><div><strong>机器学习基础小测</strong><p class="quiz-evidence">08-18 · 使用 1 次提示</p></div><span>8 / 10</span></div><div class="history-row"><div><strong>推荐系统与兴趣</strong><p class="quiz-evidence">08-15 · 没有使用提示</p></div><span>7 / 10</span></div></div><button class="mini-panel-link btn-ghost" data-route="quizzes">查看全部 <span>→</span></button></article>
+          <article class="surface mini-panel mini-panel--memory normal-only" data-od-id="home-memory-entry"><span class="mono">AI 记得什么</span><blockquote class="memory-quote">“你喜欢通过例子学习。”</blockquote><div class="memory-chips"><span class="memory-chip">例子优先</span><span class="memory-chip">短时多轮</span></div><button class="mini-panel-link btn-ghost" data-open-companion="memory">问问为什么 <span>→</span></button></article>
+          <article class="surface mini-panel empty-only" data-od-id="home-empty-change"><span class="mono muted">最近变化</span><blockquote class="memory-quote">“等你完成几节课，这里会出现你的学习变化。”</blockquote><button class="mini-panel-link btn-ghost" data-route="library">开始第一课 <span>→</span></button></article>
+          <article class="surface mini-panel empty-only" data-od-id="home-empty-quiz"><span class="mono muted">最近测验</span><blockquote class="memory-quote">“还没有测验记录，先读完一节吧。”</blockquote><button class="mini-panel-link btn-ghost" data-route="reader">去读第 1 章 <span>→</span></button></article>
+          <article class="surface mini-panel empty-only" data-od-id="home-empty-memory"><span class="mono muted">AI 记得什么</span><blockquote class="memory-quote">“我们才刚认识，我还在慢慢了解你。”</blockquote><button class="mini-panel-link btn-ghost" data-route="library">开始第一课 <span>→</span></button></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-library" class="view" data-view="library" data-od-id="library-screen">
+      <div class="container page">
+        <div class="page-head"><div><p class="mono page-kicker">学习 · 书库</p><h1 class="display page-title">找到下一本<br>适合你的书。</h1></div><p class="page-intro">内容按年级和兴趣整理。霜铃会把你的最近学习变化，也放进推荐理由里。</p></div>
+        <div class="library-toolbar" data-od-id="library-toolbar"><input class="library-search" type="search" aria-label="搜索书库" placeholder="搜索书名、知识点或主题"><div class="grade-filter" role="group" aria-label="学段筛选"><button class="grade-btn" aria-pressed="true" data-grade-filter="推荐">推荐</button><button class="grade-btn" aria-pressed="false" data-grade-filter="小学">小学</button><button class="grade-btn" aria-pressed="false" data-grade-filter="初中">初中</button><button class="grade-btn" aria-pressed="false" data-grade-filter="高中">高中</button></div><button class="btn btn-ghost btn-small" data-more-filters="true" id="more-filters-btn" aria-expanded="false" data-od-id="library-more-filters">更多筛选 ▾</button></div>
+        <div class="topic-filters" id="topic-filters" hidden=""><span class="mono muted">主题</span><div class="filter-strip" role="group" aria-label="主题筛选"><button class="filter-chip" aria-pressed="false" data-topic-filter="AI 基础">AI 基础</button><button class="filter-chip" aria-pressed="false" data-topic-filter="机器人">机器人</button><button class="filter-chip" aria-pressed="false" data-topic-filter="编程">编程</button><button class="filter-chip" aria-pressed="false" data-topic-filter="数据">数据</button><button class="filter-chip" aria-pressed="false" data-topic-filter="AI 伦理">AI 伦理</button><button class="filter-chip" aria-pressed="false" data-topic-filter="数字素养">数字素养</button></div></div>
+        <div class="library-section-heading"><h2>为你精选</h2><span>根据最近学习变化</span></div>
+        <div class="library-grid" data-od-id="library-featured-grid">
+          <article class="surface library-card" data-od-id="library-card-ai"><div class="library-card-cover"><span class="library-cover-num">01</span><strong>AI 不是魔法</strong><span class="library-cover-keywords">训练数据 · 标签 · 算法</span></div><div class="library-card-body"><span class="mono muted">初中 · AI 基础</span><p>从推荐系统、训练数据到算法公平，建立一张看懂 AI 的地图。</p><span class="library-card-status"><i></i>已开始 · 读到第 3 章</span><div class="library-card-meta"><span>7 章 · 预计 90 分钟</span><button class="btn-ghost" data-route="reader">继续 →</button></div></div></article>
+          <article class="surface library-card" data-od-id="library-card-robot"><div class="library-card-cover"><span class="library-cover-num">02</span><strong>机器人会怎么想？</strong><span class="library-cover-keywords">感知 · 决策 · 行动</span></div><div class="library-card-body"><span class="mono muted">初中 · 机器人</span><p>用真实案例理解感知、决策和行动之间的关系。</p><span class="library-card-status"><i></i>霜铃推荐 · 你最近对机器人感兴趣</span><div class="library-card-meta"><span>5 章 · 预计 65 分钟</span><span><button class="book-why" data-open-companion="book-why-2">为什么推荐？</button></span></div></div></article>
+          <article class="surface library-card" data-od-id="library-card-ethics"><div class="library-card-cover"><span class="library-cover-num">03</span><strong>和算法相处</strong><span class="library-cover-keywords">选择 · 判断 · 公平</span></div><div class="library-card-body"><span class="mono muted">初中 · 数字素养</span><p>当算法参与选择，我们怎样保留自己的判断？</p><span class="library-card-status"><i></i>霜铃推荐 · 接在训练数据之后</span><div class="library-card-meta"><span>6 章 · 预计 70 分钟</span><span><button class="book-why" data-open-companion="book-why-3">为什么推荐？</button></span></div></div></article>
+        </div>
+        <div class="library-section-heading"><h2>全部书籍</h2><span id="book-count">共 12 本</span></div>
+        <div class="library-all-grid" id="book-grid" data-od-id="library-all-grid"></div>
+        <div class="empty-state" id="library-empty" hidden="" data-od-id="library-empty-state"><h3>没有找到匹配的书</h3><p>换一个关键词，或者清除筛选再试试。</p><button class="btn btn-secondary btn-small" data-clear-library="true">清除筛选</button></div>
+      </div>
+    </section>
+
+    <section id="view-reader" class="view" data-view="reader" data-od-id="reader-screen">
+      <div class="container page reader-page">
+        <div class="reader-topbar"><div class="breadcrumbs"><button class="btn btn-ghost btn-small" data-route="home" data-od-id="reader-back">← 返回首页</button><span>/</span><span>AI 不是魔法</span><span>/</span><strong>训练数据</strong><span class="mono muted">第 3 / 7 节</span></div><div class="reader-actions"><button class="btn btn-ghost btn-small" data-open-companion="summary" data-od-id="reader-summary">总结本页</button><button class="btn btn-secondary btn-small" data-open-companion="quiz" data-od-id="reader-quiz">给我出题</button></div></div>
+        <div class="reader-layout">
+          <aside class="chapter-nav" data-od-id="chapter-navigation"><p class="mono chapter-nav-title">本章目录</p><button class="chapter-collapse" data-collapse-chapters="true" aria-expanded="true" data-od-id="chapter-collapse">收起目录 ▾</button><button class="chapter-item is-done" data-od-id="chapter-01"><span class="chapter-number">01</span><span>从“会回答”开始</span></button><button class="chapter-item is-done" data-od-id="chapter-02"><span class="chapter-number">02</span><span>推荐系统看见了什么</span></button><button class="chapter-item" aria-current="page" data-od-id="chapter-03"><span class="chapter-number">03</span><span>训练数据</span></button><button class="chapter-item" data-od-id="chapter-04"><span class="chapter-number">04</span><span>算法偏见</span></button><button class="chapter-item" data-od-id="chapter-05"><span class="chapter-number">05</span><span>让判断回到人手里</span></button></aside>
+          <article class="reader-copy" data-od-id="reader-content">
+            <p class="mono reader-kicker">第 03 章 · 知识块 02</p>
+            <h1 class="display reader-title">训练数据：机器是怎么学会的？</h1>
+            <p class="reader-dek">机器学习不是把答案塞进机器，而是让它先看过一组例子，再从例子里找出规律。</p>
+            <p class="mono memory-signal" data-od-id="reader-memory-signal">这是我们第三次遇到「训练数据」</p>
+            <div class="reader-body">
+              <p data-read-section="训练数据 · 导入">想象你在教一只小狗认识“球”。你不会只说一次“这是球”，而是会拿出不同颜色、不同大小、不同材质的球，让它一次次看到：这些东西虽然长得不完全一样，但有一些共同的特征。</p>
+              <p data-read-section="训练数据 · 定义">机器学习里的 <mark data-selected-term="训练数据">训练数据</mark>，就像这些被反复展示的例子。它们通常包含“机器看到的内容”和“我们希望它学会的答案”，也就是特征和标签。</p>
+              <div class="knowledge-card" data-read-section="知识卡片 · 训练数据" data-od-id="knowledge-card-training-data"><div class="knowledge-card-head"><div><span class="mono muted">知识卡片 · 02</span><h2 class="knowledge-card-title">训练数据</h2></div><button class="btn btn-secondary btn-small" data-open-companion="explain" data-od-id="explain-knowledge">让霜铃讲给我听</button></div><p>训练数据是一组用来帮助机器发现规律的例子。例子越能代表真实世界，机器之后遇到新情况时，越可能做出合适的判断。</p><div class="example-block"><strong>生活里的例子</strong><span>给音乐推荐系统看你喜欢过的歌曲，它就能尝试猜测下一首你可能想听什么。</span></div></div>
+              <figure class="reader-figure" data-read-section="图解 · 训练数据的三个角色" data-od-id="reader-figure-training-data">
+                <svg viewBox="0 0 560 152" role="img" aria-label="训练数据三个角色图解">
+                  <rect x="12" y="34" width="150" height="84" fill="none" stroke="#c9ccd3"></rect>
+                  <rect x="220" y="34" width="120" height="84" fill="none" stroke="#c9ccd3"></rect>
+                  <rect x="398" y="34" width="150" height="84" fill="none" stroke="#c9ccd3"></rect>
+                  <text x="87" y="70" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#52565e">例子</text>
+                  <text x="87" y="96" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#52565e">训练数据</text>
+                  <text x="280" y="70" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#52565e">规律</text>
+                  <text x="280" y="96" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#52565e">机器学到的</text>
+                  <text x="473" y="70" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#52565e">预测</text>
+                  <text x="473" y="96" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#52565e">遇到新情况时</text>
+                  <path d="M162 76h58" stroke="#c9ccd3"></path>
+                  <path d="M340 76h58" stroke="#c9ccd3"></path>
+                  <path d="M183 70l8 6-8 6z" fill="none" stroke="#c9ccd3"></path>
+                  <path d="M361 70l8 6-8 6z" fill="none" stroke="#c9ccd3"></path>
+                </svg>
+                <figcaption>训练数据的三个角色：例子 → 规律 → 预测</figcaption>
+              </figure>
+              <aside class="reader-callout" data-read-section="想一想" data-od-id="reader-callout-think"><strong>想一想</strong><p>如果例子只有一种情况，机器学到的规律会怎样？下一节「算法偏见」会给你答案。</p></aside>
+              <p data-read-section="小结">但“看过很多例子”不等于“永远不会出错”。如果例子只来自一种情况，机器学到的规律也可能变得狭窄。下一节，我们会一起看看这和算法偏见有什么关系。</p>
+            </div>
+            <div class="reader-footer"><span>读到这里了吗？选择一段文字，直接问霜铃。</span><button class="btn btn-primary btn-small" data-open-companion="check-in" data-od-id="reader-check-in">我想问一个问题 <span>→</span></button></div>
+          </article>
+          <aside class="context-rail" data-od-id="screen-context-rail"><p class="mono muted">当前学习上下文</p><h3>霜铃知道你正在看什么</h3><div class="context-row"><span>书本</span><strong>AI 不是魔法</strong></div><div class="context-row"><span>章节</span><strong>训练数据</strong></div><div class="context-row"><span>知识点</span><strong>特征 · 标签 · 规律</strong></div><div class="context-actions"><button class="btn btn-secondary btn-small" data-open-companion="explain" data-od-id="context-explain">解释当前内容</button><button class="btn btn-secondary btn-small" data-open-companion="summary" data-od-id="context-summary">总结本页</button><button class="btn btn-secondary btn-small" data-open-companion="quiz" data-od-id="context-quiz">给我出题</button></div></aside>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-quizzes" class="view" data-view="quizzes" data-od-id="quiz-history-screen">
+      <div class="container page">
+        <div class="page-head"><div><p class="mono page-kicker">测验 · 历史记录</p><h1 class="display page-title">每一次答题，<br>都会留下线索。</h1></div><p class="page-intro">正式测验的题目、你的答案和霜铃当时的提示，都会按时间留在这里。</p></div>
+        <div class="quiz-filter-row normal-only"><div class="filter-strip" role="group" aria-label="测验筛选"><button class="filter-chip" aria-pressed="true" data-quiz-filter="全部">全部</button><button class="filter-chip" aria-pressed="false" data-quiz-filter="章节测验">章节测验</button><button class="filter-chip" aria-pressed="false" data-quiz-filter="AI 小测">AI 小测</button><button class="filter-chip" aria-pressed="false" data-quiz-filter="更早">更早</button></div><span class="mono muted" id="quiz-count">共 3 次测验</span></div>
+        <div class="quiz-timeline normal-only" id="quiz-timeline" data-od-id="quiz-history-list"></div>
+        <div class="empty-state" id="quiz-empty" hidden="" data-od-id="quiz-empty-state"><h3>这里还没有这类测验</h3><p>换一个筛选条件，或者让霜铃现场出一份。</p><button class="btn btn-secondary btn-small" data-open-companion="quiz">让霜铃出一份测验</button></div>
+        <div class="empty-state empty-only" data-od-id="quiz-empty-new"><h3>还没有正式测验</h3><p>等你在阅读中完成第一次测验，题目、答案和提示都会留在这里。</p><button class="btn btn-secondary btn-small" data-route="library">去书库开始学习</button></div>
+      </div>
+    </section>
+
+    <section id="view-quiz-detail" class="view" data-view="quiz-detail" data-od-id="quiz-detail-screen">
+      <div class="container page">
+        <div class="quiz-detail-top" data-od-id="quiz-detail-top">
+          <button class="btn btn-ghost btn-small" data-route="quizzes" data-od-id="quiz-detail-back">← 返回测验记录</button>
+          <h1 class="display page-title" id="quiz-detail-name">机器学习基础小测</h1>
+          <p class="page-intro" id="quiz-detail-src">《AI 不是魔法》 · 第 3 章 · 训练数据 · 08-18 · 章节测验</p>
+          <div class="quiz-detail-score"><span class="quiz-score" id="quiz-detail-score">8 / 10</span><blockquote class="quiz-ai-note" id="quiz-detail-note">概念题表现稳定，应用题还需要多练。</blockquote></div>
+        </div>
+        <ol class="question-list" data-od-id="quiz-detail-questions">
+          <li class="question-item" data-od-id="qd-question-01">
+            <div class="question-head"><span class="mono muted">第 1 题 · 概念题</span><span class="result-tag result-ok">正确</span></div>
+            <p class="question-stem">训练数据最重要的作用是什么？</p>
+            <div class="question-answer"><span>你的答案</span><strong>B</strong><p>让机器从例子中发现可重复的规律</p></div>
+          </li>
+          <li class="question-item" data-od-id="qd-question-02">
+            <div class="question-head"><span class="mono muted">第 2 题 · 应用题</span><span class="result-tag result-wrong">错误</span></div>
+            <p class="question-stem">如果训练数据里只有一种狗的图片，机器遇到猫时最可能怎样？</p>
+            <div class="question-answer"><span>你的答案</span><strong>B</strong><p>会先问它是不是狗</p></div>
+            <div class="question-correct"><span>正确答案</span><strong>C</strong><p>会把它也判断成狗</p></div>
+            <div class="question-interactions" data-od-id="qd-question-02-interactions">
+              <p class="interaction-note">你当时使用了 <b>一级提示</b></p>
+              <p class="interaction-note">你当时问霜铃：<q>这里是不是和训练集有关？</q></p>
+              <blockquote class="quiz-ai-note">霜铃当时的提示：可以先想想训练数据在机器学习中的作用——它提供的是例子，还是规则？</blockquote>
+              <button class="btn btn-ghost btn-small" data-open-companion="quiz-requestion" data-od-id="qd-ask-again">现在再问霜铃</button>
+            </div>
+          </li>
+          <li class="question-item" data-od-id="qd-question-03">
+            <div class="question-head"><span class="mono muted">第 3 题 · 概念题</span><span class="result-tag result-ok">正确</span></div>
+            <p class="question-stem">下面哪一项最接近“标签”的含义？</p>
+            <div class="question-answer"><span>你的答案</span><strong>A</strong><p>我们希望机器学会的答案</p></div>
+          </li>
+        </ol>
+        <p class="mono muted quiz-detail-foot">共 10 题 · 这里展示 3 题回顾</p>
+        <p class="mono muted quiz-detail-foot" id="quiz-detail-sample-note" hidden="">答卷回顾以「机器学习基础小测」为例 · 每题互动都会按此方式保留</p>
+      </div>
+    </section>
+
+    <section id="view-profile" class="view" data-view="profile" data-od-id="learning-profile-screen">
+      <div class="container page">
+        <div class="page-head">
+          <div><p class="mono page-kicker">成长 · AI 学习画像</p><h1 class="display page-title">霜铃眼中的<br>你。</h1></div>
+          <p class="page-intro">霜铃对你的每条理解都来自真实学习记录。你可以查看依据、纠正记忆，也可以打开原始 AI 档案看它到底怎么记录你。</p>
+        </div>
+
+        <div class="profile-layout">
+          <div class="profile-main">
+            <div class="student-view" id="student-view" data-od-id="profile-student-view">
+              <article class="surface student-intro" data-od-id="profile-ai-knows">
+                <span class="mono muted">AI 对我的认识</span>
+                <blockquote class="student-quote">你更喜欢从生活中的例子开始，再回到抽象概念。</blockquote>
+                <p class="student-quote-sub">遇到较长理论时，你有时会失去耐心；但一旦把概念放进具体情境，你会很快追问“为什么”。这也是霜铃现在更常用案例开场的原因。</p>
+                <p class="md-evidence">依据：最近 3 次课程对话、2 次测验和 1 次章节学习记录</p>
+              </article>
+
+              <div class="student-section" data-od-id="profile-habits">
+                <h2 class="student-h2">学习方式</h2>
+                <div class="habit-list">
+                  <div class="habit-item"><span>讲解偏好</span><strong>例子优先</strong></div>
+                  <div class="habit-item"><span>学习节奏</span><strong>短时、多轮互动</strong></div>
+                  <div class="habit-item"><span>难度偏好</span><strong>中等</strong></div>
+                </div>
+              </div>
+
+              <div class="student-section" data-od-id="profile-performance">
+                <h2 class="student-h2">当前表现</h2>
+                <ul class="student-rows">
+                  <li class="student-row" data-od-id="profile-row-concept">
+                    <div class="student-row-head"><strong>概念理解</strong><span class="level-tag">较稳定</span></div>
+                    <p>最近多次概念问答中表现稳定。</p>
+                    <p class="md-evidence">依据：3 次课程对话 · 2 次测验</p>
+                  </li>
+                  <li class="student-row" data-od-id="profile-row-transfer">
+                    <div class="student-row-head"><strong>应用迁移</strong><span class="level-tag">仍需观察</span><button class="md-ask" data-open-companion="profile-why-transfer" data-od-id="profile-student-ask-transfer">问霜铃 →</button></div>
+                    <p>把概念放进新情境时，偶尔需要二级提示。</p>
+                    <p class="md-evidence">依据：最近 3 次应用题练习</p>
+                  </li>
+                  <li class="student-row" data-od-id="profile-row-question">
+                    <div class="student-row-head"><strong>提问习惯</strong><span class="level-tag">越来越具体</span><button class="md-ask" data-open-companion="profile-why-question" data-od-id="profile-ask-question">问霜铃 →</button></div>
+                    <p>最近开始追问“为什么会这样”，而不是只问“这是什么”。</p>
+                    <p class="md-evidence">依据：最近 3 次对话记录</p>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="student-section" data-od-id="profile-change">
+                <h2 class="student-h2">最近变化</h2>
+                <blockquote class="md-quote">你的问题从“这是什么”走到了“为什么会这样”。这不是一个突然出现的结论，而是霜铃从多次学习事件里看到的变化。</blockquote>
+                <p class="md-evidence">依据：最近 3 次关于训练数据和算法偏见的对话；其中 2 次你主动追问了例子背后的原因。</p>
+              </div>
+            </div>
+
+            <div class="archive-view" id="archive-view" hidden="" data-od-id="profile-archive-view">
+          <article class="surface doc-shell" data-od-id="profile-document">
+            <div class="doc-bar">
+              <div class="doc-file">
+                <svg class="icon doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v4h4"></path><path d="M9 12h6M9 16h6"></path></svg>
+                <span class="doc-filename">xiaoming.agent.md</span>
+                <span class="doc-badge" id="doc-user-edit-badge" hidden="">用户修改</span>
+                <span class="doc-updated" id="doc-updated">由霜铃维护 · 最近更新 08-18 20:18</span>
+              </div>
+              <div class="doc-bar-right">
+                <button class="btn btn-ghost btn-small" data-export-profile="true" data-od-id="profile-export">导出</button>
+                <div class="doc-tabs" role="tablist" aria-label="画像查看方式">
+                  <button class="doc-tab" data-doc-mode="preview" role="tab" aria-selected="true" data-od-id="profile-tab-preview">预览</button>
+                  <button class="doc-tab" data-doc-mode="edit" role="tab" aria-selected="false" data-od-id="profile-tab-edit">编辑</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="doc-view" data-doc-view="preview" data-od-id="profile-md-preview">
+              <div class="md-frontmatter" data-od-id="profile-frontmatter">
+                <span class="fm-dash">---</span>
+                <div class="fm-row"><span class="fm-key">name</span><span class="fm-val">小明</span></div>
+                <div class="fm-row"><span class="fm-key">grade</span><span class="fm-val">初二 · 8 年级</span></div>
+                <div class="fm-row"><span class="fm-key">updated</span><span class="fm-val">2026-08-18 20:18</span></div>
+                <div class="fm-row"><span class="fm-key">preferred_explanation_style</span><span class="fm-val">example_based <span class="fm-note"># 举例优先</span></span></div>
+                <div class="fm-row"><span class="fm-key">preferred_difficulty</span><span class="fm-val">medium <span class="fm-note"># 中等难度</span></span></div>
+                <div class="fm-row"><span class="fm-key">preferred_session_length</span><span class="fm-val">short <span class="fm-note"># 短时、多轮</span></span></div>
+                <span class="fm-dash">---</span>
+              </div>
+
+              <div class="md-body">
+                <h2 class="md-h2">AI 对我的认识</h2>
+                <p class="md-p">你喜欢先从生活里的例子出发，再回到抽象概念。遇到较长理论时，你有时会失去耐心；但一旦把概念放进具体情境，你会很快追问“为什么”。这也是霜铃现在更常用案例开场的原因。</p>
+                <p class="md-evidence">依据：最近 3 次课程对话、2 次测验和 1 次章节学习记录</p>
+
+                <h2 class="md-h2">我的优势</h2>
+                <ul class="md-judgments">
+                  <li class="md-judgment" data-od-id="profile-judgment-concept">
+                    <div class="md-judgment-head"><strong>概念理解</strong><span class="level-tag">较强</span></div>
+                    <p>最近多次概念问答中表现稳定。</p>
+                    <p class="md-evidence">依据：3 次课程对话 · 2 次测验</p>
+                  </li>
+                  <li class="md-judgment" data-od-id="profile-judgment-ai-basics">
+                    <div class="md-judgment-head"><strong>AI 基础理解</strong><span class="level-tag">较强</span></div>
+                    <p>最近多次概念问答和测验中表现稳定。</p>
+                    <p class="md-evidence">依据：2 次测验 · 1 次章节学习</p>
+                  </li>
+                  <li class="md-judgment" data-od-id="profile-judgment-question">
+                    <div class="md-judgment-head"><strong>提问习惯</strong><span class="level-tag">越来越具体</span></div>
+                    <p>最近开始追问“为什么会这样”，而不是只问“这是什么”。</p>
+                    <p class="md-evidence">依据：最近 3 次对话记录</p>
+                  </li>
+                </ul>
+
+                <h2 class="md-h2">当前薄弱方向</h2>
+                <ul class="md-judgments">
+                  <li class="md-judgment" data-od-id="profile-judgment-transfer">
+                    <div class="md-judgment-head"><strong>应用迁移</strong><span class="level-tag">仍需观察</span><button class="md-ask" data-open-companion="profile-why-transfer" data-od-id="profile-ask-transfer">问霜铃 →</button></div>
+                    <p>把概念放进新情境时，偶尔需要二级提示。</p>
+                    <p class="md-evidence">依据：最近 3 次应用题练习</p>
+                  </li>
+                </ul>
+
+                <h2 class="md-h2">我的学习习惯</h2>
+                <ul class="md-judgments">
+                  <li class="md-judgment" data-od-id="profile-habit-pace">
+                    <div class="md-judgment-head"><strong>学习节奏</strong><span class="level-tag">短时、多轮</span><button class="md-ask" data-open-companion="profile-why-pace" data-od-id="profile-ask-pace">问霜铃 →</button></div>
+                    <p>较长理论段落后，更适合插入一次互动。</p>
+                    <p class="md-evidence">依据：最近 3 次学习时长记录</p>
+                  </li>
+                  <li class="md-judgment" data-od-id="profile-habit-explain">
+                    <div class="md-judgment-head"><strong>讲解偏好</strong><span class="level-tag">先例子、后定义</span></div>
+                    <p>霜铃现在更常用案例开场，再回到概念本身。</p>
+                    <p class="md-evidence">依据：3 次对话 · 与 frontmatter 偏好一致</p>
+                  </li>
+                </ul>
+
+                <h2 class="md-h2">最近变化</h2>
+                <blockquote class="md-quote">你的问题从“这是什么”走到了“为什么会这样”。这不是一个突然出现的结论，而是霜铃从多次学习事件里看到的变化。</blockquote>
+                <p class="md-evidence">依据：最近 3 次关于训练数据和算法偏见的对话；其中 2 次你主动追问了例子背后的原因。</p>
+                <div class="md-ask-row"><button class="md-ask" data-open-companion="profile-why-change" data-od-id="profile-ask-change">为什么这样更新？ →</button></div>
+              </div>
+            </div>
+
+            <div class="doc-view" data-doc-view="edit" hidden="" data-od-id="profile-md-editor">
+              <div class="md-editor">
+                <p class="md-editor-hint">这是霜铃真正在读的文件。修改后，下次讲解就会参考新内容；你手动修改的部分会标记为「用户确认」。</p>
+                <div class="md-editor-wrap">
+                  <div class="md-gutter" id="md-gutter" aria-hidden="true"></div>
+                  <textarea id="md-source" class="md-source" wrap="off" spellcheck="false" aria-label="画像文件源码">---
+name: 小明
+grade: 初二 · 8 年级
+updated: 2026-08-18 20:18
+preferred_explanation_style: example_based   # 举例优先
+preferred_difficulty: medium                 # 中等难度
+preferred_session_length: short              # 短时、多轮
+---
+
+## AI 对我的认识
+
+你喜欢先从生活里的例子出发，再回到抽象概念。遇到较长理论时，你有时会失去耐心；但一旦把概念放进具体情境，你会很快追问“为什么”。这也是霜铃现在更常用案例开场的原因。
+
+&gt; 依据：最近 3 次课程对话、2 次测验和 1 次章节学习记录
+
+## 我的优势
+
+- 概念理解 —— 较强：最近多次概念问答中表现稳定。
+  &gt; 依据：3 次课程对话 · 2 次测验
+- AI 基础理解 —— 较强：最近多次概念问答和测验中表现稳定。
+  &gt; 依据：2 次测验 · 1 次章节学习
+- 提问习惯 —— 越来越具体：最近开始追问“为什么会这样”。
+  &gt; 依据：最近 3 次对话记录
+
+## 当前薄弱方向
+
+- 应用迁移 —— 仍需观察：把概念放进新情境时，偶尔需要二级提示。
+  &gt; 依据：最近 3 次应用题练习
+
+## 我的学习习惯
+
+- 学习节奏 —— 短时、多轮：较长理论段落后，更适合插入一次互动。
+- 讲解偏好 —— 先例子、后定义：霜铃现在更常用案例开场。
+
+## 最近变化
+
+&gt; 你的问题从“这是什么”走到了“为什么会这样”。
+
+依据：最近 3 次关于训练数据和算法偏见的对话记录；其中 2 次你主动追问了例子背后的原因。</textarea>
+                </div>
+                <div class="md-editor-actions">
+                  <button class="btn btn-ghost btn-small" data-doc-cancel="true" data-od-id="profile-edit-cancel">放弃修改</button>
+                  <button class="btn btn-secondary btn-small" data-doc-save="true" data-od-id="profile-edit-save">保存修改</button>
+                </div>
+              </div>
+            </div>
+            <div class="doc-meta-strip" data-od-id="profile-changelog">
+              <p class="mono muted">修改记录</p>
+              <ul class="changelog" id="profile-changelog-list">
+                <li><time>08-18</time><span>依据 3 次对话更新「最近变化」</span></li>
+                <li><time>08-15</time><span>确认「提问习惯」越来越具体</span></li>
+                <li><time>08-12</time><span>新增「应用迁移」· 仍需观察</span></li>
+              </ul>
+              <button class="btn btn-ghost btn-small" data-profile-view="student" data-od-id="profile-archive-back">← 返回学生视图</button>
+            </div>
+          </article>
+            </div>
+          </div>
+
+          <aside class="profile-rail" data-od-id="profile-rail">
+            <div class="rail-block">
+              <p class="mono">证据覆盖</p>
+              <p class="rail-copy">所有结论来自真实学习记录：3 次课程对话 · 2 次测验 · 1 次章节学习。没有分数。</p>
+            </div>
+            <div class="rail-block" data-od-id="profile-memory-list">
+              <p class="mono">霜铃记得这些</p>
+              <ul class="memory-list" id="memory-list">
+                <li class="memory-item" data-memory="example"><p>“你喜欢通过例子学习。”</p><div class="memory-actions"><button data-mem-action="ok">正确</button><button data-mem-action="dispute">不完全正确</button><button data-mem-action="edit">修改</button><button data-mem-action="forget">忘记这条</button></div><p class="memory-confirmed">已确认 · 霜铃会继续使用</p></li>
+                <li class="memory-item" data-memory="pace"><p>“你更喜欢短时、多轮的学习节奏。”</p><div class="memory-actions"><button data-mem-action="ok">正确</button><button data-mem-action="dispute">不完全正确</button><button data-mem-action="edit">修改</button><button data-mem-action="forget">忘记这条</button></div><p class="memory-confirmed">已确认 · 霜铃会继续使用</p></li>
+                <li class="memory-item" data-memory="why"><p>“你最近开始追问‘为什么’。”</p><div class="memory-actions"><button data-mem-action="ok">正确</button><button data-mem-action="dispute">不完全正确</button><button data-mem-action="edit">修改</button><button data-mem-action="forget">忘记这条</button></div><p class="memory-confirmed">已确认 · 霜铃会继续使用</p></li>
+              </ul>
+            </div>
+            <div class="rail-block rail-actions">
+              <button class="btn btn-primary btn-small" data-open-companion="profile-question" data-od-id="profile-question">问霜铃：为什么这样判断？</button>
+              <button class="btn btn-ghost btn-small" data-profile-view="archive" data-od-id="profile-advanced-toggle">查看原始 AI 档案</button>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="selection-popover" class="selection-popover" data-od-id="selection-popover"><span id="selection-text">训练数据</span><button data-open-companion="selected">问霜铃</button></div>
+
+  <div id="companion-dock" class="companion-dock" data-open="false" data-od-id="global-companion">
+    <button id="companion-trigger" class="companion-trigger" aria-label="打开霜铃 AI 教师" aria-describedby="companion-state-chip" data-od-id="companion-trigger"><span class="companion-state" id="companion-state" role="status" aria-live="polite">待机中</span><span class="companion-sprite" data-sprite-state="idle" role="img" aria-label="霜铃待机状态"></span><span class="companion-status-chip" id="companion-state-chip"><i></i><span>在线 · 随时可以问我</span></span></button>
+  </div>
+
+  <aside id="companion-panel" class="companion-panel" aria-label="霜铃对话面板" data-od-id="companion-panel">
+    <div class="chat-header"><div class="chat-identity"><div class="chat-mini-avatar"><span class="chat-mini-sprite" data-sprite-state="idle"></span></div><div class="chat-name"><strong>霜铃</strong><span id="chat-status">AI 数字教师 · 正在参考当前章节</span></div></div><div class="chat-head-actions"><button id="chat-voice" class="icon-btn" data-open-voice="true" aria-label="开始语音对话" data-od-id="chat-voice"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"></path><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"></path></svg></button><button class="icon-btn" data-close-companion="true" aria-label="收起对话" data-od-id="chat-close"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 6 12 12M18 6 6 18"></path></svg></button></div></div>
+    <div class="chat-context"><span class="status-dot"></span><span>正在参考：</span><strong id="chat-context-label" class="chat-context-label">AI 不是魔法 / 第3章 / 训练数据</strong></div>
+    <div id="chat-feed" class="chat-feed" aria-live="polite" data-od-id="chat-feed"></div>
+    <div class="chat-quick" id="chat-quick" data-od-id="chat-quick-actions"></div>
+    <form id="chat-form" class="chat-composer" data-od-id="chat-composer"><textarea id="chat-input" class="chat-input" rows="1" placeholder="问问霜铃，比如：那它为什么会出错？"></textarea><button class="send-btn" type="submit" aria-label="发送消息" data-od-id="chat-send"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 12 16-8-4 16-4-6-8-2Z"></path><path d="m12 14 4-6"></path></svg></button></form>
+  </aside>
+
+  <div id="voice-overlay" class="voice-overlay" data-od-id="voice-overlay"><div class="voice-sheet"><div class="voice-top"><strong>和霜铃说话</strong><button id="voice-close" class="icon-btn" data-close-voice="true" aria-label="结束语音对话" data-od-id="voice-close"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 6 12 12M18 6 6 18"></path></svg></button></div><div class="voice-stage"><div class="sprite" data-sprite-state="listening" role="img" aria-label="霜铃正在听"></div><div class="voice-status"><strong id="voice-status-title">正在听你说话…</strong><span id="voice-status-copy">你可以继续说“为什么这个算法会产生偏见？”</span></div><div class="waveform" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><p class="voice-transcript">“我想知道，训练数据为什么会影响算法最后的判断？”</p></div><div class="voice-actions"><button class="btn btn-secondary" data-voice-toggle="true" data-od-id="voice-toggle">切换到霜铃回答</button><button class="btn btn-primary" data-close-voice="true" data-od-id="voice-end">结束对话</button></div></div></div>
+
+  <div id="toast" class="toast" role="status"></div>
+
+  <script>
+    const state = {
+      view: 'home',
+      companionOpen: false,
+      voiceOpen: false,
+      selectedText: '',
+      quizChoice: '',
+      quizAnswer: '',
+      hintLevel: 0,
+      quizSaved: false,
+      currentQuiz: 'q1',
+      aiState: 'idle',
+      messages: [
+        { role: 'ai', kind: 'text', content: '我看到你现在在《AI 不是魔法》的“训练数据”这一节。你想先用生活里的例子理解，还是直接看定义？', meta: '基于当前章节与学习偏好' },
+        { role: 'user', kind: 'text', content: '那这里的“训练数据”具体指什么？', meta: '刚刚' },
+        { role: 'ai', kind: 'text', content: '可以把它想成你教小狗认识球时，反复拿给它看的那些例子。它们帮助机器发现：不同的例子之间，哪些特征会和某个答案一起出现。', meta: '霜铃 · 已理解上下文' },
+        { role: 'tool', kind: 'tool', content: 'Quiz Skill 已创建 · 正式测验已记录' },
+        { role: 'ai', kind: 'quiz', content: '根据这一段内容，试一道小题。', meta: '第 1 题 / 共 3 题' }
+      ]
+    };
+
+    const spriteFrames = {
+      idle: { row: 0, frames: 7, label: '待机中' },
+      listening: { row: 6, frames: 6, label: '正在听' },
+      thinking: { row: 8, frames: 6, label: '思考中' },
+      speaking: { row: 3, frames: 4, label: '讲解中' },
+      happy: { row: 4, frames: 5, label: '很开心' },
+      confused: { row: 5, frames: 8, label: '有点疑惑' },
+      encouraging: { row: 7, frames: 6, label: '给你鼓励' }
+    };
+
+    const $ = (selector, root = document) => root.querySelector(selector);
+    const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+    const dock = $('#companion-dock');
+    const panel = $('#companion-panel');
+    const toast = $('#toast');
+    let toastTimer;
+    let lastFocus = null;
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('is-visible');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('is-visible'), 2200);
+    }
+
+    function setAiState(next) {
+      state.aiState = next;
+      $$('.companion-sprite, .chat-mini-sprite, .voice-stage .sprite').forEach((sprite) => { sprite.dataset.spriteState = next; });
+      $('#companion-state').textContent = spriteFrames[next]?.label || spriteFrames.idle.label;
+      dock.dataset.active = next === 'idle' ? 'false' : 'true';
+      const chipLabels = { idle: '在线 · 随时可以问我', listening: '正在听你说话', thinking: '正在思考你的问题', speaking: '正在讲解当前内容', happy: '为你的进步开心', confused: '我们可以换一种讲法', encouraging: '正在生成测验' };
+      $('#companion-state-chip span').textContent = chipLabels[next] || chipLabels.idle;
+      $('#chat-status').textContent = next === 'thinking' ? 'AI 数字教师 · 正在整理你的问题…' : next === 'speaking' ? 'AI 数字教师 · 正在给你讲解' : next === 'listening' ? 'AI 数字教师 · 正在听你说' : 'AI 数字教师 · 正在参考当前章节';
+    }
+
+    let suggestTimer = null;
+    function showSuggestion() {
+      if (state.companionOpen) return;
+      dock.dataset.suggest = 'true';
+      $('#companion-state').textContent = '有一个新建议';
+      suggestTimer = setTimeout(() => { dock.dataset.suggest = 'false'; $('#companion-state').textContent = spriteFrames[state.aiState]?.label || spriteFrames.idle.label; }, 7000);
+    }
+
+    function renderChat() {
+      const feed = $('#chat-feed');
+      feed.innerHTML = state.messages.map((message, index) => {
+        if (message.kind === 'tool') return `<div class="tool-message" data-message-index="${index}"><b></b><span>${message.content}</span></div>`;
+        if (message.kind === 'typing') return `<div class="message"><div class="message-bubble"><span class="typing"><i></i><i></i><i></i></span></div></div>`;
+        if (message.kind === 'quiz') {
+          const selected = state.quizChoice;
+          const answered = state.quizAnswer;
+          const options = [['A', '只要数据越多，结果就一定正确'], ['B', '让机器从例子中发现可重复的规律'], ['C', '让机器不需要再看新的内容'], ['D', '让机器不用验证就直接做决定']];
+          return `<div class="message"><div class="message-bubble">${message.content}<div class="quiz-card" data-od-id="chat-quiz-card"><div class="quiz-card-head"><span>结构化测验 · Quiz Session</span><span>${message.meta}</span></div><h4>训练数据最重要的作用是什么？</h4><div class="quiz-options">${options.map(([letter, text]) => `<button class="quiz-option ${selected === letter ? 'is-selected' : ''} ${answered === 'B' && letter === 'B' ? 'is-correct' : ''} ${answered && answered !== 'B' && selected === letter ? 'is-wrong' : ''}" data-quiz-choice="${letter}"><em>${letter}</em><span>${text}</span></button>`).join('')}</div><div class="quiz-footer"><span>${answered === 'B' ? '答题记录已保存 · 霜铃会继续陪你复盘' : answered ? '答案已记录 · 霜铃可以继续给你提示' : state.hintLevel ? `已使用 ${state.hintLevel} 级提示` : '可以先选一个答案'}</span>${answered === 'B' ? '<span>✓ 已完成</span>' : `<div class="quiz-footer-actions"><button class="quiz-hint-btn" data-request-hint="true">给我一点提示</button>${answered ? '' : '<button class="btn btn-secondary btn-small" data-submit-quiz="true">提交答案</button>'}</div>`}</div></div></div><span class="message-meta">${message.meta}</span></div>`;
+        }
+        if (message.kind === 'error') return `<div class="message"><div class="message-bubble is-error">${message.content}<div class="error-actions"><button data-retry-chat="true">重试</button><button data-close-companion="true">稍后再问</button></div></div><span class="message-meta">${message.meta}</span></div>`;
+        if (message.kind === 'refuse') return `<div class="message"><div class="message-bubble is-refuse">${message.content}<p>你可以试试：「解释训练数据」「给我出题」</p></div><span class="message-meta">${message.meta}</span></div>`;
+        return `<div class="message ${message.role === 'user' ? 'user' : ''}"><div class="message-bubble">${message.content}${message.streaming ? '<span class="stream-caret"></span>' : ''}</div><span class="message-meta">${message.meta || (message.role === 'user' ? '你' : '霜铃')}</span></div>`;
+      }).join('');
+      feed.scrollTop = feed.scrollHeight;
+      $$('.quiz-option', feed).forEach((button) => button.addEventListener('click', () => { state.quizChoice = button.dataset.quizChoice; renderChat(); }));
+      $('[data-submit-quiz="true"]', feed)?.addEventListener('click', submitQuiz);
+      $('[data-retry-chat="true"]', feed)?.addEventListener('click', retryChat);
+    }
+
+    function currentIntentText(intent) {
+      const selected = state.selectedText ? `你刚刚选中了“${state.selectedText}”。` : '';
+      return {
+        explain: `${selected}我先换一种讲法：训练数据不是机器背下来的答案，而是帮助它找规律的例子。比如让推荐系统看见你喜欢过的歌曲，它会尝试猜下一首。`,
+        summary: '这一页可以先记住三件事：训练数据是例子；标签是我们希望机器学会的答案；例子是否有代表性，会影响机器之后的判断。',
+        quiz: '好，我已经把当前章节的内容放进一份正式小测里。做完后，题目、答案和你使用过的提示都会保留在历史记录中。',
+        'check-in': '我在。你现在卡在“训练数据”的定义，还是卡在它为什么会影响算法判断？',
+        selected: `你选中的“${state.selectedText || '训练数据'}”位于当前章节的知识卡片里。我可以从它和“标签”的关系讲起。`,
+        memory: '因为最近三次学习事件里，你都先要求看例子，再回到定义。这个偏好不是一次判断，而是霜铃逐渐观察到的线索。',
+        'memory-dispute': '收到。我会把“你喜欢通过例子学习”先标记为“待确认”，接下来的讲解里我会多试几种方式，看看哪种对你更有效，再更新这条记忆。',
+        'profile-question': '这份画像的每条判断都带着依据。比如“应用迁移”目前是“仍需观察”，不是因为一次答错，而是因为最近几次把概念放进新情境时，你都需要二级提示。这个判断会继续变化。',
+        'profile-why-transfer': '“应用迁移”目前是“仍需观察”：最近三次把概念放进新情境的练习里，你有两次需要二级提示才能完成。等你有几次独立完成的应用题，霜铃就会更新这条判断。',
+        'profile-why-pace': '连续三次学习里，你都在约 18 分钟的理论讲解后主动要求休息或提问，所以霜铃把节奏记成“短时、多轮”，并在长段落后安排一次互动。',
+        'profile-why-question': '“提问习惯”来自最近 3 次对话：你从只问“这是什么”，慢慢开始追问“为什么会这样”。这说明你不再只想要答案，开始关心答案从哪里来。',
+        'profile-why-change': '“最近变化”来自最近 3 次关于训练数据和算法偏见的对话，其中 2 次你主动追问了例子背后的原因。它不来自某一次测验，而是多次对话里慢慢出现的变化。',
+        'presence-ask': '我在。你昨天两次追问了“标签”的定义，等读到知识卡片时我们可以再展开。现在想继续第 3 章，还是先聊点别的？',
+        'today-learn': '今天的建议是：先花 12 分钟把「训练数据」这一节读完，再做一道随堂小测巩固。我会一直在旁边，随时可以问我。',
+        'continue-yesterday': '你昨天停在「训练数据」的知识卡片，还问过“标签”的定义。我们从那里接着读，还是先花一分钟回顾一下？',
+        'recent-status': '最近一周：概念理解越来越稳，提问也从“是什么”变成了“为什么”。唯一要留意的，是把概念放进新情境的应用迁移。',
+        'recommend-next': '我推荐《和算法相处》：它正好接在「训练数据」之后，讲算法参与选择时怎样保留自己的判断，一共 6 章、约 70 分钟。',
+        'book-fit': '《机器人会怎么想？》适合你：你喜欢从生活例子出发，这本书每章都从一个真实机器人案例开始，5 章、每章约 13 分钟。',
+        'book-why-1': '《AI 不是魔法》你正在读：已经到第 3 章，而且最近两次测验里“训练数据”的连接还不够稳，继续读下去正好把概念用起来。',
+        'book-why-2': '因为你最近对机器人表现出兴趣，而且这本书每章从真实案例出发，正好符合你“先例子、后定义”的学习偏好。',
+        'book-why-3': '「训练数据」之后你会遇到“算法偏见”，《和算法相处》正好接着讲人怎么保留判断。读完第 3 章再开始，衔接最顺。',
+        'give-example': '举个例子：给音乐推荐系统看你喜欢过的歌，它就能猜下一首。训练数据就是它看过的那些歌，标签就是“喜欢 / 不喜欢”。',
+        'give-hint': '先回忆一下：训练数据是让机器背答案，还是从例子里找规律？',
+        'another-way': '换一种讲法：把训练数据想成你教小狗认识球时，反复拿给它看的那些例子。',
+        'why-wrong': '第 2 题里，训练数据只有一种狗的图片，机器学到的规律就是“四只脚、毛茸茸 = 狗”，所以遇到猫也会判断成狗。它没有“先问一问”的能力。',
+        'quiz-requestion': '当然可以。第 2 题我们当时停在“训练数据提供的是例子，还是规则”。现在再看一遍：例子只有一种，机器学到的规律就变窄了。要不要我再出一个类似的题？',
+        'quiz-detail': '这份历史测验会展示当时的原题、你的答案和提示记录，不会重新生成一份“看起来差不多”的题。'
+      }[intent] || '我会把当前页面、这段对话和你最近的学习线索一起考虑。';
+    }
+
+    let streamTimer = null;
+    function pushAiStreaming(text, meta) {
+      state.messages.forEach((message) => { if (message.streaming) { message.content = '…'; delete message.streaming; } });
+      state.messages.push({ role: 'ai', kind: 'text', content: '', meta, streaming: true });
+      renderChat();
+      const feed = $('#chat-feed');
+      const bubbles = $$('.message:not(.user) .message-bubble', feed);
+      const bubble = bubbles[bubbles.length - 1];
+      let index = 0;
+      clearInterval(streamTimer);
+      streamTimer = setInterval(() => {
+        index += 1;
+        bubble.innerHTML = text.slice(0, index) + '<span class="stream-caret"></span>';
+        feed.scrollTop = feed.scrollHeight;
+        if (index >= text.length) {
+          clearInterval(streamTimer);
+          bubble.innerHTML = text;
+          const message = state.messages[state.messages.length - 1];
+          message.content = text;
+          delete message.streaming;
+        }
+      }, 22);
+      setAiState('speaking');
+    }
+
+    function openCompanion(intent = 'check-in') {
+      lastFocus = document.activeElement;
+      state.companionOpen = true;
+      dock.dataset.open = 'true';
+      dock.dataset.suggest = 'false';
+      panel.classList.add('is-open');
+      if (intent === 'quiz') {
+        setAiState('encouraging');
+        const tool = { role: 'tool', kind: 'tool', content: 'Quiz Skill · 正在生成测验…' };
+        state.messages.push(tool);
+        renderChat();
+        setTimeout(() => {
+          tool.content = 'Quiz Skill 已创建 · 正式测验已记录';
+          state.messages.push({ role: 'ai', kind: 'quiz', content: '先做一道，看看你会怎么判断。', meta: '第 1 题 / 共 3 题' });
+          renderChat();
+        }, 900);
+        placePanel();
+        $('#chat-input').focus({ preventScroll: true });
+        return;
+      }
+      if (intent === 'explain' || intent === 'summary' || intent === 'selected' || intent === 'give-example' || intent === 'another-way') setAiState('speaking');
+      else if (intent === 'profile-question' || intent === 'memory' || intent === 'memory-dispute' || intent.startsWith('profile-why') || intent.startsWith('book-why') || intent === 'book-fit' || intent === 'recommend-next' || intent === 'why-wrong' || intent === 'quiz-requestion') setAiState('thinking');
+      else setAiState('speaking');
+      const response = currentIntentText(intent);
+      if (!state.messages.some((message) => message.content === response)) pushAiStreaming(response, '霜铃 · 当前页面上下文');
+      placePanel();
+      $('#chat-input').focus({ preventScroll: true });
+    }
+
+    function closeCompanion() {
+      state.companionOpen = false;
+      dock.dataset.open = 'false';
+      panel.classList.remove('is-open');
+      setAiState('idle');
+      if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus({ preventScroll: true });
+    }
+
+    function startVoice() {
+      state.voiceOpen = true;
+      $('#voice-overlay').classList.add('is-open');
+      setAiState('listening');
+      $('#voice-close').focus({ preventScroll: true });
+    }
+
+    function closeVoice() {
+      state.voiceOpen = false;
+      $('#voice-overlay').classList.remove('is-open');
+      setAiState(state.companionOpen ? 'idle' : 'idle');
+      $('#chat-voice').focus({ preventScroll: true });
+    }
+
+    function requestHint() {
+      if (state.quizAnswer === 'B') { showToast('这道题已经完成，霜铃可以陪你复盘'); return; }
+      if (state.hintLevel >= 3) { showToast('已经是第 3 级提示了，试着先选一个答案'); return; }
+      state.hintLevel += 1;
+      const hints = {
+        1: '先想想：训练数据是让机器背答案，还是让机器从例子中找规律？',
+        2: '把“训练数据”想成你教小狗认识球时反复展示的那些例子。',
+        3: '选出那个描述“从例子里发现可重复规律”的选项。'
+      };
+      setAiState('encouraging');
+      state.messages.push({ role: 'ai', kind: 'text', content: `给你一个${state.hintLevel}级提示：${hints[state.hintLevel]}`, meta: `霜铃 · 提示 ${state.hintLevel} / 3` });
+      renderChat();
+    }
+
+    function submitQuiz() {
+      if (!state.quizChoice) { showToast('先选一个答案，霜铃会陪你一起检查'); return; }
+      state.quizAnswer = state.quizChoice;
+      setAiState('happy');
+      if (!state.quizSaved) {
+        state.quizSaved = true;
+        QUIZZES.unshift({ id: 'q-live', date: '今天', type: 'AI 小测', name: '训练数据 · 随堂测验', book: 'AI 不是魔法', chapter: '第 3 章 · 训练数据', score: state.quizChoice === 'B' ? '3 / 3' : '2 / 3', meta: `使用 ${state.hintLevel} 次提示 · 3 道题`, note: state.quizChoice === 'B' ? '一次答对，概念和例子连得很好。' : '方向接近，答完记得回看“规律”这个关键词。', term: 'this' });
+        renderQuizzes();
+        showToast('QuizSession 已保存 · 可在测验页查看');
+      }
+      state.messages.push({ role: 'ai', kind: 'text', content: state.quizChoice === 'B' ? '答对了。你抓住了关键：训练数据的价值，不是数量本身，而是它能不能帮助机器发现可重复的规律。' : '这个答案很接近了。再想想：训练数据真正帮助机器做的，是从例子里找出规律。', meta: '霜铃 · 结果已保存' });
+      renderChat();
+    }
+
+    function sendMessage(value) {
+      const text = value.trim();
+      if (!text) return;
+      state.messages.push({ role: 'user', kind: 'text', content: text, meta: '刚刚' });
+      state.messages.push({ kind: 'typing' });
+      setAiState('thinking');
+      renderChat();
+      setTimeout(() => {
+        state.messages = state.messages.filter((message) => message.kind !== 'typing');
+        if (text.includes('断网') || text.includes('网络')) {
+          state.messages.push({ role: 'ai', kind: 'error', content: '网络似乎开了小差，霜铃没有收到完整的内容。', meta: '网络错误' });
+          setAiState('idle');
+          renderChat();
+          return;
+        }
+        if (text.includes('天气') || text.includes('股票') || text.includes('游戏')) {
+          state.messages.push({ role: 'ai', kind: 'refuse', content: '这个问题不在霜铃的教学范围里。我们可以聊聊正在学的内容，或者换一个和课程有关的问题。', meta: '无法回答' });
+          setAiState('confused');
+          renderChat();
+          return;
+        }
+        const context = state.selectedText ? `你刚刚选中的“${state.selectedText}”` : '当前这节内容';
+        pushAiStreaming(text.includes('为什么') ? `因为${context}会影响机器之后看到的新情况。它学到的不是“永远正确的答案”，而是从例子里归纳出来的规律，所以例子不完整时，判断也会变窄。` : `我会把你的问题和${context}连起来回答：先把训练数据理解成“机器看过的例子”，再看这些例子怎样影响它的判断。要不要我换成一个更贴近生活的例子？`, '霜铃 · 连续会话');
+      }, 820);
+    }
+
+    function retryChat() {
+      state.messages = state.messages.filter((message) => message.kind !== 'error');
+      state.messages.push({ kind: 'typing' });
+      renderChat();
+      setTimeout(() => {
+        state.messages = state.messages.filter((message) => message.kind !== 'typing');
+        pushAiStreaming('网络恢复了。我重新回答：先把训练数据理解成“机器看过的例子”，再看这些例子怎样影响它之后的判断。', '霜铃 · 重试');
+      }, 700);
+    }
+
+    const QUICK_ACTIONS = {
+      home: [['today-learn', '今天学什么？'], ['continue-yesterday', '继续昨天的内容'], ['recent-status', '看看最近学习状态']],
+      library: [['recommend-next', '推荐下一本'], ['book-fit', '这本书适合我吗？']],
+      reader: [['explain', '解释这里'], ['give-example', '举个例子'], ['summary', '总结本页'], ['quiz', '给我出题']],
+      quizzes: [['give-hint', '给我一点提示'], ['another-way', '换一种讲法'], ['why-wrong', '为什么这个答案错了？']],
+      'quiz-detail': [['another-way', '换一种讲法'], ['why-wrong', '为什么这个答案错了？']],
+      profile: [['profile-question', '为什么这样判断我？'], ['profile-why-change', '最近我有什么变化？']]
+    };
+
+    function renderQuickActions() {
+      const actions = QUICK_ACTIONS[state.view] || QUICK_ACTIONS.home;
+      $('#chat-quick').innerHTML = actions.map(([intent, label]) => `<button class="quick-btn" data-chat-action="${intent}">${label}</button>`).join('') + '<button class="quick-btn" data-open-voice="true">语音聊天</button>';
+    }
+
+    function setView(view) {
+      state.view = view;
+      $$('[data-view]').forEach((section) => section.classList.toggle('is-active', section.dataset.view === view));
+      $$('[data-route]').forEach((button) => { if (button.classList.contains('nav-link')) button.setAttribute('aria-current', button.dataset.route === view ? 'page' : 'false'); });
+      if (view !== 'reader') { state.selectedText = ''; $('#selection-popover').classList.remove('is-visible'); }
+      if (view === 'reader') { $('#chat-context-label').textContent = 'AI 不是魔法 / 第3章 / 训练数据'; }
+      else if (view === 'quizzes') { $('#chat-context-label').textContent = `测验记录 · ${QUIZZES.length} 次`; }
+      else if (view === 'quiz-detail') { const quiz = QUIZZES.find((q) => q.id === state.currentQuiz) || QUIZZES[0]; $('#chat-context-label').textContent = `测验答卷 · ${quiz.name}`; }
+      else if (view === 'profile') { $('#chat-context-label').textContent = '学习画像 · 依据真实学习记录'; }
+      else if (view === 'library') { $('#chat-context-label').textContent = `书库 · ${BOOKS.length} 本书`; }
+      else { $('#chat-context-label').textContent = '首页 · 最近学习记录'; }
+      renderQuickActions();
+      const next = clampDock(dock.offsetLeft, dock.offsetTop);
+      dock.style.left = `${next.x}px`; dock.style.top = `${next.y}px`; dock.style.right = 'auto'; dock.style.bottom = 'auto';
+      if (view === 'home') window.history.replaceState({}, '', '#home');
+      else window.history.replaceState({}, '', `#${view}`);
+    }
+
+    function placePanel() {
+      if (!state.companionOpen) return;
+      const rect = dock.getBoundingClientRect();
+      const panelWidth = Math.min(392, window.innerWidth - 32);
+      const panelHeight = Math.min(640, window.innerHeight - 32);
+      panel.style.width = `${panelWidth}px`;
+      panel.style.height = `${panelHeight}px`;
+      if (window.innerWidth <= 720) {
+        panel.style.left = '16px';
+        panel.style.top = `${Math.max(16, window.innerHeight - panelHeight - 16)}px`;
+        return;
+      }
+      const gap = 16;
+      let left = rect.right + gap;
+      let top = rect.top + rect.height - panelHeight;
+      if (left + panelWidth > window.innerWidth - 16 && rect.left >= panelWidth + gap) left = rect.left - panelWidth - gap;
+      if (left + panelWidth > window.innerWidth - 16) left = Math.max(16, window.innerWidth - panelWidth - 16);
+      if (top < 76) top = 76;
+      if (top + panelHeight > window.innerHeight - 16) top = window.innerHeight - panelHeight - 16;
+      panel.style.left = `${left}px`;
+      panel.style.top = `${top}px`;
+    }
+
+    function loadCompanionPosition() {
+      const saved = localStorage.getItem('shuangling-companion-position');
+      if (saved) {
+        try { const point = JSON.parse(saved); dock.style.left = `${point.x}px`; dock.style.top = `${point.y}px`; dock.style.right = 'auto'; dock.style.bottom = 'auto'; return; } catch (error) { /* use default */ }
+      }
+      dock.style.left = `${Math.max(24, window.innerWidth - 168)}px`;
+      dock.style.top = `${Math.max(80, window.innerHeight - 188)}px`;
+      dock.style.right = 'auto';
+      dock.style.bottom = 'auto';
+    }
+
+    function clampDock(x, y) {
+      return { x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - 134)), y: Math.min(Math.max(76, y), Math.max(76, window.innerHeight - 160)) };
+    }
+
+    let drag = null;
+    $('#companion-trigger').addEventListener('pointerdown', (event) => {
+      drag = { startX: event.clientX, startY: event.clientY, originX: dock.offsetLeft, originY: dock.offsetTop, moved: false };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    });
+    $('#companion-trigger').addEventListener('pointermove', (event) => {
+      if (!drag) return;
+      const dx = event.clientX - drag.startX;
+      const dy = event.clientY - drag.startY;
+      if (Math.abs(dx) + Math.abs(dy) > 5) drag.moved = true;
+      if (!drag.moved) return;
+      const next = clampDock(drag.originX + dx, drag.originY + dy);
+      dock.style.left = `${next.x}px`; dock.style.top = `${next.y}px`; dock.style.right = 'auto'; dock.style.bottom = 'auto';
+      if (state.companionOpen) placePanel();
+    });
+    $('#companion-trigger').addEventListener('pointerup', () => { if (drag?.moved) localStorage.setItem('shuangling-companion-position', JSON.stringify({ x: dock.offsetLeft, y: dock.offsetTop })); });
+    $('#companion-trigger').addEventListener('click', () => { if (drag?.moved) { drag = null; return; } state.companionOpen ? closeCompanion() : openCompanion('check-in'); drag = null; });
+    $('#companion-trigger').addEventListener('keydown', (event) => {
+      const movement = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] }[event.key];
+      if (movement) {
+        event.preventDefault();
+        const next = clampDock(dock.offsetLeft + movement[0], dock.offsetTop + movement[1]);
+        dock.style.left = `${next.x}px`; dock.style.top = `${next.y}px`; dock.style.right = 'auto'; dock.style.bottom = 'auto';
+        localStorage.setItem('shuangling-companion-position', JSON.stringify(next));
+        if (state.companionOpen) placePanel();
+      }
+      if (event.key === 'Escape' && state.companionOpen) closeCompanion();
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!event.target.closest('.nav-right') && !$('#user-menu').hidden) $('#user-menu').hidden = true;
+      const routeTarget = event.target.closest('[data-route]');
+      if (routeTarget) {
+        event.preventDefault();
+        if (routeTarget.dataset.quizId) { state.currentQuiz = routeTarget.dataset.quizId; fillQuizDetail(); }
+        setView(routeTarget.dataset.route);
+      }
+      const companionTarget = event.target.closest('[data-open-companion]');
+      if (companionTarget) { event.preventDefault(); openCompanion(companionTarget.dataset.openCompanion); }
+      if (event.target.closest('[data-close-companion]')) closeCompanion();
+      if (event.target.closest('[data-open-voice]')) startVoice();
+      if (event.target.closest('[data-close-voice]')) closeVoice();
+      const docTab = event.target.closest('.doc-tab[data-doc-mode]');
+      if (docTab) setDocMode(docTab.dataset.docMode);
+      if (event.target.closest('[data-doc-save]')) saveDoc();
+      if (event.target.closest('[data-doc-cancel]')) cancelDoc();
+      if (event.target.closest('[data-export-profile]')) showToast('已导出 xiaoming.agent.md（演示）');
+      const action = event.target.closest('[data-chat-action]');
+      if (action) openCompanion(action.dataset.chatAction);
+      if (event.target.closest('[data-request-hint]')) requestHint();
+      const grade = event.target.closest('.grade-btn[data-grade-filter]');
+      if (grade) {
+        $$('.grade-btn').forEach((button) => button.setAttribute('aria-pressed', button === grade ? 'true' : 'false'));
+        applyLibraryFilter();
+      }
+      const topic = event.target.closest('.filter-chip[data-topic-filter]');
+      if (topic) {
+        topic.setAttribute('aria-pressed', topic.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+        applyLibraryFilter();
+      }
+      if (event.target.closest('[data-more-filters]')) {
+        const box = $('#topic-filters');
+        const show = box.hidden;
+        box.hidden = !show;
+        $('#more-filters-btn').setAttribute('aria-expanded', show ? 'true' : 'false');
+        $('#more-filters-btn').textContent = show ? '收起筛选 ▴' : '更多筛选 ▾';
+      }
+      const quizFilter = event.target.closest('.filter-chip[data-quiz-filter]');
+      if (quizFilter) {
+        $$('.filter-chip[data-quiz-filter]').forEach((chip) => chip.setAttribute('aria-pressed', chip === quizFilter ? 'true' : 'false'));
+        renderQuizzes();
+      }
+      if (event.target.closest('[data-clear-library]')) {
+        $$('.grade-btn').forEach((button) => button.setAttribute('aria-pressed', button.dataset.gradeFilter === '推荐' ? 'true' : 'false'));
+        $$('.filter-chip[data-topic-filter]').forEach((chip) => chip.setAttribute('aria-pressed', 'false'));
+        const search = $('.library-search');
+        if (search) search.value = '';
+        applyLibraryFilter();
+      }
+      if (event.target.closest('[data-collapse-chapters]')) {
+        const nav = event.target.closest('.chapter-nav');
+        const button = event.target.closest('[data-collapse-chapters]');
+        nav.classList.toggle('is-collapsed');
+        const collapsed = nav.classList.contains('is-collapsed');
+        button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        button.textContent = collapsed ? '展开目录 ▸' : '收起目录 ▾';
+      }
+      const memAction = event.target.closest('[data-mem-action]');
+      if (memAction) handleMemoryAction(memAction.closest('.memory-item'), memAction.dataset.memAction);
+      const profileView = event.target.closest('[data-profile-view]');
+      if (profileView) setProfileView(profileView.dataset.profileView);
+      if (event.target.closest('[data-user-menu]')) {
+        const menu = $('#user-menu');
+        menu.hidden = !menu.hidden;
+        event.target.closest('[data-user-menu]').setAttribute('aria-expanded', menu.hidden ? 'false' : 'true');
+      }
+      const ageSet = event.target.closest('[data-age-set]');
+      if (ageSet) setAge(ageSet.dataset.ageSet);
+      if (event.target.closest('[data-demo-new]')) toggleDemoNew();
+      if (event.target.closest('[data-voice-toggle]')) {
+        const listening = state.aiState === 'listening';
+        setAiState(listening ? 'speaking' : 'listening');
+        $('#voice-status-title').textContent = listening ? '霜铃正在回答…' : '正在听你说话…';
+        $('#voice-status-copy').textContent = listening ? '你可以随时打断，或者继续追问。' : '你可以继续说“为什么这个算法会产生偏见？”';
+      }
+    });
+    $('#chat-form').addEventListener('submit', (event) => { event.preventDefault(); const input = $('#chat-input'); sendMessage(input.value); input.value = ''; });
+    $('#chat-input').addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('#chat-form').requestSubmit(); } });
+    const BOOKS = [
+      { id: 'b1', num: '01', title: 'AI 不是魔法', grade: '初中', topic: 'AI 基础', chapters: 7, minutes: 90, keywords: '训练数据 · 标签 · 算法', status: '读到第 3 章', started: true, recommend: true, tint: 1 },
+      { id: 'b2', num: '02', title: '机器人会怎么想？', grade: '初中', topic: '机器人', chapters: 5, minutes: 65, keywords: '感知 · 决策 · 行动', status: '未开始', started: false, recommend: true, tint: 2 },
+      { id: 'b3', num: '03', title: '和算法相处', grade: '初中', topic: '数字素养', chapters: 6, minutes: 70, keywords: '选择 · 判断 · 公平', status: '未开始', started: false, recommend: true, tint: 3 },
+      { id: 'b4', num: '04', title: '数据会说话吗？', grade: '初中', topic: '数据', chapters: 4, minutes: 40, keywords: '数据 · 图表 · 结论', status: '未开始', started: false, recommend: false, tint: 4 },
+      { id: 'b5', num: '05', title: '让代码动起来', grade: '初中', topic: '编程', chapters: 8, minutes: 95, keywords: '编程 · 逻辑 · 循环', status: '未开始', started: false, recommend: false, tint: 1 },
+      { id: 'b6', num: '06', title: '机器如何理解语言', grade: '高中', topic: 'AI 基础', chapters: 6, minutes: 75, keywords: '语言 · 模型 · 上下文', status: '未开始', started: false, recommend: false, tint: 2 },
+      { id: 'b7', num: '07', title: '和未来一起学习', grade: '高中', topic: '数字素养', chapters: 5, minutes: 60, keywords: '未来 · 工具 · 协作', status: '未开始', started: false, recommend: false, tint: 3 },
+      { id: 'b8', num: '08', title: '你好，机器人', grade: '小学', topic: '机器人', chapters: 4, minutes: 35, keywords: '机器人 · 故事 · 动手', status: '未开始', started: false, recommend: false, tint: 4 },
+      { id: 'b9', num: '09', title: '会思考的盒子', grade: '小学', topic: 'AI 基础', chapters: 5, minutes: 40, keywords: 'AI · 类比 · 小实验', status: '未开始', started: false, recommend: false, tint: 1 },
+      { id: 'b10', num: '10', title: '数据是什么颜色？', grade: '小学', topic: '数据', chapters: 4, minutes: 30, keywords: '数据 · 颜色 · 分类', status: '未开始', started: false, recommend: false, tint: 2 },
+      { id: 'b11', num: '11', title: '算法与偏见', grade: '高中', topic: 'AI 伦理', chapters: 7, minutes: 85, keywords: '偏见 · 公平 · 责任', status: '未开始', started: false, recommend: false, tint: 3 },
+      { id: 'b12', num: '12', title: '自己动手训练 AI', grade: '高中', topic: '编程', chapters: 8, minutes: 100, keywords: '训练 · 数据 · 实战', status: '未开始', started: false, recommend: false, tint: 4 }
+    ];
+
+    function renderBooks() {
+      const grid = $('#book-grid');
+      if (!grid) return;
+      grid.innerHTML = BOOKS.map((book) => `
+        <article class="book-card book-tint-${book.tint}" data-book-grade="${book.grade}" data-book-topic="${book.topic}">
+          <div class="book-card-cover"><span class="book-num">${book.num}</span></div>
+          <div class="book-card-body">
+            <span class="mono muted">${book.grade} · ${book.topic}</span>
+            <h3>${book.title}</h3>
+            <p class="book-keywords">${book.keywords}</p>
+            <div class="book-card-meta"><span>${book.chapters} 章 · 预计 ${book.minutes} 分钟</span></div>
+            <div class="book-card-foot">
+              <span class="book-status ${book.started ? 'is-reading' : ''}">${book.started ? `已开始 · ${book.status}` : '未开始'}</span>
+              ${book.recommend ? `<span class="book-reco"><em>霜铃推荐</em><button class="book-why" data-open-companion="book-why-${book.id === 'b2' ? '2' : book.id === 'b3' ? '3' : '1'}">为什么推荐？</button></span>` : ''}
+            </div>
+          </div>
+        </article>`).join('');
+      $('#book-count').textContent = `共 ${BOOKS.length} 本`;
+      applyLibraryFilter();
+    }
+
+    function applyLibraryFilter() {
+      const grade = $('.grade-btn[aria-pressed="true"]')?.dataset.gradeFilter || '推荐';
+      const topics = $$('.filter-chip[data-topic-filter][aria-pressed="true"]').map((chip) => chip.dataset.topicFilter);
+      const needle = ($('.library-search')?.value || '').trim().toLowerCase();
+      let visibleCount = 0;
+      $$('.book-card').forEach((card) => {
+        const num = card.querySelector('.book-num')?.textContent.trim();
+        const book = BOOKS.find((item) => item.num === num);
+        if (!book) return;
+        const matchesGrade = grade === '推荐' ? true : book.grade === grade;
+        const matchesTopic = topics.length === 0 || topics.includes(book.topic);
+        const matchesQuery = !needle || `${book.title} ${book.keywords} ${book.topic}`.toLowerCase().includes(needle);
+        const visible = matchesGrade && matchesTopic && matchesQuery;
+        card.hidden = !visible;
+        visibleCount += visible ? 1 : 0;
+      });
+      const showFeatured = grade === '推荐' && topics.length === 0 && !needle;
+      const featuredGrid = $('.library-grid');
+      const featuredHeading = $$('.library-section-heading')[0];
+      if (featuredGrid) featuredGrid.hidden = !showFeatured;
+      if (featuredHeading) featuredHeading.hidden = !showFeatured;
+      $('#library-empty').hidden = visibleCount !== 0;
+    }
+    $('.library-search')?.addEventListener('input', applyLibraryFilter);
+
+    const QUIZZES = [
+      { id: 'q1', date: '08-18', type: '章节测验', name: '机器学习基础小测', book: 'AI 不是魔法', chapter: '第 3 章 · 训练数据', score: '8 / 10', meta: '使用 1 次提示 · 3 道应用题', note: '概念题表现稳定，应用题还需要多练。', term: 'this' },
+      { id: 'q2', date: '08-15', type: 'AI 小测', name: '推荐系统与兴趣', book: 'AI 不是魔法', chapter: '第 2 章 · 推荐系统', score: '7 / 10', meta: '没有使用提示 · 2 道题完成', note: '你能说出推荐的原因，但还会忽略数据来源。', term: 'this' },
+      { id: 'q3', date: '08-11', type: 'AI 小测', name: '什么是机器学习', book: 'AI 不是魔法', chapter: '第 1 章 · 会回答的机器', score: '6 / 10', meta: '使用 2 次提示 · 3 道题完成', note: '概念记住了，但例子和概念还连不起来。', term: 'this' }
+    ];
+
+    function renderQuizzes() {
+      const timeline = $('#quiz-timeline');
+      if (!timeline) return;
+      const filter = $('.filter-chip[data-quiz-filter][aria-pressed="true"]')?.dataset.quizFilter || '全部';
+      const list = filter === '全部' ? QUIZZES : filter === '更早' ? [] : QUIZZES.filter((quiz) => quiz.type === filter);
+      $('#quiz-count').textContent = `共 ${list.length} 次测验`;
+      $('#quiz-empty').hidden = list.length !== 0;
+      timeline.innerHTML = list.map((quiz) => `
+        <article class="quiz-entry" data-od-id="quiz-row-${quiz.id}">
+          <div class="quiz-date"><time>${quiz.date}</time><i></i></div>
+          <div class="quiz-entry-body">
+            <div class="quiz-entry-head"><span class="quiz-type">${quiz.type}</span><strong>${quiz.name}</strong><span class="quiz-score">${quiz.score}</span></div>
+            <p class="quiz-entry-src">《${quiz.book}》 · ${quiz.chapter}</p>
+            <p class="quiz-entry-meta">${quiz.meta}</p>
+            <blockquote class="quiz-ai-note">${quiz.note}</blockquote>
+            <div class="quiz-entry-actions"><button class="btn btn-secondary btn-small" data-route="quiz-detail" data-quiz-id="${quiz.id}">查看答卷</button></div>
+          </div>
+        </article>`).join('');
+    }
+
+    function fillQuizDetail() {
+      const quiz = QUIZZES.find((q) => q.id === state.currentQuiz) || QUIZZES[0];
+      $('#quiz-detail-name').textContent = quiz.name;
+      $('#quiz-detail-src').textContent = `《${quiz.book}》 · ${quiz.chapter} · ${quiz.date} · ${quiz.type}`;
+      $('#quiz-detail-score').textContent = quiz.score;
+      $('#quiz-detail-note').textContent = quiz.note;
+      const isQ1 = quiz.id === 'q1';
+      $('.question-list').hidden = !isQ1;
+      $('.quiz-detail-foot').hidden = !isQ1;
+      const sampleNote = $('#quiz-detail-sample-note');
+      if (sampleNote) sampleNote.hidden = isQ1;
+    }
+
+    function handleMemoryAction(item, action) {
+      if (!item) return;
+      if (action === 'ok') { item.classList.add('is-confirmed'); showToast('已确认，霜铃会继续使用这条记忆'); }
+      else if (action === 'forget') { item.remove(); showToast('已忘记这条记忆，霜铃不会再使用'); }
+      else if (action === 'dispute') { openCompanion('memory-dispute'); }
+      else if (action === 'edit') { setProfileView('archive'); setDocMode('edit'); showToast('在编辑器中直接修改这条记忆'); }
+    }
+
+    function setProfileView(view) {
+      $('#student-view').hidden = view !== 'student';
+      $('#archive-view').hidden = view !== 'archive';
+      if (view === 'archive') setDocMode('preview');
+    }
+
+    function setAge(age) {
+      document.documentElement.dataset.age = age === 'junior' ? '' : age;
+      $$('[data-age-set]').forEach((button) => button.setAttribute('aria-pressed', button.dataset.ageSet === age ? 'true' : 'false'));
+      localStorage.setItem('shuangling-age', age);
+      showToast({ primary: '已切换小学适配：字号与点击区域更大', junior: '已切换初中适配（默认）', senior: '已切换高中适配：信息更紧凑' }[age]);
+    }
+
+    function toggleDemoNew() {
+      const on = !document.body.classList.contains('demo-new');
+      document.body.classList.toggle('demo-new', on);
+      $('#demo-new-btn').setAttribute('aria-pressed', on ? 'true' : 'false');
+      showToast(on ? '已切换到新同学视角（演示空状态）' : '已回到小明（有学习记录）');
+    }
+
+    // 成长页 · agent.md 文档编辑
+    const mdSource = $('#md-source');
+    const mdGutter = $('#md-gutter');
+    const profileOriginal = mdSource ? mdSource.value : '';
+
+    function syncGutter() {
+      if (!mdSource || !mdGutter) return;
+      const count = mdSource.value.split('\n').length;
+      let html = '';
+      for (let i = 1; i <= count; i += 1) html += `<span>${i}</span>`;
+      mdGutter.innerHTML = html;
+      mdGutter.scrollTop = mdSource.scrollTop;
+    }
+
+    function setDocMode(mode) {
+      $$('.doc-tab').forEach((tab) => tab.setAttribute('aria-selected', tab.dataset.docMode === mode ? 'true' : 'false'));
+      $$('.doc-view').forEach((view) => { view.hidden = view.dataset.docView !== mode; });
+      if (mode === 'edit' && mdSource) { syncGutter(); mdSource.focus({ preventScroll: true }); }
+    }
+
+    function saveDoc() {
+      if (!mdSource || !mdSource.value.trim()) { showToast('文件不能为空'); return; }
+      $('#doc-updated').textContent = '由霜铃维护 · 最近更新 刚刚 · 你修改过';
+      $('#doc-user-edit-badge').hidden = false;
+      const item = document.createElement('li');
+      item.className = 'is-new';
+      item.innerHTML = '<time>今天</time><span>你手动修改了画像 · 已标记「用户确认」</span>';
+      $('#profile-changelog-list').prepend(item);
+      setDocMode('preview');
+      showToast('已保存，霜铃下次讲解会参考新画像');
+    }
+
+    function cancelDoc() {
+      if (!mdSource) return;
+      mdSource.value = profileOriginal;
+      syncGutter();
+      setDocMode('preview');
+      showToast('已放弃修改');
+    }
+
+    if (mdSource) {
+      mdSource.addEventListener('input', syncGutter);
+      mdSource.addEventListener('scroll', () => { if (mdGutter) mdGutter.scrollTop = mdSource.scrollTop; });
+      syncGutter();
+    }
+
+    document.addEventListener('selectionchange', () => {
+      const selection = window.getSelection();
+      const text = selection?.toString().trim();
+      const node = selection?.anchorNode?.parentElement;
+      if (!text || !node?.closest('.reader-copy')) { $('#selection-popover').classList.remove('is-visible'); return; }
+      state.selectedText = text.slice(0, 50);
+      $('#selection-text').textContent = state.selectedText;
+      const range = selection.getRangeAt(0).getBoundingClientRect();
+      const popover = $('#selection-popover');
+      popover.style.left = `${Math.min(Math.max(12, range.left), window.innerWidth - 168)}px`;
+      popover.style.top = `${Math.max(12, range.top - 48)}px`;
+      popover.classList.add('is-visible');
+    });
+
+    window.addEventListener('resize', () => { const next = clampDock(dock.offsetLeft, dock.offsetTop); dock.style.left = `${next.x}px`; dock.style.top = `${next.y}px`; if (state.companionOpen) placePanel(); });
+    if ('IntersectionObserver' in window) {
+      const readerObserver = new IntersectionObserver((entries) => {
+        const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (visible && state.view === 'reader') $('#chat-context-label').textContent = `AI 不是魔法 / 第3章 / ${visible.target.dataset.readSection}`;
+      }, { rootMargin: '-18% 0px -55% 0px' });
+      $$('.reader-body [data-read-section]').forEach((section) => readerObserver.observe(section));
+    }
+    loadCompanionPosition();
+    renderBooks();
+    renderQuizzes();
+    renderChat();
+    renderQuickActions();
+    fillQuizDetail();
+    setAiState('idle');
+    const savedAge = localStorage.getItem('shuangling-age');
+    if (savedAge && savedAge !== 'junior') {
+      document.documentElement.dataset.age = savedAge;
+      $$('[data-age-set]').forEach((button) => button.setAttribute('aria-pressed', button.dataset.ageSet === savedAge ? 'true' : 'false'));
+    }
+    setTimeout(showSuggestion, 6000);
+    requestAnimationFrame(function animateSprites(time) {
+      $$('.sprite, .companion-sprite, .chat-mini-sprite').forEach((sprite) => {
+        const spec = spriteFrames[sprite.dataset.spriteState] || spriteFrames.idle;
+        const width = sprite.clientWidth || 120;
+        const height = sprite.clientHeight || 130;
+        const frame = Math.floor(time / 220) % spec.frames;
+        sprite.style.backgroundSize = `${width * 8}px ${height * 11}px`;
+        sprite.style.backgroundPosition = `-${frame * width}px -${spec.row * height}px`;
+      });
+      requestAnimationFrame(animateSprites);
+    });
+  </script>
+
+
+</body></html>

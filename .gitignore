@@ -1,0 +1,53 @@
+# ---- Node / Frontend ----
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+.next/
+out/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Python / Backend ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# ---- Environment & Secrets ----
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+
+# ---- Editor / OS ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ---- Logs & Temporary Files ----
+*.log
+logs/
+tmp/
+*.tmp
+.cache/
+
+# ---- Orchestrator / runtime state ----
+.agents/
+.codex/
+.hermes-tasks/
