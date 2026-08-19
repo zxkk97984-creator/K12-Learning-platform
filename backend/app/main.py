@@ -8,6 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.envelope import error_response, ok
 from app.config import settings
 from app.modules.content.router import router as content_router
+from app.modules.conversation.router import router as conversation_router
 from app.modules.identity.router import router as identity_router
 from app.modules.learning.router import router as learning_router
 
@@ -22,6 +23,7 @@ app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 app.include_router(identity_router, prefix="/api/v1")
 app.include_router(content_router, prefix="/api/v1")
 app.include_router(learning_router, prefix="/api/v1")
+app.include_router(conversation_router, prefix="/api/v1")
 
 
 @app.get("/health")

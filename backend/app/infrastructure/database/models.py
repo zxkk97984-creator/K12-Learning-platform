@@ -451,3 +451,125 @@ class BookProgress(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class Conversation(Base):
+    """conversations（0-E §3.12；学生对话上下文）。"""
+
+    __tablename__ = "conversations"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ACTIVE','ARCHIVED','DELETED')",
+            name="ck_conversations_status",
+        ),
+        CheckConstraint(
+            "channel IN ('TEXT','VOICE')",
+            name="ck_conversations_channel",
+        ),
+        Index(
+            "ix_conversations_student_updated",
+            "student_id",
+            text("updated_at DESC"),
+        ),
+        Index("ix_conversations_teacher_role", "teacher_role_id"),
+    )
+
+    conversation_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    # FK→teacher_roles 延迟到 Phase 11；0-E 定义为非空，本任务因角色表尚未落地放宽为可空。
+    teacher_role_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    title: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'ACTIVE'"))
+    channel: Mapped[str] = mapped_column(String(16), server_default=text("'TEXT'"))
+    current_page_context: Mapped[dict] = mapped_column(
+        JSONB, server_default=text("'{}'::jsonb")
+    )
+    recent_messages: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Message(Base):
+    """messages（0-E §3.13；只追加，由应用层保证）。"""
+
+    __tablename__ = "messages"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('STUDENT','TEACHER','SYSTEM')",
+            name="ck_messages_role",
+        ),
+        CheckConstraint(
+            "type IN ('TEXT','QUIZ','TOOL_STATUS','HINT','RECOMMENDATION',"
+            "'SYSTEM','LEARNING_SUMMARY')",
+            name="ck_messages_type",
+        ),
+        UniqueConstraint(
+            "conversation_id", "sequence", name="uq_messages_conversation_sequence"
+        ),
+    )
+
+    message_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    conversation_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("conversations.conversation_id", ondelete="RESTRICT"),
+    )
+    role: Mapped[str] = mapped_column(String(16))
+    type: Mapped[str] = mapped_column(String(32))
+    content: Mapped[str] = mapped_column(Text)
+    metadata_: Mapped[dict] = mapped_column(
+        "metadata", JSONB, server_default=text("'{}'::jsonb")
+    )
+    sequence: Mapped[int] = mapped_column(Integer)
+    model_info: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ConversationSummary(Base):
+    """conversation_summaries（0-E §3.14；每个会话最多一条）。"""
+
+    __tablename__ = "conversation_summaries"
+    __table_args__ = (
+        CheckConstraint(
+            "token_count >= 0", name="ck_conversation_summaries_token_count"
+        ),
+        UniqueConstraint(
+            "conversation_id", name="uq_conversation_summaries_conversation"
+        ),
+    )
+
+    summary_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    conversation_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("conversations.conversation_id", ondelete="CASCADE"),
+    )
+    summary: Mapped[str] = mapped_column(Text)
+    token_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    summary_version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    source_message_ids: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+    model_info: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
