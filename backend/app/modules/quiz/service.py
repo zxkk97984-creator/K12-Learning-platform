@@ -2,7 +2,7 @@ import base64
 import binascii
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
@@ -21,7 +21,7 @@ from app.infrastructure.database.models import (
     QuizSession,
     StudentProfile,
 )
-from app.modules.quiz.quiz_bank import QUIZ_BANK, QuizBankQuestion, select_questions
+from app.modules.quiz.skill import QuizGenerationContext, QuizSkill
 from app.modules.quiz.schemas import (
     CreateQuizSessionRequest,
     QuizAnswerDTO,
@@ -33,11 +33,10 @@ from app.modules.quiz.schemas import (
     QuizSessionListItemDTO,
     SubmitQuizAnswerRequest,
 )
+from app.skills.registry import get_skill
 
 
 MAX_ATTEMPTS = 3
-SKILL_VERSION = "quiz-v1"
-MODEL_INFO = {"provider": "quiz-bank", "model": "quiz-bank-v1"}
 
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
@@ -117,6 +116,9 @@ def _interaction_dto(interaction: QuizInteraction) -> QuizInteractionDTO:
 class QuizService:
     """Quiz lifecycle service with immutable question snapshots and audit writes."""
 
+    def __init__(self, skill: QuizSkill | None = None) -> None:
+        self.skill = skill or cast(QuizSkill, get_skill("quiz"))
+
     async def _get_profile(
         self, session: AsyncSession, user_id: UUID
     ) -> StudentProfile:
@@ -191,83 +193,27 @@ class QuizService:
                 raise _error(422, "VALIDATION_ERROR", "chapter does not belong to book")
             book_id = book_id or chapter.book_id
 
-        now = datetime.now(timezone.utc)
-        quiz_session_id = uuid4()
-        bank_questions = select_questions(request.difficulty, request.question_count)
-        snapshot: list[dict[str, Any]] = []
-        question_rows: list[QuizQuestion] = []
-        for order, bank_question in enumerate(bank_questions, start=1):
-            question_id = uuid4()
-            source_context = {
-                "bank_id": bank_question.bank_id,
-                "book_id": str(book_id) if book_id is not None else None,
-                "chapter_id": str(chapter_id) if chapter_id is not None else None,
-            }
-            interaction_policy = {"allow_hint": True, "max_hint_level": 3}
-            row = QuizQuestion(
-                question_id=question_id,
-                quiz_session_id=quiz_session_id,
-                question_order=order,
-                question_type=bank_question.question_type,
-                stem=bank_question.stem,
-                options=bank_question.options,
-                correct_answer=bank_question.correct_answer,
-                explanation=bank_question.explanation,
-                source_context=source_context,
-                interaction_policy=interaction_policy,
-                knowledge_point_ids=list(bank_question.knowledge_point_ids),
-                created_at=now,
-            )
-            question_rows.append(row)
-            snapshot.append(
-                {
-                    "question_id": str(question_id),
-                    "quiz_session_id": str(quiz_session_id),
-                    "question_order": order,
-                    "question_type": bank_question.question_type,
-                    "stem": bank_question.stem,
-                    "options": bank_question.options,
-                    "correct_answer": bank_question.correct_answer,
-                    "explanation": bank_question.explanation,
-                    "source_context": source_context,
-                    "interaction_policy": interaction_policy,
-                    "knowledge_point_ids": list(bank_question.knowledge_point_ids),
-                }
-            )
-
         chapter_title = None
         if chapter_id is not None:
             chapter = await session.get(Chapter, chapter_id)
             chapter_title = chapter.title if chapter is not None else None
         title = f"{chapter_title} · 随堂测验" if chapter_title else "霜铃随堂测验"
-        quiz_session = QuizSession(
-            quiz_session_id=quiz_session_id,
+        context = QuizGenerationContext(
             student_id=profile.student_id,
-            conversation_id=request.conversation_id,
             teacher_role_id=conversation.teacher_role_id or profile.current_teacher_role_id,
+            conversation_id=request.conversation_id,
             book_id=book_id,
             chapter_id=chapter_id,
-            title=title,
             quiz_kind=request.quiz_kind,
-            status="ACTIVE",
-            questions_snapshot=snapshot,
-            result_summary={
-                "correct": 0,
-                "total": request.question_count,
-                "hints_used": 0,
-            },
-            duration_seconds=0,
-            ai_feedback=None,
-            model_info=MODEL_INFO,
-            skill_version=SKILL_VERSION,
-            created_at=now,
-            updated_at=now,
+            question_count=request.question_count,
+            difficulty=request.difficulty,
+            title=title,
         )
-        session.add(quiz_session)
-        # The ORM models intentionally do not define relationships; flush the
-        # parent explicitly before inserting FK-backed question rows.
-        await session.flush()
-        session.add_all(question_rows)
+        await self.skill.generate(session, context)
+        quiz_session = context.generated_session
+        if quiz_session is None:
+            raise RuntimeError("QuizSkill did not create a quiz session")
+        now = quiz_session.created_at
         session.add(
             LearningEvent(
                 student_id=profile.student_id,
@@ -276,7 +222,7 @@ class QuizService:
                 book_id=book_id,
                 chapter_id=chapter_id,
                 conversation_id=request.conversation_id,
-                quiz_session_id=quiz_session_id,
+                quiz_session_id=quiz_session.quiz_session_id,
                 payload={"quiz_kind": request.quiz_kind, "question_count": request.question_count},
                 created_at=now,
             )
@@ -438,18 +384,10 @@ class QuizService:
             return answers[0]
         return None
 
-    @staticmethod
-    def _is_answer_correct(question: QuizQuestion, submitted: dict[str, Any]) -> bool:
-        correct = question.correct_answer or {}
-        if question.question_type == "MULTIPLE_CHOICE":
-            return sorted(submitted.get("keys", [])) == sorted(correct.get("keys", []))
-        if question.question_type == "FILL_BLANK":
-            return str(submitted.get("value", "")).strip().casefold() == str(
-                correct.get("value", "")
-            ).strip().casefold()
-        return str(submitted.get("key", "")).strip().casefold() == str(
-            correct.get("key", "")
-        ).strip().casefold()
+    def _is_answer_correct(
+        self, question: QuizQuestion, submitted: dict[str, Any]
+    ) -> bool:
+        return self.skill.grade(question, submitted)
 
     async def _current_hint_level(
         self, session: AsyncSession, quiz_session_id: UUID, question_id: UUID
@@ -617,10 +555,6 @@ class QuizService:
         await session.refresh(answer)
         return _answer_dto(answer), False
 
-    def _find_bank_question(self, question: QuizQuestion) -> QuizBankQuestion | None:
-        bank_id = (question.source_context or {}).get("bank_id")
-        return next((item for item in QUIZ_BANK if item.bank_id == bank_id), None)
-
     async def _find_hint_replay(
         self,
         session: AsyncSession,
@@ -694,12 +628,7 @@ class QuizService:
         if hint_level > max_hint_level:
             raise _error(409, "QUIZ_HINT_LIMIT_REACHED", "maximum hint level reached")
 
-        bank_question = self._find_bank_question(question)
-        hint_text = (
-            bank_question.hints[hint_level - 1]
-            if bank_question is not None
-            else f"先回到题干，找出它要求你判断的关键规律（提示 {hint_level}）。"
-        )
+        hint_text = self.skill.hint(question, hint_level)
         now = datetime.now(timezone.utc)
         request_sequence = await self._next_interaction_sequence(
             session, quiz_session_id

@@ -200,6 +200,63 @@ class TestConversationSSE:
         assert context["route"] == "/reader"
         assert context["selected_text"] == "训练数据"
 
+    def test_quiz_intent_emits_tool_events_and_persists_quiz_session(
+        self, client: TestClient, token: str
+    ) -> None:
+        conversation_id = create_conversation(client, token)
+        response = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(token),
+            json={"content": "给我出题"},
+        )
+
+        assert response.status_code == 200
+        events = parse_sse(response.text)
+        names = [event["event"] for event in events]
+        assert names == [
+            "message.start",
+            "text.delta",
+            "tool.start",
+            "tool.result",
+            "text.delta",
+            "text.done",
+            "message.done",
+        ]
+
+        start = events[0]["data"]
+        tool_start = events[2]["data"]
+        tool_result = events[3]["data"]
+        text_done = events[5]["data"]
+        assert tool_start["tool"] == "quiz"
+        assert tool_start["state"] == "running"
+        assert tool_start["message_id"] == start["message_id"]
+        assert tool_start["payload"] == {"quiz_session_id": None}
+        assert tool_result["tool_run_id"] == tool_start["tool_run_id"]
+        assert tool_result["tool"] == "quiz"
+        assert tool_result["status"] == "success"
+        assert tool_result["payload"]["skill_version"] == "quiz-v1"
+        quiz_session_id = tool_result["payload"]["quiz_session_id"]
+        assert quiz_session_id
+        assert "好的，我来出一道题" in text_done["content"]
+        assert "题目已生成" in text_done["content"]
+
+        detail = client.get(
+            f"/api/v1/quiz-sessions/{quiz_session_id}",
+            headers=headers(token),
+        )
+        assert detail.status_code == 200
+        assert detail.json()["data"]["conversation_id"] == conversation_id
+        assert detail.json()["data"]["status"] == "ACTIVE"
+
+        messages = client.get(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(token),
+        )
+        assert messages.status_code == 200
+        rows = messages.json()["data"]
+        assert [row["role"] for row in rows] == ["STUDENT", "TEACHER"]
+        assert rows[1]["content"] == text_done["content"]
+
     def test_stream_requires_owner_and_active_conversation(
         self, client: TestClient, token: str, other_token: str
     ) -> None:

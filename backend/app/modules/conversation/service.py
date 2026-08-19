@@ -30,6 +30,16 @@ from app.modules.conversation.schemas import (
     PatchConversationRequest,
     SendMessageRequest,
 )
+from app.modules.quiz.schemas import CreateQuizSessionRequest
+from app.modules.quiz.service import QuizService
+
+
+QUIZ_INTENT_KEYWORDS = ("出题", "题目", "测验", "quiz", "考考我")
+
+
+def _is_quiz_intent(content: str) -> bool:
+    normalized = content.casefold()
+    return any(keyword.casefold() in normalized for keyword in QUIZ_INTENT_KEYWORDS)
 
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
@@ -153,6 +163,9 @@ def _message_dto(message: Message) -> MessageDTO:
 
 class ConversationService:
     """Conversation Domain application service."""
+
+    def __init__(self, quiz_service: QuizService | None = None) -> None:
+        self.quiz_service = quiz_service or QuizService()
 
     async def _get_profile(
         self, session: AsyncSession, user_id: UUID
@@ -321,6 +334,7 @@ class ConversationService:
         teacher_sequence = student_sequence + 1
         teacher_created_at = datetime.now(timezone.utc)
         request_id = str(uuid4())
+        quiz_intent = _is_quiz_intent(request.content)
         system_prompt = (
             "你是霜铃，一位耐心、清晰的中文 K12 数字教师。"
             "请根据学生的问题循序解释，鼓励学生自己思考。"
@@ -341,6 +355,160 @@ class ConversationService:
                 },
                 event_id=teacher_message_id,
             )
+
+            if quiz_intent:
+                chunks: list[str] = []
+                tool_run_id = str(uuid4())
+                intro = "好的，我来出一道题，请听题～"
+                chunks.append(intro)
+                yield _sse_frame(
+                    "text.delta",
+                    {
+                        "message_id": str(teacher_message_id),
+                        "delta": intro,
+                        "index": 0,
+                        "sequence": teacher_sequence,
+                    },
+                    event_id=teacher_message_id,
+                )
+                yield _sse_frame(
+                    "tool.start",
+                    {
+                        "tool_run_id": tool_run_id,
+                        "tool": "quiz",
+                        "state": "running",
+                        "message_id": str(teacher_message_id),
+                        "payload": {"quiz_session_id": None},
+                    },
+                    event_id=teacher_message_id,
+                )
+                try:
+                    quiz_session = await self.quiz_service.create_session(
+                        session,
+                        user_id,
+                        CreateQuizSessionRequest(
+                            conversation_id=conversation_id,
+                            question_count=1,
+                            difficulty="MEDIUM",
+                        ),
+                    )
+                except HTTPException as exc:
+                    await session.rollback()
+                    detail = exc.detail if isinstance(exc.detail, dict) else {}
+                    code = str(detail.get("code", "QUIZ_SKILL_ERROR"))
+                    message = str(detail.get("message", "quiz skill failed"))
+                    yield _sse_frame(
+                        "tool.result",
+                        {
+                            "tool_run_id": tool_run_id,
+                            "tool": "quiz",
+                            "status": "error",
+                            "payload": {"code": code, "message": message},
+                        },
+                        event_id=teacher_message_id,
+                    )
+                    yield _sse_error(request_id, code, message)
+                    return
+                except Exception:
+                    await session.rollback()
+                    yield _sse_frame(
+                        "tool.result",
+                        {
+                            "tool_run_id": tool_run_id,
+                            "tool": "quiz",
+                            "status": "error",
+                            "payload": {
+                                "code": "QUIZ_SKILL_ERROR",
+                                "message": "quiz skill unavailable",
+                            },
+                        },
+                        event_id=teacher_message_id,
+                    )
+                    yield _sse_error(
+                        request_id,
+                        "QUIZ_SKILL_ERROR",
+                        "quiz skill unavailable",
+                    )
+                    return
+
+                quiz_session_id = str(quiz_session.quiz_session_id)
+                yield _sse_frame(
+                    "tool.result",
+                    {
+                        "tool_run_id": tool_run_id,
+                        "tool": "quiz",
+                        "status": "success",
+                        "payload": {
+                            "quiz_session_id": quiz_session_id,
+                            "skill_version": quiz_session.skill_version,
+                        },
+                    },
+                    event_id=teacher_message_id,
+                )
+                outro = "题目已生成，请在卡片中作答～"
+                chunks.append(outro)
+                yield _sse_frame(
+                    "text.delta",
+                    {
+                        "message_id": str(teacher_message_id),
+                        "delta": outro,
+                        "index": 1,
+                        "sequence": teacher_sequence,
+                    },
+                    event_id=teacher_message_id,
+                )
+                content = "".join(chunks)
+                model_info = dict(self.quiz_service.skill.model_info)
+                yield _sse_frame(
+                    "text.done",
+                    {
+                        "message_id": str(teacher_message_id),
+                        "content": content,
+                        "model_info": model_info,
+                        "usage": {
+                            "input_tokens": sum(
+                                len(item["content"]) for item in history
+                            ),
+                            "output_tokens": len(content),
+                        },
+                    },
+                    event_id=teacher_message_id,
+                )
+                teacher_message = Message(
+                    message_id=teacher_message_id,
+                    conversation_id=conversation_id,
+                    role="TEACHER",
+                    type="TEXT",
+                    content=content,
+                    metadata_={"tool": "quiz", "quiz_session_id": quiz_session_id},
+                    sequence=teacher_sequence,
+                    model_info=model_info,
+                    created_at=teacher_created_at,
+                )
+                session.add(teacher_message)
+                conversation.last_message_at = teacher_created_at
+                try:
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                    yield _sse_error(
+                        request_id,
+                        "MESSAGE_PERSISTENCE_ERROR",
+                        "assistant message could not be persisted",
+                    )
+                    return
+                yield _sse_frame(
+                    "message.done",
+                    {
+                        "message_id": str(teacher_message_id),
+                        "conversation_id": str(conversation_id),
+                        "sequence": teacher_sequence,
+                        "created_at": _isoformat_z(teacher_created_at),
+                        "metadata": {"tool": "quiz", "quiz_session_id": quiz_session_id},
+                    },
+                    event_id=teacher_message_id,
+                )
+                return
 
             chunks: list[str] = []
             try:
