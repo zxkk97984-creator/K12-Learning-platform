@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getConversations: vi.fn(),
   createConversation: vi.fn(),
   getMessages: vi.fn(),
+  getPreferences: vi.fn(),
 }))
 
 vi.mock('@/features/companion', () => ({
@@ -42,13 +43,43 @@ vi.mock('@/mocks/services', () => ({
     createConversation: mocks.createConversation,
     getMessages: mocks.getMessages,
   },
+  studentService: {
+    getPreferences: mocks.getPreferences,
+  },
 }))
 
 import { useConversationStore } from '../store/conversation-store'
 import { ChatComposer } from './ChatComposer'
 
+class FakeMediaRecorder {
+  state = 'inactive'
+  onstop: (() => void) | null = null
+
+  start() {
+    this.state = 'recording'
+  }
+
+  stop() {
+    this.state = 'inactive'
+    this.onstop?.()
+  }
+}
+
+const audioInstances: FakeAudio[] = []
+
+class FakeAudio {
+  volume = 1
+  playbackRate = 1
+  play = vi.fn().mockResolvedValue(undefined)
+
+  constructor() {
+    audioInstances.push(this)
+  }
+}
+
 describe('ChatComposer voice UI', () => {
   beforeEach(() => {
+    audioInstances.length = 0
     vi.clearAllMocks()
     useConversationStore.setState({ messages: [], conversationId: null, loaded: false })
     mocks.getConversations.mockResolvedValue([])
@@ -67,6 +98,14 @@ describe('ChatComposer voice UI', () => {
       last_message_at: null,
     })
     mocks.getMessages.mockResolvedValue([])
+    mocks.getPreferences.mockResolvedValue({
+      voice_preference: {
+        input_enabled: true,
+        tts_enabled: true,
+        volume: 0.8,
+        speed: 1,
+      },
+    })
     mocks.createVoiceClient.mockReturnValue({
       connect: vi.fn().mockResolvedValue(undefined),
       sendAudioChunk: vi.fn(),
@@ -79,11 +118,29 @@ describe('ChatComposer voice UI', () => {
 
   afterEach(() => {
     cleanup()
+    vi.unstubAllGlobals()
+    audioInstances.length = 0
   })
 
   it('渲染麦克风按钮', () => {
     render(React.createElement(ChatComposer))
     expect(screen.getByRole('button', { name: '语音输入' })).toBeTruthy()
+  })
+
+  it('input_enabled=false 时隐藏麦克风按钮', async () => {
+    mocks.getPreferences.mockResolvedValue({
+      voice_preference: {
+        input_enabled: false,
+        tts_enabled: true,
+        volume: 0.8,
+        speed: 1,
+      },
+    })
+    render(React.createElement(ChatComposer))
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '语音输入' })).toBeNull(),
+    )
   })
 
   it('无麦克风权限时降级为文字输入并显示错误状态', async () => {
@@ -103,5 +160,63 @@ describe('ChatComposer voice UI', () => {
 
     expect(screen.getByText('正在说话…')).toBeTruthy()
     expect(mocks.setAiState).toHaveBeenCalledWith('speaking')
+  })
+
+  it('TTS 播放应用 volume/speed', async () => {
+    mocks.getPreferences.mockResolvedValue({
+      voice_preference: {
+        input_enabled: true,
+        tts_enabled: true,
+        volume: 0.5,
+        speed: 1.5,
+      },
+    })
+    vi.stubGlobal('MediaRecorder', FakeMediaRecorder)
+    vi.stubGlobal('Audio', FakeAudio)
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      mediaDevices: {
+        getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [] }),
+      },
+    })
+    render(React.createElement(ChatComposer))
+    await waitFor(() => expect(mocks.getPreferences).toHaveBeenCalled())
+    await act(async () => undefined)
+    fireEvent.click(screen.getByRole('button', { name: '语音输入' }))
+
+    await waitFor(() => expect(mocks.callbacks).not.toBeNull())
+    act(() => mocks.callbacks?.onAudio?.('QUJD'))
+
+    expect(audioInstances[0].volume).toBe(0.5)
+    expect(audioInstances[0].playbackRate).toBe(1.5)
+    expect(audioInstances[0].play).toHaveBeenCalled()
+  })
+
+  it('tts_enabled=false 时跳过音频播放', async () => {
+    mocks.getPreferences.mockResolvedValue({
+      voice_preference: {
+        input_enabled: true,
+        tts_enabled: false,
+        volume: 0.8,
+        speed: 1,
+      },
+    })
+    vi.stubGlobal('MediaRecorder', FakeMediaRecorder)
+    vi.stubGlobal('Audio', FakeAudio)
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      mediaDevices: {
+        getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [] }),
+      },
+    })
+    render(React.createElement(ChatComposer))
+    await waitFor(() => expect(mocks.getPreferences).toHaveBeenCalled())
+    await act(async () => undefined)
+    fireEvent.click(screen.getByRole('button', { name: '语音输入' }))
+
+    await waitFor(() => expect(mocks.callbacks).not.toBeNull())
+    act(() => mocks.callbacks?.onAudio?.('QUJD'))
+
+    expect(audioInstances).toHaveLength(0)
   })
 })

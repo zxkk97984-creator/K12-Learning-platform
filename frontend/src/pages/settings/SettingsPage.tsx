@@ -26,6 +26,8 @@ const STYLE_OPTIONS: PreferredExplanationStyle[] = [
   'INTERACTIVE',
 ]
 
+const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2]
+
 function applyAge(age: 'primary' | 'junior' | 'senior'): void {
   document.documentElement.dataset.age = age === 'junior' ? '' : age
   window.localStorage.setItem('shuangling-age', age)
@@ -41,6 +43,10 @@ export default function SettingsPage() {
   const [style, setStyle] = useState<PreferredExplanationStyle>('EXAMPLE_BASED')
   const [difficulty, setDifficulty] = useState<PreferredDifficulty>('MEDIUM')
   const [sessionLength, setSessionLength] = useState<PreferredSessionLength>('SHORT')
+  const [inputEnabled, setInputEnabled] = useState(true)
+  const [ttsEnabled, setTtsEnabled] = useState(true)
+  const [volumePercent, setVolumePercent] = useState(80)
+  const [speed, setSpeed] = useState(1)
   const [roleId, setRoleId] = useState('role-shuangling')
   const [roles, setRoles] = useState<TeacherRole[]>([])
   const [age, setAge] = useState<'primary' | 'junior' | 'senior'>('junior')
@@ -64,6 +70,10 @@ export default function SettingsPage() {
         setStyle(prefs.preferred_explanation_style)
         setDifficulty(prefs.preferred_difficulty)
         setSessionLength(prefs.preferred_session_length)
+        setInputEnabled(prefs.voice_preference.input_enabled)
+        setTtsEnabled(prefs.voice_preference.tts_enabled)
+        setVolumePercent(Math.round(prefs.voice_preference.volume * 100))
+        setSpeed(prefs.voice_preference.speed)
         setRoleId(currentUser.current_teacher_role_id ?? 'role-shuangling')
         setRoles(roleList)
       } catch {
@@ -97,6 +107,12 @@ export default function SettingsPage() {
         preferred_explanation_style: style,
         preferred_difficulty: difficulty,
         preferred_session_length: sessionLength,
+        voice_preference: {
+          input_enabled: inputEnabled,
+          tts_enabled: ttsEnabled,
+          volume: volumePercent / 100,
+          speed,
+        },
       })
       applyAge(age)
       await refreshMe()
@@ -265,7 +281,55 @@ export default function SettingsPage() {
 
         <section className="rounded-[14px] border border-border bg-surface p-5">
           <h2 className="font-display text-lg text-fg">语音</h2>
-          <p className="mt-2 text-xs text-muted">语音输入 / TTS 设置（Phase 9 实现，当前占位）。</p>
+          <div className="mt-4 grid gap-3">
+            <label className="flex items-center justify-between text-xs text-muted">
+              <span>语音输入</span>
+              <input
+                type="checkbox"
+                checked={inputEnabled}
+                aria-label="语音输入开关"
+                onChange={(event) => setInputEnabled(event.target.checked)}
+                className="h-4 w-4 accent-fg"
+              />
+            </label>
+            <label className="flex items-center justify-between text-xs text-muted">
+              <span>语音朗读（TTS）</span>
+              <input
+                type="checkbox"
+                checked={ttsEnabled}
+                aria-label="语音朗读开关"
+                onChange={(event) => setTtsEnabled(event.target.checked)}
+                className="h-4 w-4 accent-fg"
+              />
+            </label>
+            <label className="grid gap-1 text-xs text-muted">
+              <span>音量（{volumePercent}%）</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={volumePercent}
+                aria-label="语音音量"
+                onChange={(event) => setVolumePercent(Number(event.target.value))}
+                className="accent-fg"
+              />
+            </label>
+            <label className="grid gap-1 text-xs text-muted">
+              语速
+              <select
+                value={speed}
+                aria-label="语音语速"
+                onChange={(event) => setSpeed(Number(event.target.value))}
+                className="h-10 rounded-[10px] border border-border bg-bg px-3 text-[13px] text-fg outline-none focus:border-fg"
+              >
+                {SPEED_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}x
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </section>
 
         <div>

@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useCompanionStore } from '@/features/companion'
 import { useToastStore } from '@/features/feedback'
 import { useScreenContext } from '@/features/screen-context'
+import type { VoicePreference } from '@/entities/student/types'
+import { studentService } from '@/mocks/services'
 import { createVoiceClient, type VoiceClient, type VoiceState } from '@/shared/api/voice-client'
 
 import { useConversationStore } from '../store/conversation-store'
@@ -31,6 +33,12 @@ export function ChatComposer() {
   const [value, setValue] = useState('')
   const [voiceState, setVoiceState] = useState<VoiceState>('IDLE')
   const [recording, setRecording] = useState(false)
+  const [voicePrefs, setVoicePrefs] = useState<VoicePreference>({
+    input_enabled: true,
+    tts_enabled: true,
+    volume: 0.8,
+    speed: 1,
+  })
   const send = useConversationStore((state) => state.send)
   const ensureConversationId = useConversationStore((state) => state.ensureConversationId)
   const refresh = useConversationStore((state) => state.refresh)
@@ -41,6 +49,13 @@ export function ChatComposer() {
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<string[]>([])
   const voiceClientRef = useRef<VoiceClient | null>(null)
+
+  useEffect(() => {
+    void studentService
+      .getPreferences()
+      .then((prefs) => setVoicePrefs(prefs.voice_preference))
+      .catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -68,7 +83,10 @@ export function ChatComposer() {
           onState: applyVoiceState,
           onFinal: () => void refresh(),
           onAudio: (data) => {
+            if (!voicePrefs.tts_enabled) return
             const audio = new Audio(`data:audio/wav;base64,${data}`)
+            audio.volume = voicePrefs.volume
+            audio.playbackRate = voicePrefs.speed
             void audio.play().catch(() => undefined)
           },
           onError: (code, message) => {
@@ -178,17 +196,19 @@ export function ChatComposer() {
           aria-label="消息输入"
           className="min-h-[42px] max-h-[88px] flex-1 resize-none rounded-[10px] border border-border bg-bg px-3 py-2.5 text-[13px] text-fg outline-none focus:border-fg"
         />
-        <button
-          type="button"
-          aria-label={recording ? '停止录音' : '语音输入'}
-          className="relative grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[10px] border border-border bg-surface text-fg hover:border-fg"
-          onClick={toggleVoice}
-        >
-          🎤
-          {recording ? (
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 animate-pulse rounded-full bg-red-500" />
-          ) : null}
-        </button>
+        {voicePrefs.input_enabled ? (
+          <button
+            type="button"
+            aria-label={recording ? '停止录音' : '语音输入'}
+            className="relative grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[10px] border border-border bg-surface text-fg hover:border-fg"
+            onClick={toggleVoice}
+          >
+            🎤
+            {recording ? (
+              <span className="absolute top-1.5 right-1.5 h-2 w-2 animate-pulse rounded-full bg-red-500" />
+            ) : null}
+          </button>
+        ) : null}
         <button
           type="submit"
           aria-label="发送消息"
