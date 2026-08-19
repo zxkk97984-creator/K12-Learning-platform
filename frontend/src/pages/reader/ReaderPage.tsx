@@ -280,7 +280,8 @@ export default function ReaderPage() {
     setPopover(null)
   }
 
-  const chapterIndex = chapters.findIndex((chapter) => chapter.chapter_id === chapterId)
+  const activeChapterId = detail?.chapter_id ?? chapterId
+  const chapterIndex = chapters.findIndex((chapter) => chapter.chapter_id === activeChapterId)
 
   return (
     <div className="py-6">
@@ -319,7 +320,7 @@ export default function ReaderPage() {
         <aside className="sticky top-[99px] self-start max-md:static max-md:flex max-md:gap-2 max-md:overflow-x-auto">
           <p className="mb-3 font-mono text-[10px] tracking-wider text-muted max-md:hidden">本章目录</p>
           {chapters.map((chapter) => {
-            const active = chapter.chapter_id === chapterId
+            const active = chapter.chapter_id === activeChapterId
             return (
               <button
                 key={chapter.chapter_id}

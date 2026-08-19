@@ -14,14 +14,14 @@ export interface Book {
   difficulty: BookDifficulty
   estimated_minutes: number
   author: string | null
-  /** 主题标签（原型 topic，如「AI 基础」「机器人」） */
+  /** 后端 tags；seed 约定 tags[0]=主题、tags[1]=关键词 */
   tags: string[]
-  /** 原型 keywords（搜索用，顿号分隔字符串） */
+  /** 从 tags[1] 派生的关键词（搜索/展示用） */
   keywords: string
-  /** 原型 num（展示编号 01~12） */
-  book_no: string
-  /** 原型 tint（封面视觉变体 1~4，0-B 展示字段） */
-  tint: BookTint
+  /** 原型 num（展示编号 01~12）；后端 BookDTO 不返回，真实 API 数据中可能为空 */
+  book_no?: string
+  /** 原型 tint（封面视觉变体 1~4）；后端 BookDTO 不返回，真实 API 数据中可能为空 */
+  tint?: BookTint
   status: BookStatus
   /** (derived) 章数 */
   chapter_count: number

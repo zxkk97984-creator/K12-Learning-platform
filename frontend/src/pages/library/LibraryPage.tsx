@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 
-import type { Book, BookProgress } from '@/entities/book/types'
+import type { Book } from '@/entities/book/types'
 import type { Stage } from '@/entities/student/types'
 import { useCompanionStore } from '@/features/companion'
 import type { ConversationIntent } from '@/features/conversation'
@@ -24,10 +23,8 @@ function bookStage(book: Book): Stage {
 }
 
 export default function LibraryPage() {
-  const navigate = useNavigate()
   const runIntent = useConversationStore((state) => state.runIntent)
   const [books, setBooks] = useState<Book[]>([])
-  const [progressMap, setProgressMap] = useState<Record<string, BookProgress>>({})
   const [grade, setGrade] = useState<'推荐' | Stage>('推荐')
   const [topics, setTopics] = useState<string[]>([])
   const [search, setSearch] = useState('')
@@ -35,12 +32,7 @@ export default function LibraryPage() {
 
   useEffect(() => {
     void (async () => {
-      const [bookList, progressList] = await Promise.all([
-        contentService.getBooks(),
-        contentService.getProgress(),
-      ])
-      setBooks(bookList)
-      setProgressMap(Object.fromEntries(progressList.map((item) => [item.book_id, item])))
+      setBooks(await contentService.getBooks())
     })()
   }, [])
 
@@ -155,11 +147,10 @@ export default function LibraryPage() {
                 (item) => item.bookId === book.book_id,
               )
               const recommendation = recommendationIndex >= 0 ? bookRecommendations[recommendationIndex] : undefined
-              const progress = progressMap[book.book_id]
               return (
                 <article key={book.book_id} className="overflow-hidden rounded-[14px] border border-border bg-surface">
-                  <div className="relative min-h-[132px] p-4 text-surface" style={{ backgroundColor: TINT_BG[book.tint] ?? 'var(--color-fg)' }}>
-                    <span className="font-mono text-xs opacity-60">{book.book_no}</span>
+                  <div className="relative min-h-[132px] p-4 text-surface" style={{ backgroundColor: TINT_BG[book.tint ?? 1] ?? 'var(--color-fg)' }}>
+                    <span className="font-mono text-xs opacity-60">{book.book_no ?? ''}</span>
                     <strong className="mt-10 block max-w-[12ch] font-display text-xl leading-tight">
                       {book.title}
                     </strong>
@@ -177,15 +168,6 @@ export default function LibraryPage() {
                       <span className="font-mono text-[9px] text-muted">
                         {book.chapter_count} 章 · 预计 {book.estimated_minutes} 分钟
                       </span>
-                      {progress ? (
-                        <button
-                          type="button"
-                          className="text-xs text-fg hover:underline"
-                          onClick={() => navigate(`/learn/${book.book_id}/ch3`)}
-                        >
-                          继续 →
-                        </button>
-                      ) : null}
                     </div>
                     {recommendation ? (
                       <button
@@ -226,15 +208,14 @@ export default function LibraryPage() {
       ) : (
         <div className="mt-4 grid grid-cols-4 gap-3 max-lg:grid-cols-2 max-md:grid-cols-2 max-sm:grid-cols-1">
           {filtered.map((book) => {
-            const progress = progressMap[book.book_id]
             const recommendationIndex = bookRecommendations.findIndex(
               (item) => item.bookId === book.book_id,
             )
             const recommendation = recommendationIndex >= 0 ? bookRecommendations[recommendationIndex] : undefined
             return (
               <article key={book.book_id} className="overflow-hidden rounded-[12px] border border-border bg-surface">
-                <div className="relative h-[54px] border-b border-border" style={{ backgroundColor: TINT_BG[book.tint] ?? 'var(--color-fg)' }}>
-                  <span className="absolute top-2.5 left-3.5 font-display text-xl text-fg/20">{book.book_no}</span>
+                <div className="relative h-[54px] border-b border-border" style={{ backgroundColor: TINT_BG[book.tint ?? 1] ?? 'var(--color-fg)' }}>
+                  <span className="absolute top-2.5 left-3.5 font-display text-xl text-fg/20">{book.book_no ?? ''}</span>
                 </div>
                 <div className="p-3.5">
                   <span className="font-mono text-[9px] text-muted">
@@ -246,18 +227,7 @@ export default function LibraryPage() {
                     {book.chapter_count} 章 · 预计 {book.estimated_minutes} 分钟
                   </div>
                   <div className="mt-2 flex min-h-[30px] items-center justify-between border-t border-border pt-2">
-                    <span className={`text-[11px] ${progress ? 'text-fg' : 'text-muted'}`}>
-                      {progress ? `已开始 · 读到第 ${progress.chapter_id?.replace('ch', '') ?? '3'} 章` : '未开始'}
-                    </span>
-                    {progress ? (
-                      <button
-                        type="button"
-                        className="text-xs text-fg hover:underline"
-                        onClick={() => navigate(`/learn/${book.book_id}/ch3`)}
-                      >
-                        继续 →
-                      </button>
-                    ) : null}
+                    <span className="text-[11px] text-muted">未开始</span>
                   </div>
                   {recommendation ? (
                     <button

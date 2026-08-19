@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { contentService } from '../services'
+import { MockContentService } from './content-service'
+
+const contentService = new MockContentService()
 
 describe('MockContentService 筛选逻辑（学段/主题/搜索）', () => {
   it('getBooks 返回 12 本', async () => {
