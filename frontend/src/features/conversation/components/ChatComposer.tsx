@@ -1,14 +1,17 @@
 import { useState, type KeyboardEvent } from 'react'
 
+import { useScreenContext } from '@/features/screen-context'
+
 import { useConversationStore } from '../store/conversation-store'
 
 export function ChatComposer() {
   const [value, setValue] = useState('')
   const send = useConversationStore((state) => state.send)
+  const { screenContext } = useScreenContext()
 
   const submit = () => {
     if (!value.trim()) return
-    void send(value)
+    void send(value, screenContext)
     setValue('')
   }
 

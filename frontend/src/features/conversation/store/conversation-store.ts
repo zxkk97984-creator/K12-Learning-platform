@@ -4,15 +4,11 @@ import type { Message } from '@/entities/conversation/types'
 import { useCompanionStore } from '@/features/companion'
 import { conversationService } from '@/mocks/services'
 import { quizService } from '@/mocks/services'
+import type { SendMessageCallbacks, StreamErrorEvent } from '@/shared/api/conversation-service'
+import type { ScreenContext } from '@/features/screen-context/types'
 
-import { INTENT_AI_STATE, currentIntentText } from '../data/intents'
+import { INTENT_AI_STATE } from '../data/intents'
 import type { ChatMessage, ConversationIntent } from '../types'
-
-const CONVERSATION_ID = 'conv-1'
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
-}
 
 let messageSeq = 100
 function nextId(): string {
@@ -44,12 +40,60 @@ function toChatMessage(message: Message): ChatMessage {
 }
 
 let streamTimer: number | undefined
+let loadPromise: Promise<void> | null = null
+let activeAbortController: AbortController | undefined
+
+const INTENT_PROMPTS: Record<ConversationIntent, string> = {
+  explain: '解释当前内容',
+  summary: '总结本页',
+  quiz: '给我出题',
+  'check-in': '你在吗？',
+  selected: '解释我选中的内容',
+  memory: '我有什么学习记忆？',
+  'memory-dispute': '我不认可这条记忆',
+  'profile-question': '为什么这样判断我？',
+  'profile-why-transfer': '为什么说我的应用迁移仍需观察？',
+  'profile-why-pace': '为什么这样判断我的学习节奏？',
+  'profile-why-question': '为什么这样判断我的提问习惯？',
+  'profile-why-change': '最近我有什么变化？',
+  'presence-ask': '霜铃在吗？',
+  'today-learn': '今天学什么？',
+  'continue-yesterday': '继续昨天的内容',
+  'recent-status': '看看最近学习状态',
+  'recommend-next': '推荐下一本',
+  'book-fit': '这本书适合我吗？',
+  'book-why-1': '为什么推荐这本书？',
+  'book-why-2': '这本书为什么适合我？',
+  'book-why-3': '下一步为什么学这个？',
+  'give-example': '举个例子',
+  'give-hint': '给我一点提示',
+  'another-way': '换一种讲法',
+  'why-wrong': '为什么出错？',
+  'quiz-requestion': '再出一道类似的题',
+  'quiz-detail': '解释这份测验记录',
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
+}
+
+function errorText(error: StreamErrorEvent | Error): string {
+  if ('code' in error && error.code) return `${error.message}（${error.code}）`
+  return error.message || '网络似乎开了小差，霜铃没有收到完整的内容。'
+}
+
+function intentPrompt(intent: ConversationIntent, selectedText?: string): string {
+  if (intent === 'selected' && selectedText) return `解释我选中的“${selectedText}”`
+  return INTENT_PROMPTS[intent]
+}
 
 interface ConversationStore {
   messages: ChatMessage[]
+  conversationId: string | null
   loaded: boolean
   load: () => Promise<void>
-  send: (raw: string) => Promise<void>
+  send: (raw: string, screenContext?: ScreenContext) => Promise<void>
+  abortCurrent: () => void
   runIntent: (intent: ConversationIntent, selectedText?: string) => void
   retry: () => void
   /** 追加一条 AI 文本消息（quiz 结果/提示等，非流式） */
@@ -62,17 +106,63 @@ interface ConversationStore {
 
 export const useConversationStore = create<ConversationStore>()((set, get) => ({
   messages: [],
+  conversationId: null,
   loaded: false,
 
   async load() {
     if (get().loaded) return
-    const serviceMessages = await conversationService.getMessages(CONVERSATION_ID)
-    set({ messages: serviceMessages.map(toChatMessage), loaded: true })
+    if (loadPromise) return loadPromise
+    loadPromise = (async () => {
+      try {
+        const conversations = await conversationService.getConversations({
+          status: 'ACTIVE',
+          limit: 1,
+        })
+        const conversation = conversations[0]
+        if (!conversation) {
+          set({ loaded: true })
+          return
+        }
+        const serviceMessages = await conversationService.getMessages(
+          conversation.conversation_id,
+          { sort: 'asc' },
+        )
+        set({
+          conversationId: conversation.conversation_id,
+          messages: serviceMessages.map(toChatMessage),
+          loaded: true,
+        })
+      } catch {
+        set({
+          loaded: true,
+          messages: [
+            {
+              id: nextId(),
+              role: 'ai',
+              kind: 'error',
+              content: '对话历史暂时加载失败，请稍后重试。',
+              meta: '历史加载失败',
+            },
+          ],
+        })
+      } finally {
+        loadPromise = null
+      }
+    })()
+    return loadPromise
   },
 
-  async send(raw: string) {
+  async send(raw: string, screenContext?: ScreenContext) {
     const text = raw.trim()
     if (!text) return
+    await get().load()
+    let conversationId = get().conversationId
+    if (!conversationId) {
+      const conversation = await conversationService.createConversation({ channel: 'TEXT' })
+      conversationId = conversation.conversation_id
+      set({ conversationId })
+    }
+
     const userMessage: ChatMessage = {
       id: nextId(),
       role: 'user',
@@ -90,78 +180,154 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     }))
     useCompanionStore.getState().setAiState('thinking')
 
-    await sleep(820)
-    const state = get()
-    const withoutTyping = state.messages.filter((message) => message.id !== typingId)
+    const abortController = new AbortController()
+    activeAbortController?.abort()
+    activeAbortController = abortController
+    let assistantId: string | null = null
+    let assistantContent = ''
+    let errorShown = false
 
-    if (text.includes('断网') || text.includes('网络')) {
-      set({
+    const removeTyping = () => {
+      set((state) => ({ messages: state.messages.filter((message) => message.id !== typingId) }))
+    }
+    const showError = (error: StreamErrorEvent | Error) => {
+      if (errorShown) return
+      errorShown = true
+      set((state) => ({
         messages: [
-          ...withoutTyping,
+          ...state.messages.filter((message) => message.id !== typingId),
           {
             id: nextId(),
             role: 'ai',
             kind: 'error',
-            content: '网络似乎开了小差，霜铃没有收到完整的内容。',
+            content: errorText(error),
             meta: '网络错误',
           },
         ],
-      })
+      }))
       useCompanionStore.getState().setAiState('idle')
-      return
     }
-    if (text.includes('天气') || text.includes('股票') || text.includes('游戏')) {
-      set({
-        messages: [
-          ...withoutTyping,
-          {
-            id: nextId(),
-            role: 'ai',
-            kind: 'refuse',
-            content: '这个问题不在霜铃的教学范围里。我们可以聊聊正在学的内容，或者换一个和课程有关的问题。',
-            meta: '无法回答',
-          },
-        ],
+    const upsertAssistant = (id: string, patch: Partial<ChatMessage>) => {
+      set((state) => {
+        const exists = state.messages.some((message) => message.id === id)
+        if (!exists) {
+          return {
+            messages: [
+              ...state.messages.filter((message) => message.id !== typingId),
+              {
+                id,
+                role: 'ai',
+                kind: 'text',
+                content: '',
+                meta: '霜铃 · 连续会话',
+                streaming: true,
+                ...patch,
+              },
+            ],
+          }
+        }
+        return {
+          messages: state.messages.map((message) =>
+            message.id === id ? { ...message, ...patch } : message,
+          ),
+        }
       })
-      useCompanionStore.getState().setAiState('confused')
-      return
     }
 
-    // 普通/为什么分支：回复文案来自 MockConversationService（原型 sendMessage 文本）
-    let reply = '我会把你的问题和当前这节内容连起来回答。'
     try {
-      const assistant = await conversationService.sendMessage(CONVERSATION_ID, { content: text })
-      reply = assistant.content
-    } catch {
-      reply = '我会把你的问题和当前这节内容连起来回答。'
+      const input = screenContext
+        ? { content: text, screen_context: screenContext }
+        : { content: text }
+      const callbacks: SendMessageCallbacks = {
+        signal: abortController.signal,
+        onStart: (event) => {
+          assistantId = event.message_id
+          assistantContent = ''
+          upsertAssistant(event.message_id, { content: '', streaming: true })
+        },
+        onDelta: (event) => {
+          assistantId ??= event.message_id
+          assistantContent += event.delta
+          upsertAssistant(assistantId, { content: assistantContent, streaming: true })
+        },
+        onTextDone: (event) => {
+          assistantId ??= event.message_id
+          assistantContent = event.content
+          upsertAssistant(assistantId, { content: assistantContent, streaming: true })
+        },
+        onToolStart: (event) => {
+          set((state) => ({
+            messages: [
+              ...state.messages,
+              {
+                id: `tool-${event.tool_run_id}`,
+                role: 'ai',
+                kind: 'tool',
+                content: `${event.tool} · 正在处理中…`,
+                meta: '',
+              },
+            ],
+          }))
+        },
+        onToolResult: (event) => {
+          set((state) => ({
+            messages: state.messages.map((message) =>
+              message.id === `tool-${event.tool_run_id}`
+                ? {
+                    ...message,
+                    content:
+                      event.status === 'success'
+                        ? `${event.tool} · 已完成`
+                        : `${event.tool} · 处理失败`,
+                  }
+                : message,
+            ),
+          }))
+        },
+        onDone: (event) => {
+          assistantId ??= event.message_id
+          upsertAssistant(assistantId, { content: assistantContent, streaming: false })
+          removeTyping()
+          useCompanionStore.getState().setAiState('speaking')
+        },
+        onError: (error) => {
+          if (error instanceof Error && isAbortError(error)) return
+          showError(error)
+        },
+      }
+      await conversationService.sendMessage(conversationId, input, callbacks)
+    } catch (error) {
+      if (!isAbortError(error)) showError(error instanceof Error ? error : new Error(String(error)))
+      else removeTyping()
+    } finally {
+      if (activeAbortController === abortController) activeAbortController = undefined
     }
-    set({ messages: withoutTyping })
-    get().pushStreaming(reply, '霜铃 · 连续会话')
   },
 
   runIntent(intent: ConversationIntent, selectedText?: string) {
-    const text = currentIntentText(intent, selectedText)
     useCompanionStore.getState().setAiState(INTENT_AI_STATE[intent] ?? 'speaking')
-    // 去重：同 content 不重复流式输出（对齐原型）
-    if (get().messages.some((message) => message.content === text)) return
+    const text = intentPrompt(intent, selectedText)
     if (intent === 'quiz') {
-      get().runQuizToolFlow()
+      void get()
+        .send(text)
+        .then(() => get().runQuizToolFlow())
+        .catch(() => undefined)
       return
     }
-    get().pushStreaming(text, '霜铃 · 当前页面上下文')
+    void get().send(text)
   },
 
   async retry() {
-    const state = get()
-    const withoutError = state.messages.filter((message) => message.kind !== 'error')
-    const typingId = nextId()
-    set({ messages: [...withoutError, { id: typingId, role: 'ai', kind: 'typing', content: '' }] })
-    await sleep(700)
-    set((current) => ({ messages: current.messages.filter((message) => message.id !== typingId) }))
-    get().pushStreaming(
-      '网络恢复了。我重新回答：先把训练数据理解成“机器看过的例子”，再看这些例子怎样影响它之后的判断。',
-      '霜铃 · 重试',
-    )
+    const lastUserMessage = [...get().messages].reverse().find((message) => message.role === 'user')
+    set((state) => ({ messages: state.messages.filter((message) => message.kind !== 'error') }))
+    if (lastUserMessage) await get().send(lastUserMessage.content)
+  },
+
+  abortCurrent: () => {
+    activeAbortController?.abort()
+    activeAbortController = undefined
+    if (streamTimer !== undefined) window.clearInterval(streamTimer)
+    streamTimer = undefined
   },
 
   appendAiText: (content: string, meta: string) => {
@@ -217,7 +383,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     let sessionId = 'q1'
     try {
       const session = await quizService.createQuizSession({
-        conversation_id: CONVERSATION_ID,
+        conversation_id: get().conversationId ?? 'conv-1',
         quiz_kind: 'AI_QUIZ',
       })
       sessionId = session.quiz_session_id

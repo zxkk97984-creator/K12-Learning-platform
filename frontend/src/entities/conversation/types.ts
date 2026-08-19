@@ -41,15 +41,26 @@ export interface Message {
   created_at: string
 }
 
+export interface ConversationListItem {
+  conversation_id: string
+  title: string | null
+  status: ConversationStatus
+  channel: ConversationChannel
+  teacher_role_id: string | null
+  teacher_role: Record<string, unknown> | null
+  last_message_at: string | null
+  updated_at: string
+}
+
 export interface Conversation {
   conversation_id: string
   student_id: string
-  teacher_role_id: string
+  teacher_role_id: string | null
   title: string | null
   status: ConversationStatus
   channel: ConversationChannel
   /** 0-D POST messages 时随请求更新 */
-  current_page_context: ScreenContext | null
+  current_page_context: ScreenContext | Record<string, unknown> | null
   /** 缓存窗口，事实源在 messages（0-C） */
   recent_messages: Message[]
   conversation_summary: string | null

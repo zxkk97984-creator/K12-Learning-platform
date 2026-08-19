@@ -2,9 +2,12 @@ export type { StudentService, StudentProfilePatch, StudentPreferencePatch } from
 export type { ContentService, ContentListParams } from './content-service'
 export type {
   ConversationService,
+  ConversationListParams,
+  MessageListParams,
   CreateConversationInput,
   UpdateConversationInput,
   SendMessageInput,
+  SendMessageCallbacks,
 } from './conversation-service'
 export type {
   QuizService,
@@ -15,4 +18,6 @@ export type {
 export type { MemoryService, MemoryAction } from './memory-service'
 export type { TeacherRoleService } from './teacher-role-service'
 export { ApiStudentService } from './api-student-service'
+export { ApiConversationService } from './api-conversation-service'
+export { fetchSSE, parseSSEFrame } from './sse'
 export { ApiError, apiRequest } from './http'

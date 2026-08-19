@@ -1,10 +1,12 @@
 import type { ConversationService } from '@/shared/api/conversation-service'
 import type {
   CreateConversationInput,
+  SendMessageCallbacks,
   SendMessageInput,
   UpdateConversationInput,
 } from '@/shared/api/conversation-service'
 import type { Conversation, ConversationSummary, Message } from '@/entities/conversation/types'
+import type { ScreenContext } from '@/features/screen-context/types'
 
 import { delay } from '../delay'
 import { mockConversation, mockMessages } from '../data/conversation'
@@ -14,6 +16,37 @@ let conversations: Conversation[] = [
   { ...mockConversation, recent_messages: messages.map((message) => ({ ...message })) },
 ]
 let conversationSeq = 2
+
+function isCallbacks(
+  value: ScreenContext | SendMessageCallbacks | undefined,
+): value is SendMessageCallbacks {
+  return Boolean(
+    value &&
+      ('onStart' in value ||
+        'onDelta' in value ||
+        'onToolStart' in value ||
+        'onToolResult' in value ||
+        'onTextDone' in value ||
+        'onDone' in value ||
+        'onError' in value ||
+        'signal' in value),
+  )
+}
+
+function storedScreenContext(context: ScreenContext): Record<string, unknown> {
+  return {
+    route: context.route,
+    page_type: context.pageType,
+    ...(context.bookId ? { book_id: context.bookId } : {}),
+    ...(context.chapterId ? { chapter_id: context.chapterId } : {}),
+    ...(context.chapterTitle ? { chapter_title: context.chapterTitle } : {}),
+    ...(context.contentBlockId ? { content_block_id: context.contentBlockId } : {}),
+    ...(context.visibleSection ? { visible_section: context.visibleSection } : {}),
+    ...(context.selectedText ? { selected_text: context.selectedText } : {}),
+    ...(context.knowledgePoints ? { knowledge_points: context.knowledgePoints } : {}),
+    ...(context.actions ? { actions: context.actions } : {}),
+  }
+}
 
 function replyFor(content: string): string {
   if (content.includes('为什么')) {
@@ -26,10 +59,14 @@ export class MockConversationService implements ConversationService {
   async getConversations() {
     return delay(
       conversations.map((conversation) => ({
-        ...conversation,
-        recent_messages: messages
-          .filter((message) => message.conversation_id === conversation.conversation_id)
-          .slice(-20),
+        conversation_id: conversation.conversation_id,
+        title: conversation.title,
+        status: conversation.status,
+        channel: conversation.channel,
+        teacher_role_id: conversation.teacher_role_id,
+        teacher_role: null,
+        last_message_at: conversation.last_message_at,
+        updated_at: conversation.updated_at,
       })),
       200,
     )
@@ -89,7 +126,44 @@ export class MockConversationService implements ConversationService {
     )
   }
 
-  async sendMessage(conversationId: string, input: SendMessageInput) {
+  async sendMessage(
+    conversationId: string,
+    input: SendMessageInput,
+    callbacks?: SendMessageCallbacks,
+  ): Promise<void>
+  async sendMessage(
+    conversationId: string,
+    content: string,
+    screenContext?: ScreenContext,
+    callbacks?: SendMessageCallbacks,
+  ): Promise<void>
+  async sendMessage(
+    conversationId: string,
+    inputOrContent: SendMessageInput | string,
+    screenContextOrCallbacks?: ScreenContext | SendMessageCallbacks,
+    explicitCallbacks?: SendMessageCallbacks,
+  ): Promise<void> {
+    const input: SendMessageInput =
+      typeof inputOrContent === 'string'
+        ? {
+            content: inputOrContent,
+            screen_context:
+              screenContextOrCallbacks && 'route' in screenContextOrCallbacks
+                ? screenContextOrCallbacks
+                : undefined,
+          }
+        : inputOrContent
+    const callbacks: SendMessageCallbacks | undefined =
+      typeof inputOrContent === 'string'
+        ? screenContextOrCallbacks && 'route' in screenContextOrCallbacks
+          ? explicitCallbacks
+          : isCallbacks(screenContextOrCallbacks)
+            ? screenContextOrCallbacks
+            : undefined
+        : isCallbacks(screenContextOrCallbacks)
+          ? screenContextOrCallbacks
+          : undefined
+
     const conversation = conversations.find((item) => item.conversation_id === conversationId)
     if (!conversation) throw new Error(`CONVERSATION_NOT_FOUND: ${conversationId}`)
 
@@ -124,13 +198,42 @@ export class MockConversationService implements ConversationService {
       item.conversation_id === conversationId
         ? {
             ...item,
-            current_page_context: input.screen_context ?? item.current_page_context,
+            current_page_context: input.screen_context
+              ? storedScreenContext(input.screen_context)
+              : item.current_page_context,
             last_message_at: assistantMessage.created_at,
             updated_at: assistantMessage.created_at,
           }
         : item,
     )
-    return delay(assistantMessage, 250)
+    await delay(undefined, 250)
+    callbacks?.onStart?.({
+      message_id: assistantMessage.message_id,
+      conversation_id: conversationId,
+      role: 'TEACHER',
+      type: 'TEXT',
+      sequence: assistantMessage.sequence,
+      created_at: assistantMessage.created_at,
+      request_id: `mock-${assistantMessage.message_id}`,
+    })
+    callbacks?.onDelta?.({
+      message_id: assistantMessage.message_id,
+      delta: assistantMessage.content,
+      index: 0,
+      sequence: assistantMessage.sequence,
+    })
+    callbacks?.onTextDone?.({
+      message_id: assistantMessage.message_id,
+      content: assistantMessage.content,
+      model_info: assistantMessage.model_info,
+    })
+    callbacks?.onDone?.({
+      message_id: assistantMessage.message_id,
+      conversation_id: conversationId,
+      sequence: assistantMessage.sequence,
+      created_at: assistantMessage.created_at,
+      metadata: {},
+    })
   }
 
   async getSummary(_conversationId: string) {

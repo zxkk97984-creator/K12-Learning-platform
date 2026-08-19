@@ -35,7 +35,16 @@ test.describe('黄金路径', () => {
     // 4. 发送消息 → 流式 AI 回复
     await page.getByLabel('消息输入').fill('那它为什么会出错？')
     await page.getByRole('button', { name: '发送消息' }).click()
-    await expect(page.getByText(/因为当前这节内容会影响机器之后看到的新情况/)).toBeVisible({
+    await expect(page.getByText(/遇到错误时，可以先复现问题/).last()).toBeVisible({
+      timeout: 10_000,
+    })
+
+    // 4-D：刷新后重新从真实会话历史加载消息
+    await page.reload()
+    await expect(page.getByRole('heading', { name: '训练数据', level: 1 })).toBeVisible()
+    await page.getByRole('button', { name: '打开霜铃 AI 教师' }).click()
+    await expect(page.getByRole('complementary', { name: '霜铃对话面板' })).toBeVisible()
+    await expect(page.getByText(/遇到错误时，可以先复现问题/).last()).toBeVisible({
       timeout: 10_000,
     })
 

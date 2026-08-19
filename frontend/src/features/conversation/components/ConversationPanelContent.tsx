@@ -21,12 +21,14 @@ function contextLabel(pathname: string): string {
 export function ConversationPanelContent() {
   const open = useCompanionStore((state) => state.open)
   const load = useConversationStore((state) => state.load)
+  const abortCurrent = useConversationStore((state) => state.abortCurrent)
   const location = useLocation()
   const { screenContext } = useScreenContext()
 
   useEffect(() => {
     if (open) void load()
-  }, [open, load])
+    return () => abortCurrent()
+  }, [open, load, abortCurrent])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
