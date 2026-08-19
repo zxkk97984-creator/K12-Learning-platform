@@ -30,6 +30,7 @@ from app.modules.conversation.schemas import (
     PatchConversationRequest,
     SendMessageRequest,
 )
+from app.modules.memory.agent_md import build_evidence_reply, is_evidence_question
 from app.modules.quiz.schemas import CreateQuizSessionRequest
 from app.modules.quiz.service import QuizService
 
@@ -335,6 +336,14 @@ class ConversationService:
         teacher_created_at = datetime.now(timezone.utc)
         request_id = str(uuid4())
         quiz_intent = _is_quiz_intent(request.content)
+        evidence_reply: str | None = None
+        try:
+            if is_evidence_question(request.content):
+                evidence_reply = await build_evidence_reply(
+                    session, profile.student_id, request.content
+                )
+        except Exception:  # pragma: no cover - evidence citation must not break chat
+            evidence_reply = None
         system_prompt = (
             "你是霜铃，一位耐心、清晰的中文 K12 数字教师。"
             "请根据学生的问题循序解释，鼓励学生自己思考。"
@@ -505,6 +514,74 @@ class ConversationService:
                         "sequence": teacher_sequence,
                         "created_at": _isoformat_z(teacher_created_at),
                         "metadata": {"tool": "quiz", "quiz_session_id": quiz_session_id},
+                    },
+                    event_id=teacher_message_id,
+                )
+                return
+
+            if evidence_reply is not None:
+                content = evidence_reply
+                model_info = {"provider": "rule", "model": "memory-rule-v1"}
+                delta_index = 0
+                for index in range(0, len(content), 8):
+                    chunk = content[index : index + 8]
+                    yield _sse_frame(
+                        "text.delta",
+                        {
+                            "message_id": str(teacher_message_id),
+                            "delta": chunk,
+                            "index": delta_index,
+                            "sequence": teacher_sequence,
+                        },
+                        event_id=teacher_message_id,
+                    )
+                    delta_index += 1
+                yield _sse_frame(
+                    "text.done",
+                    {
+                        "message_id": str(teacher_message_id),
+                        "content": content,
+                        "model_info": model_info,
+                        "usage": {
+                            "input_tokens": sum(
+                                len(item["content"]) for item in history
+                            ),
+                            "output_tokens": len(content),
+                        },
+                    },
+                    event_id=teacher_message_id,
+                )
+                teacher_message = Message(
+                    message_id=teacher_message_id,
+                    conversation_id=conversation_id,
+                    role="TEACHER",
+                    type="TEXT",
+                    content=content,
+                    metadata_={},
+                    sequence=teacher_sequence,
+                    model_info=model_info,
+                    created_at=teacher_created_at,
+                )
+                session.add(teacher_message)
+                conversation.last_message_at = teacher_created_at
+                try:
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                    yield _sse_error(
+                        request_id,
+                        "MESSAGE_PERSISTENCE_ERROR",
+                        "assistant message could not be persisted",
+                    )
+                    return
+                yield _sse_frame(
+                    "message.done",
+                    {
+                        "message_id": str(teacher_message_id),
+                        "conversation_id": str(conversation_id),
+                        "sequence": teacher_sequence,
+                        "created_at": _isoformat_z(teacher_created_at),
+                        "metadata": {},
                     },
                     event_id=teacher_message_id,
                 )

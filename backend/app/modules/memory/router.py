@@ -2,6 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_student
@@ -16,6 +17,7 @@ from app.modules.memory.schemas import (
     MemoryType,
     PatchMemoryRequest,
 )
+from app.modules.memory.agent_md import render_agent_md
 from app.modules.memory.service import MemoryService
 
 router = APIRouter(tags=["memory"])
@@ -115,3 +117,12 @@ async def get_episode(
 ):
     episode = await service.get_episode(session, user.user_id, episode_id)
     return ok(episode)
+
+
+@router.get("/me/agent.md")
+async def get_agent_md(
+    user: Annotated[User, Depends(require_student)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    content = await render_agent_md(session, user.user_id)
+    return Response(content=content, media_type="text/markdown")
