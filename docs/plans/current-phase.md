@@ -3,7 +3,13 @@
 > 本文件由 Hermes（总控）维护，是会话恢复的权威进度来源。恢复时先读 `霜铃_V3_Hermes-Codex_多Agent协同开发总路线.md`（Execution Baseline）再读本文件。
 
 ## 当前阶段
-**Phase 5 — 练习与测验（Assessment）**（Phase 4 已完成，自动进入）
+**Phase 5 — 练习与测验（Assessment）**（5-A~5-C 已 PASS，5-D 待执行）
+
+## 当前 blocker ⚠️（外部资源，需用户决策）
+**Codex（gpt-5.6-luna）OpenAI 配额已耗尽**（2026-08-19 触发 usage limit，提示 2026-08-20 13:45 恢复）。
+- 5-D 任务书已写好（`.hermes-tasks/task-5D.md`），Codex 无法执行
+- 选项：a) 充值/换账号配额 b) 换回 deepseek 模型（不受 OpenAI 配额，需用户自己换 + /clear 清历史）c) 等 8-20 恢复
+- 模型切换用户自行操作（此前模式：用户切换 + Hermes 用 `herdr pane send-text w1:p6 "/clear"` 清历史解决 400 兼容问题）
 
 ## 已完成 Checkpoint
 - `phase-0-checkpoint`（`87b7782`）：仓库初始化 + 全套契约
