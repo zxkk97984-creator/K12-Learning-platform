@@ -3,6 +3,7 @@
 The database is the single source of truth; .agent.md is only a rendered view.
 """
 
+import re
 from typing import Any
 from uuid import UUID
 
@@ -25,8 +26,6 @@ SOURCE_LABEL = {
     "BOOK_PROGRESS": "阅读进度",
 }
 
-WHY_KEYWORDS = ("为什么", "为啥")
-JUDGE_KEYWORDS = ("觉得", "认为", "判断", "看出")
 PROFILE_KEYWORDS = (
     "喜欢",
     "擅长",
@@ -38,14 +37,37 @@ PROFILE_KEYWORDS = (
     "例子",
 )
 
+# 「为什么你觉得/认为/判断」类质询需要画像词，避免「为什么你觉得这道题很难」误伤。
+REQUIRE_PROFILE_PATTERNS = (
+    re.compile(r"为什么(?:你|您)?(?:会)?(?:这么)?(?:觉得|认为)"),
+    re.compile(r"为什么(?:你|您)?(?:会)?(?:这么)?判断"),
+)
+
+# 其余变体只要是对 AI 判断依据的追问即可触发。
+FREE_PATTERNS = (
+    re.compile(r"为什么(?:这么|这样)(?:觉得|认为|判断|说)"),
+    re.compile(r"为什么(?:你|您)?(?:会)?(?:这么)?(?:看出|说)"),
+    re.compile(r"凭什么(?:这么)?(?:判断|觉得|认为|说|看出)"),
+    re.compile(r"怎么(?:会)?(?:看出来(?:的)?|看出|判断(?:的)?)"),
+)
+
+FIRST_PERSON_CUE = re.compile(r"(?:我|咱)(?:觉得|认为|判断|看出)")
+SECOND_PERSON_CUE = re.compile(r"(?:你|您)(?:觉得|认为|判断|看出)")
+
 
 def is_evidence_question(content: str) -> bool:
     normalized = content.casefold()
-    return (
-        any(keyword in normalized for keyword in WHY_KEYWORDS)
-        and any(keyword in normalized for keyword in JUDGE_KEYWORDS)
-        and any(keyword in normalized for keyword in PROFILE_KEYWORDS)
+    # 第一人称陈述（「我觉得这题很难」）不触发；除非同时包含对第二人称的质询。
+    if FIRST_PERSON_CUE.search(normalized) and not SECOND_PERSON_CUE.search(normalized):
+        return False
+    has_profile_keyword = any(
+        keyword in normalized for keyword in PROFILE_KEYWORDS
     )
+    if any(pattern.search(normalized) for pattern in FREE_PATTERNS):
+        return True
+    if any(pattern.search(normalized) for pattern in REQUIRE_PROFILE_PATTERNS):
+        return has_profile_keyword
+    return False
 
 
 def _payload_summary(payload: dict[str, Any]) -> str:

@@ -190,6 +190,12 @@ def create_conversation(client: TestClient, token: str) -> str:
 def test_evidence_question_intent_matcher() -> None:
     assert is_evidence_question("为什么你觉得我比较喜欢通过例子学习？")
     assert is_evidence_question("为什么你认为我擅长数学")
+    assert is_evidence_question("怎么看出我比较喜欢通过例子学习？")
+    assert is_evidence_question("凭什么判断我喜欢通过例子学习？")
+    assert is_evidence_question("为什么这么觉得？")
+    assert is_evidence_question("你怎么看出来的？")
+    assert not is_evidence_question("我觉得这道题很难")
+    assert not is_evidence_question("你觉得这道题怎么做？")
     assert not is_evidence_question("给我出题")
     assert not is_evidence_question("为什么出错")
 
@@ -268,10 +274,6 @@ def test_agent_md_requires_authentication(client: TestClient) -> None:
     assert response.json()["error"]["code"] == "UNAUTHENTICATED"
 
 
-@pytest.mark.xfail(
-    reason="known bug: is_evidence_question only matches 为什么, missing 怎么看出/凭什么判断 (reported to Hermes)",
-    strict=False,
-)
 @pytest.mark.parametrize(
     "question",
     [
