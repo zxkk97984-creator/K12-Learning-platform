@@ -14,6 +14,7 @@ from app.modules.knowledge.router import router as knowledge_router
 from app.modules.learning.router import router as learning_router
 from app.modules.memory.router import router as memory_router
 from app.modules.quiz.router import router as quiz_router
+from app.modules.voice.ws import router as voice_router
 
 
 @asynccontextmanager
@@ -30,6 +31,7 @@ app.include_router(learning_router, prefix="/api/v1")
 app.include_router(conversation_router, prefix="/api/v1")
 app.include_router(memory_router, prefix="/api/v1")
 app.include_router(quiz_router, prefix="/api/v1")
+app.include_router(voice_router)
 
 
 @app.get("/health")
