@@ -23,9 +23,9 @@ test.describe('黄金路径', () => {
     await expect(page.getByRole('heading', { name: '晚上好，小明。' })).toBeVisible()
     await expect(page.getByRole('button', { name: '继续学习 →' }).first()).toBeVisible()
 
-    // 2. 继续学习 → reader
+    // 2. 继续学习 → reader（真实 UUID 路由，3-D 起不再是 b1/ch3 别名）
     await page.getByRole('button', { name: '继续学习 →' }).first().click()
-    await expect(page).toHaveURL(/\/learn\/b1\/ch3/)
+    await expect(page).toHaveURL(/\/learn\//)
     await expect(page.getByRole('heading', { name: '训练数据', level: 1 })).toBeVisible()
 
     // 3. 打开 companion

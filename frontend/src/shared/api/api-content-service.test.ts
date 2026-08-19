@@ -163,11 +163,29 @@ describe('ApiContentService', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/knowledge-points/kp-1')
   })
 
-  it('3-E 之前进度方法默认降级，不调用 Learning API', async () => {
+  it('getProgress 与 getBookProgress 接入 Learning API', async () => {
+    const progress = {
+      progress_id: 'progress-1',
+      student_id: 'student-1',
+      book_id: 'book-1',
+      chapter_id: 'chapter-3',
+      block_id: 'block-2',
+      status: 'READING',
+      position_percent: 62,
+      last_read_at: '2026-08-19T08:00:00Z',
+      started_at: '2026-08-19T07:00:00Z',
+      completed_at: null,
+      total_seconds: 120,
+    }
     const fetchMock = vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse(200, { data: [progress], meta: {} }))
+      .mockResolvedValueOnce(jsonResponse(200, { data: progress, meta: {} }))
 
-    await expect(service.getProgress()).resolves.toEqual([])
-    await expect(service.getBookProgress('book-1')).resolves.toBeNull()
-    expect(fetchMock).not.toHaveBeenCalled()
+    await expect(service.getProgress()).resolves.toEqual([progress])
+    await expect(service.getBookProgress('book-1')).resolves.toEqual(progress)
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/v1/me/progress',
+      '/api/v1/me/progress/book-1',
+    ])
   })
 })

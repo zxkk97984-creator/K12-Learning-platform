@@ -8,7 +8,7 @@ import type {
 } from '@/entities/book/types'
 
 import type { ContentListParams, ContentService } from './content-service'
-import { apiRequest } from './http'
+import { ApiError, apiRequest } from './http'
 
 type ApiContentListParams = ContentListParams & {
   cursor?: string
@@ -220,13 +220,17 @@ export class ApiContentService implements ContentService {
     )
   }
 
-  /** BookProgress 接入归 3-E；保留 ContentService 接口兼容但不调用 Learning API。 */
   async getProgress(): Promise<BookProgress[]> {
-    return []
+    return apiRequest<BookProgress[]>('/me/progress')
   }
 
-  async getBookProgress(_bookId: string): Promise<BookProgress | null> {
-    return null
+  async getBookProgress(bookId: string): Promise<BookProgress | null> {
+    try {
+      return await apiRequest<BookProgress>(`/me/progress/${encodeURIComponent(bookId)}`)
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null
+      throw error
+    }
   }
 
   private async resolveBookId(bookId: string): Promise<string> {

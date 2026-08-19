@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import type { BookProgress } from '@/entities/book/types'
+import type { Book, BookProgress, Chapter } from '@/entities/book/types'
 import type { StudentEpisode, StudentMemory } from '@/entities/memory/types'
 import type { QuizSession } from '@/entities/quiz/types'
 import { useCompanionStore } from '@/features/companion'
@@ -16,6 +16,9 @@ export default function HomePage() {
   const runIntent = useConversationStore((state) => state.runIntent)
   const [nickname, setNickname] = useState('小明')
   const [progress, setProgress] = useState<BookProgress | null>(null)
+  const [continueBook, setContinueBook] = useState<Book | null>(null)
+  const [continueChapter, setContinueChapter] = useState<Chapter | null>(null)
+  const [progressLoading, setProgressLoading] = useState(true)
   const [episodes, setEpisodes] = useState<StudentEpisode[]>([])
   const [memories, setMemories] = useState<StudentMemory[]>([])
   const [quizzes, setQuizzes] = useState<QuizSession[]>([])
@@ -31,9 +34,32 @@ export default function HomePage() {
         // 保持默认昵称「小明」
       }
       try {
-        setProgress(await contentService.getBookProgress('b1'))
+        const progressItems = await contentService.getProgress()
+        const latest = progressItems
+          .filter((item) => item.chapter_id)
+          .sort((left, right) => {
+            const leftTime = left.last_read_at ? Date.parse(left.last_read_at) : 0
+            const rightTime = right.last_read_at ? Date.parse(right.last_read_at) : 0
+            return rightTime - leftTime
+          })[0] ?? null
+        setProgress(latest)
+        if (latest?.chapter_id) {
+          const [book, chapter] = await Promise.all([
+            contentService.getBook(latest.book_id),
+            contentService.getChapter(latest.chapter_id),
+          ])
+          setContinueBook(book)
+          setContinueChapter(chapter)
+        } else {
+          setContinueBook(null)
+          setContinueChapter(null)
+        }
       } catch {
         setProgress(null)
+        setContinueBook(null)
+        setContinueChapter(null)
+      } finally {
+        setProgressLoading(false)
       }
       try {
         setEpisodes(await memoryService.getEpisodes())
@@ -63,6 +89,20 @@ export default function HomePage() {
     useCompanionStore.getState().setOpen(true)
   }
 
+  const continuePath =
+    progress?.chapter_id ? `/learn/${progress.book_id}/${progress.chapter_id}` : '/library'
+  const continueLabel = continueChapter
+    ? `继续第 ${continueChapter.chapter_order} 章 →`
+    : '去书库开始学习 →'
+  const progressTime = progress?.last_read_at
+    ? new Date(progress.last_read_at).toLocaleString('zh-CN', {
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '暂无阅读记录'
+
   return (
     <section className="py-10">
       <button
@@ -81,16 +121,20 @@ export default function HomePage() {
             晚上好，{nickname}。
           </h1>
           <p className="mt-4 max-w-[52ch] text-[15px] leading-relaxed text-muted">
-            <strong className="text-fg">昨天我们停在「训练数据」。</strong> 今天继续把这个难点讲明白。
-            霜铃记得，你更喜欢先看生活里的例子，再回到概念本身。
+            <strong className="text-fg">
+              {continueChapter ? `上次停在「${continueChapter.title}」。` : '还没有继续学习记录。'}
+            </strong>{' '}
+            {continueChapter
+              ? '今天从这里继续，把这个难点讲明白。'
+              : '去书库选一本书，霜铃会记住你的阅读位置。'}
           </p>
           <div className="mt-5 flex flex-wrap gap-2.5">
             <button
               type="button"
               className="rounded-[10px] bg-accent px-4 py-2.5 text-sm text-surface hover:bg-accent/85"
-              onClick={() => navigate('/learn/b1/ch3')}
+              onClick={() => navigate(continuePath)}
             >
-              继续学习 →
+              {continueChapter ? '继续学习 →' : '开始学习 →'}
             </button>
             <button
               type="button"
@@ -114,8 +158,8 @@ export default function HomePage() {
           </div>
           <dl className="mt-3 border-t border-border">
             {[
-              ['当前关注', '训练数据'],
-              ['最近发现', '昨天你两次追问了“标签”的定义。'],
+              ['当前关注', continueChapter?.title ?? '等待你的第一节课'],
+              ['最近发现', continueBook?.title ?? '学习记录会在这里出现。'],
               ['状态', '正在参考最近学习记录'],
             ].map(([label, value]) => (
               <div key={label} className="grid grid-cols-[62px_1fr] items-baseline gap-2.5 border-b border-border py-2 last:border-b-0">
@@ -153,40 +197,66 @@ export default function HomePage() {
                 </button>
               </div>
             </div>
-          ) : (
+          ) : progressLoading ? (
+            <div className="grid min-h-[232px] place-items-center p-8 text-center text-sm text-muted">
+              正在恢复继续学习记录…
+            </div>
+          ) : progress && continueBook && continueChapter ? (
             <div className="grid min-h-[232px] grid-cols-[164px_minmax(0,1fr)] max-sm:grid-cols-[112px_minmax(0,1fr)]">
               <div className="flex min-h-[232px] flex-col justify-between bg-fg p-5 text-surface">
-                <span className="font-mono text-[10px] text-surface/70">AI 通识 · 初中</span>
-                <span className="font-display text-2xl leading-tight">AI 不是魔法</span>
-                <span className="text-[11px] text-surface/60">从好奇开始，理解机器如何学习</span>
+                <span className="font-mono text-[10px] text-surface/70">{continueBook.tags[0] ?? '学习内容'}</span>
+                <span className="font-display text-2xl leading-tight">{continueBook.title}</span>
+                <span className="text-[11px] text-surface/60">{continueBook.description ?? '从上次位置继续学习'}</span>
               </div>
               <div className="flex flex-col justify-between gap-4 p-5">
                 <div>
-                  <p className="font-mono text-[10px] text-muted">继续第 3 章 · 训练数据</p>
+                  <p className="font-mono text-[10px] text-muted">
+                    继续第 {continueChapter.chapter_order} 章 · {continueChapter.title}
+                  </p>
                   <h3 className="mt-1.5 font-display text-2xl leading-tight text-fg">
-                    机器为什么需要先看很多例子？
+                    {continueChapter.title}
                   </h3>
                   <p className="mt-2 max-w-[48ch] text-[13px] leading-relaxed text-muted">
-                    这一节会从“教小狗认识球”的例子开始，再把它拆成训练数据、标签和预测。
+                    {continueChapter.summary ?? '从上次阅读位置继续，霜铃会陪你把这一节讲明白。'}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div className="min-w-[180px]">
                     <div className="h-1 overflow-hidden rounded-full bg-border">
-                      <span className="block h-full w-[62%] bg-fg" />
+                      <span
+                        className="block h-full bg-fg"
+                        style={{ width: `${progress.position_percent}%` }}
+                      />
                     </div>
                     <p className="mt-2 font-mono text-[10px] tracking-wide text-muted">
-                      阅读位置 {progress?.position_percent ?? 62}% · 昨天 20:18 · 预计还需 12 分钟
+                      阅读位置 {progress.position_percent}% · 最近阅读 {progressTime}
                     </p>
                   </div>
                   <button
                     type="button"
                     className="rounded-[10px] bg-accent px-3.5 py-2 text-xs text-surface"
-                    onClick={() => navigate('/learn/b1/ch3')}
+                    onClick={() => navigate(continuePath)}
                   >
-                    继续第 3 章 →
+                    {continueLabel}
                   </button>
                 </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid min-h-[232px] place-items-center p-8 text-center">
+              <div>
+                <p className="font-mono text-[10px] text-muted">还没有开始学习</p>
+                <h3 className="mt-2 font-display text-xl text-fg">从书库选一本书开始</h3>
+                <p className="mt-2 max-w-[40ch] text-[13px] text-muted">
+                  阅读器会自动保存你最近停下来的章节。
+                </p>
+                <button
+                  type="button"
+                  className="mt-4 rounded-[10px] bg-accent px-4 py-2 text-xs text-surface"
+                  onClick={() => navigate('/library')}
+                >
+                  去书库看看
+                </button>
               </div>
             </div>
           )}
@@ -218,9 +288,9 @@ export default function HomePage() {
             />
             <MiniPanel
               title="最近测验"
-              quote="还没有测验记录，先读完一节吧。"
-              actionLabel="去读第 1 章 →"
-              onAction={() => navigate('/learn/b1/ch1')}
+              quote="还没有测验记录，先从书库选一节开始吧。"
+              actionLabel="去书库开始学习 →"
+              onAction={() => navigate('/library')}
             />
             <MiniPanel
               title="AI 记得什么"

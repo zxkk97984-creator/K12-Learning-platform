@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import type { Chapter, ChapterDetail, ContentBlock } from '@/entities/book/types'
@@ -7,11 +7,30 @@ import type { ConversationIntent } from '@/features/conversation'
 import { useConversationStore } from '@/features/conversation'
 import { useScreenContext } from '@/features/screen-context'
 import { contentService } from '@/mocks/services'
+import { learningService } from '@/shared/api/learning-service'
 
 interface PopoverState {
   text: string
   left: number
   top: number
+}
+
+interface SessionLifecycle {
+  key: string
+  sessionId: string | null
+  ended: boolean
+  cleanupTimer: number | null
+}
+
+function shouldTrackBookStarted(bookId: string): boolean {
+  try {
+    const key = `shuangling-book-started:${bookId}`
+    if (window.sessionStorage.getItem(key)) return false
+    window.sessionStorage.setItem(key, '1')
+  } catch {
+    // 埋点状态不可用时仍尝试发送一次，不影响阅读。
+  }
+  return true
 }
 
 function renderMarkedText(text: unknown, mark: unknown) {
@@ -154,6 +173,58 @@ export default function ReaderPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [popover, setPopover] = useState<PopoverState | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
+  const sessionRef = useRef<SessionLifecycle | null>(null)
+  const visibleBlockIdRef = useRef<string | null>(null)
+  const progressReadyRef = useRef(false)
+  const skipInitialProgressRef = useRef(false)
+  const lastProgressRef = useRef<{ blockId: string | null; sentAt: number } | null>(null)
+  const lastSelectedTextRef = useRef('')
+
+  const activeBookId = detail?.book_id ?? bookId
+  const activeChapterId = detail?.chapter_id ?? chapterId
+
+  const trackEvent = useCallback(
+    (eventType: Parameters<typeof learningService.createEvent>[0]['event_type'], payload = {}) => {
+      void learningService
+        .createEvent({
+          event_type: eventType,
+          occurred_at: new Date().toISOString(),
+          book_id: activeBookId,
+          chapter_id: activeChapterId,
+          payload,
+        })
+        .catch(() => undefined)
+    },
+    [activeBookId, activeChapterId],
+  )
+
+  const persistProgress = useCallback(
+    (blockId: string | null, force = false) => {
+      if (!detail || !progressReadyRef.current) return
+      if (skipInitialProgressRef.current) {
+        skipInitialProgressRef.current = false
+        return
+      }
+      const now = Date.now()
+      const last = lastProgressRef.current
+      if (!force && last && last.blockId === blockId && now - last.sentAt < 30_000) return
+      const blockIndex = detail.content_blocks.findIndex((block) => block.block_id === blockId)
+      const positionPercent =
+        blockIndex >= 0 && detail.content_blocks.length > 0
+          ? Math.round(((blockIndex + 1) / detail.content_blocks.length) * 100)
+          : 0
+      lastProgressRef.current = { blockId, sentAt: now }
+      void learningService
+        .upsertProgress(activeBookId, {
+          chapter_id: activeChapterId,
+          ...(blockId ? { block_id: blockId } : {}),
+          status: 'READING',
+          position_percent: positionPercent,
+        })
+        .catch(() => undefined)
+    },
+    [activeBookId, activeChapterId, detail],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -192,6 +263,107 @@ export default function ReaderPage() {
     }
   }, [bookId, chapterId])
 
+  // 进入章节：恢复/创建 BookProgress，并记录章节与书本开始事件。
+  useEffect(() => {
+    if (!detail) return
+    let cancelled = false
+    progressReadyRef.current = false
+    skipInitialProgressRef.current = false
+    lastProgressRef.current = null
+    visibleBlockIdRef.current = null
+    lastSelectedTextRef.current = ''
+
+    void (async () => {
+      let existing = null
+      try {
+        existing = await contentService.getBookProgress(activeBookId)
+      } catch {
+        // Learning API 不可用时不阻塞真实内容阅读。
+      }
+      if (cancelled) return
+
+      const isSameChapter = existing?.chapter_id === activeChapterId
+      progressReadyRef.current = true
+      skipInitialProgressRef.current = isSameChapter
+      lastProgressRef.current = isSameChapter
+        ? { blockId: existing?.block_id ?? null, sentAt: Date.now() }
+        : null
+      void learningService
+        .upsertProgress(activeBookId, {
+          chapter_id: activeChapterId,
+          status: 'READING',
+          ...(isSameChapter ? {} : { position_percent: 0 }),
+        })
+        .catch(() => undefined)
+    })()
+
+    trackEvent('CHAPTER_STARTED')
+    if (shouldTrackBookStarted(activeBookId)) trackEvent('BOOK_STARTED')
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeBookId, activeChapterId, detail, trackEvent])
+
+  // LearningSession 生命周期：同一章节复用 StrictMode 的短暂 cleanup，真正离开时结算。
+  useEffect(() => {
+    if (!detail) return
+    const key = `${activeBookId}:${activeChapterId}`
+    const existing = sessionRef.current
+    let lifecycle: SessionLifecycle
+
+    if (existing?.key === key) {
+      lifecycle = existing
+      lifecycle.ended = false
+      if (lifecycle.cleanupTimer !== null) {
+        window.clearTimeout(lifecycle.cleanupTimer)
+        lifecycle.cleanupTimer = null
+      }
+    } else {
+      lifecycle = { key, sessionId: null, ended: false, cleanupTimer: null }
+      sessionRef.current = lifecycle
+      void learningService
+        .createSession({
+          book_id: activeBookId,
+          chapter_id: activeChapterId,
+          // 后端 entry_route 上限为 64 字符；真实 UUID 路由会超长，保留章节维度即可。
+          entry_route: `/reader/${activeChapterId}`,
+        })
+        .then((session) => {
+          lifecycle.sessionId = session.session_id
+          if (lifecycle.ended) {
+            const sessionId = lifecycle.sessionId
+            lifecycle.sessionId = null
+            if (sessionId) void learningService.endSession(sessionId).catch(() => undefined)
+          }
+        })
+        .catch(() => undefined)
+    }
+
+    return () => {
+      lifecycle.ended = true
+      lifecycle.cleanupTimer = window.setTimeout(() => {
+        if (!lifecycle.ended) return
+        const sessionId = lifecycle.sessionId
+        lifecycle.sessionId = null
+        lifecycle.cleanupTimer = null
+        if (sessionId) void learningService.endSession(sessionId).catch(() => undefined)
+        if (sessionRef.current === lifecycle) sessionRef.current = null
+      }, 0)
+    }
+  }, [activeBookId, activeChapterId, detail])
+
+  // 定时保存当前阅读位置；章节切换/卸载时由 cleanup 做最后一次写入。
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void persistProgress(visibleBlockIdRef.current, true)
+    }, 30_000)
+    return () => {
+      window.clearInterval(timer)
+      void persistProgress(visibleBlockIdRef.current, true)
+    }
+  }, [persistProgress])
+
   // 写入 ScreenContext（进入 reader 时）
   useEffect(() => {
     if (!detail) return
@@ -227,18 +399,20 @@ export default function ReaderPage() {
           .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]
         if (visible) {
           const element = visible.target as HTMLElement
-          const blockId = element.closest('[data-block-id]')?.getAttribute('data-block-id')
+          const blockId = element.closest('[data-block-id]')?.getAttribute('data-block-id') ?? null
+          visibleBlockIdRef.current = blockId
           setScreenContext({
             visibleSection: element.dataset.readSection,
             contentBlockId: blockId ?? undefined,
           })
+          void persistProgress(blockId)
         }
       },
       { rootMargin: '-18% 0px -55% 0px' },
     )
     container.querySelectorAll('[data-read-section]').forEach((element) => observer.observe(element))
     return () => observer.disconnect()
-  }, [detail, setScreenContext])
+  }, [detail, persistProgress, setScreenContext])
 
   // 选中文字 → popover（对齐 0-B §2.3，仅 reader 内容区有效）
   useEffect(() => {
@@ -247,11 +421,16 @@ export default function ReaderPage() {
       const text = selection?.toString().trim() ?? ''
       const node = selection?.anchorNode?.parentElement
       if (!text || !node || !node.closest('[data-read-container]')) {
+        lastSelectedTextRef.current = ''
         setPopover(null)
         return
       }
       const selected = text.slice(0, 50)
       setScreenContext({ selectedText: selected })
+      if (lastSelectedTextRef.current !== selected) {
+        lastSelectedTextRef.current = selected
+        trackEvent('TEXT_SELECTED', { selectedText: selected })
+      }
       try {
         const range = selection.getRangeAt(0).getBoundingClientRect()
         setPopover({
@@ -265,9 +444,11 @@ export default function ReaderPage() {
     }
     document.addEventListener('selectionchange', onSelectionChange)
     return () => document.removeEventListener('selectionchange', onSelectionChange)
-  }, [setScreenContext])
+  }, [setScreenContext, trackEvent])
 
   const triggerIntent = (intent: ConversationIntent) => {
+    if (intent === 'explain') trackEvent('EXPLAIN_REQUESTED')
+    if (intent === 'summary') trackEvent('SUMMARY_REQUESTED')
     runIntent(intent)
     useCompanionStore.getState().setOpen(true)
   }
@@ -277,10 +458,10 @@ export default function ReaderPage() {
     runIntent('selected', popover.text)
     useCompanionStore.getState().setOpen(true)
     window.getSelection()?.removeAllRanges()
+    lastSelectedTextRef.current = ''
     setPopover(null)
   }
 
-  const activeChapterId = detail?.chapter_id ?? chapterId
   const chapterIndex = chapters.findIndex((chapter) => chapter.chapter_id === activeChapterId)
 
   return (

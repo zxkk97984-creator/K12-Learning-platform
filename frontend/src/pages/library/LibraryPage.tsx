@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
-import type { Book } from '@/entities/book/types'
+import type { Book, BookProgress } from '@/entities/book/types'
 import type { Stage } from '@/entities/student/types'
 import { useCompanionStore } from '@/features/companion'
 import type { ConversationIntent } from '@/features/conversation'
@@ -22,9 +23,17 @@ function bookStage(book: Book): Stage {
   return 'JUNIOR'
 }
 
+function progressLabel(progress: BookProgress | undefined): string {
+  if (!progress) return '未开始'
+  if (progress.status === 'COMPLETED') return '已完成'
+  return progress.chapter_id ? '继续' : '已开始'
+}
+
 export default function LibraryPage() {
+  const navigate = useNavigate()
   const runIntent = useConversationStore((state) => state.runIntent)
   const [books, setBooks] = useState<Book[]>([])
+  const [progressByBook, setProgressByBook] = useState<Record<string, BookProgress>>({})
   const [grade, setGrade] = useState<'推荐' | Stage>('推荐')
   const [topics, setTopics] = useState<string[]>([])
   const [search, setSearch] = useState('')
@@ -32,7 +41,19 @@ export default function LibraryPage() {
 
   useEffect(() => {
     void (async () => {
-      setBooks(await contentService.getBooks())
+      try {
+        setBooks(await contentService.getBooks())
+      } catch {
+        setBooks([])
+      }
+      try {
+        const progress = await contentService.getProgress()
+        setProgressByBook(
+          Object.fromEntries(progress.map((item) => [item.book_id, item])),
+        )
+      } catch {
+        setProgressByBook({})
+      }
     })()
   }, [])
 
@@ -143,6 +164,7 @@ export default function LibraryPage() {
           </div>
           <div className="mt-4 grid grid-cols-3 gap-4 max-md:grid-cols-1">
             {featuredBooks.map((book) => {
+              const progress = progressByBook[book.book_id]
               const recommendationIndex = bookRecommendations.findIndex(
                 (item) => item.bookId === book.book_id,
               )
@@ -168,6 +190,18 @@ export default function LibraryPage() {
                       <span className="font-mono text-[9px] text-muted">
                         {book.chapter_count} 章 · 预计 {book.estimated_minutes} 分钟
                       </span>
+                    </div>
+                    <div className="mt-2 flex min-h-[30px] items-center justify-between border-t border-border pt-2">
+                      <span className="text-[11px] text-muted">{progressLabel(progress)}</span>
+                      {progress?.chapter_id ? (
+                        <button
+                          type="button"
+                          className="text-[11px] text-fg hover:text-accent"
+                          onClick={() => navigate(`/learn/${book.book_id}/${progress.chapter_id}`)}
+                        >
+                          继续 →
+                        </button>
+                      ) : null}
                     </div>
                     {recommendation ? (
                       <button
@@ -208,6 +242,7 @@ export default function LibraryPage() {
       ) : (
         <div className="mt-4 grid grid-cols-4 gap-3 max-lg:grid-cols-2 max-md:grid-cols-2 max-sm:grid-cols-1">
           {filtered.map((book) => {
+            const progress = progressByBook[book.book_id]
             const recommendationIndex = bookRecommendations.findIndex(
               (item) => item.bookId === book.book_id,
             )
@@ -227,7 +262,16 @@ export default function LibraryPage() {
                     {book.chapter_count} 章 · 预计 {book.estimated_minutes} 分钟
                   </div>
                   <div className="mt-2 flex min-h-[30px] items-center justify-between border-t border-border pt-2">
-                    <span className="text-[11px] text-muted">未开始</span>
+                    <span className="text-[11px] text-muted">{progressLabel(progress)}</span>
+                    {progress?.chapter_id ? (
+                      <button
+                        type="button"
+                        className="text-[11px] text-fg hover:text-accent"
+                        onClick={() => navigate(`/learn/${book.book_id}/${progress.chapter_id}`)}
+                      >
+                        继续 →
+                      </button>
+                    ) : null}
                   </div>
                   {recommendation ? (
                     <button
