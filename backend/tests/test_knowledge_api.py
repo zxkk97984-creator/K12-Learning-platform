@@ -84,7 +84,10 @@ def _ingest_test_resource() -> UUID:
     async def run() -> UUID:
         async with async_session() as session:
             existing = await session.execute(
-                select(KnowledgeResource).where(KnowledgeResource.source_name == "测试训练数据").limit(1)
+                select(KnowledgeResource)
+                .where(KnowledgeResource.source_name == "测试训练数据")
+                .order_by(KnowledgeResource.created_at.desc())
+                .limit(1)
             )
             resource = existing.scalar_one_or_none()
             if resource is not None:
