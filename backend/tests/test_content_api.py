@@ -191,7 +191,7 @@ class TestContentAPI:
         assert response.status_code == 401
 
     def test_list_books_only_published(self, client: TestClient, token: str) -> None:
-        response = client.get("/api/v1/books", headers=headers(token))
+        response = client.get("/api/v1/books?limit=100", headers=headers(token))
         assert response.status_code == 200
         body = response.json()["data"]
         assert all(book["status"] == "PUBLISHED" for book in body)

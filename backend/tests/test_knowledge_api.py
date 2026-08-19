@@ -623,7 +623,8 @@ class TestKnowledgeAPI:
 
         count, sources = asyncio.run(run())
         assert 1 <= count <= 2
-        assert any(source in {"测试训练数据", "知识点测试"} for source in sources)
+        # 共享知识库：测试资源名因其他测试的插入而演进（训练数据/知识点测试/搜索测试资源）
+        assert any(source in {"测试训练数据", "知识点测试", "搜索测试资源"} for source in sources)
 
     def test_conversation_falls_back_when_retrieval_empty(
         self,

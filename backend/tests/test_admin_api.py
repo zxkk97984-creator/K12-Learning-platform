@@ -359,3 +359,305 @@ class TestAdminAPI:
             },
         )
         assert missing_key.status_code == 422
+
+    def test_get_missing_book_returns_404(
+        self, client: TestClient, admin_token: str
+    ) -> None:
+        response = client.get(
+            f"/api/v1/admin/books/{uuid4()}",
+            headers=headers(admin_token),
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "BOOK_NOT_FOUND"
+
+    def test_patch_missing_content_returns_404(
+        self, client: TestClient, admin_token: str
+    ) -> None:
+        chapter = client.patch(
+            f"/api/v1/admin/chapters/{uuid4()}",
+            headers=headers(admin_token, **{"Idempotency-Key": f"ch404-{uuid4()}"}),
+            json={"title": "不存在"},
+        )
+        assert chapter.status_code == 404
+        assert chapter.json()["error"]["code"] == "CHAPTER_NOT_FOUND"
+
+        block = client.patch(
+            f"/api/v1/admin/content-blocks/{uuid4()}",
+            headers=headers(admin_token, **{"Idempotency-Key": f"blk404-{uuid4()}"}),
+            json={"content": {"text": "x"}},
+        )
+        assert block.status_code == 404
+        assert block.json()["error"]["code"] == "CONTENT_BLOCK_NOT_FOUND"
+
+        point = client.patch(
+            f"/api/v1/admin/knowledge-points/{uuid4()}",
+            headers=headers(admin_token, **{"Idempotency-Key": f"kp404-{uuid4()}"}),
+            json={"topic": "x"},
+        )
+        assert point.status_code == 404
+        assert point.json()["error"]["code"] == "KNOWLEDGE_POINT_NOT_FOUND"
+
+    def test_publish_grade_range_and_archive_transitions(
+        self, client: TestClient, admin_token: str
+    ) -> None:
+        created = client.post(
+            "/api/v1/admin/books",
+            headers=headers(admin_token, **{"Idempotency-Key": f"grade-{uuid4()}"}),
+            json=dict(BOOK_BODY, title=f"发布边界书-{uuid4()}"),
+        )
+        book_id = created.json()["data"]["book_id"]
+
+        invalid_grade = client.patch(
+            f"/api/v1/admin/books/{book_id}",
+            headers=headers(admin_token, **{"Idempotency-Key": f"badgrade-{uuid4()}"}),
+            json={"grade_min": 9, "grade_max": 7, "status": "PUBLISHED"},
+        )
+        assert invalid_grade.status_code == 422
+
+        chapter = client.post(
+            f"/api/v1/admin/books/{book_id}/chapters",
+            headers=headers(admin_token, **{"Idempotency-Key": f"chgrade-{uuid4()}"}),
+            json={"title": "章"},
+        )
+        assert chapter.status_code == 201
+
+        archived = client.patch(
+            f"/api/v1/admin/books/{book_id}",
+            headers=headers(admin_token, **{"Idempotency-Key": f"arch-{uuid4()}"}),
+            json={"status": "ARCHIVED"},
+        )
+        assert archived.status_code == 200
+
+        reactivate = client.patch(
+            f"/api/v1/admin/books/{book_id}",
+            headers=headers(admin_token, **{"Idempotency-Key": f"react-{uuid4()}"}),
+            json={"status": "DRAFT"},
+        )
+        assert reactivate.status_code == 409
+        assert reactivate.json()["error"]["code"] == "BOOK_INVALID_STATUS"
+
+    def test_patch_book_idempotency_boundaries(
+        self, client: TestClient, admin_token: str
+    ) -> None:
+        created = client.post(
+            "/api/v1/admin/books",
+            headers=headers(admin_token, **{"Idempotency-Key": f"pidem-{uuid4()}"}),
+            json=dict(BOOK_BODY, title=f"PATCH 幂等书-{uuid4()}"),
+        )
+        book_id = created.json()["data"]["book_id"]
+        key = f"patch-key-{uuid4()}"
+        body = {"title": "PATCH 幂等标题"}
+
+        missing = client.patch(
+            f"/api/v1/admin/books/{book_id}",
+            headers=headers(admin_token),
+            json=body,
+        )
+        assert missing.status_code == 422
+
+        first = client.patch(
+            f"/api/v1/admin/books/{book_id}",
+            headers=headers(admin_token, **{"Idempotency-Key": key}),
+            json=body,
+        )
+        assert first.status_code == 200
+
+        replay = client.patch(
+            f"/api/v1/admin/books/{book_id}",
+            headers=headers(admin_token, **{"Idempotency-Key": key}),
+            json=body,
+        )
+        assert replay.status_code == 200
+        assert replay.json()["data"]["title"] == "PATCH 幂等标题"
+
+        conflict = client.patch(
+            f"/api/v1/admin/books/{book_id}",
+            headers=headers(admin_token, **{"Idempotency-Key": key}),
+            json={"title": "冲突标题"},
+        )
+        assert conflict.status_code == 409
+        assert conflict.json()["error"]["code"] == "IDEMPOTENCY_KEY_REUSED"
+
+    def test_reprocess_missing_resource_404(
+        self, client: TestClient, admin_token: str
+    ) -> None:
+        response = client.post(
+            f"/api/v1/admin/knowledge/resources/{uuid4()}/reprocess",
+            headers=headers(admin_token, **{"Idempotency-Key": f"re404-{uuid4()}"}),
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
+
+    def test_upload_unknown_extension_422(
+        self, client: TestClient, admin_token: str
+    ) -> None:
+        response = client.post(
+            "/api/v1/admin/knowledge/resources",
+            headers=headers(admin_token, **{"Idempotency-Key": f"docx-{uuid4()}"}),
+            files={"file": ("notes.docx", b"x", "application/octet-stream")},
+            data={
+                "source_name": "DOCX",
+                "source_url": "https://test.shuangling.local/docx",
+                "license": "CC-BY-4.0",
+                "copyright_status": "测试",
+            },
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "UNSUPPORTED_FILE_TYPE"
+
+    def test_student_cannot_upload(
+        self, client: TestClient, student_token: str
+    ) -> None:
+        response = client.post(
+            "/api/v1/admin/knowledge/resources",
+            headers=headers(student_token, **{"Idempotency-Key": f"stu-{uuid4()}"}),
+            files={"file": ("x.md", b"# x", "text/markdown")},
+            data={
+                "source_name": "学生",
+                "source_url": "https://test.shuangling.local/stu",
+                "license": "CC-BY-4.0",
+                "copyright_status": "测试",
+            },
+        )
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "ADMIN_ONLY"
+
+    def test_stats_change_after_new_book_and_resource(
+        self, client: TestClient, admin_token: str
+    ) -> None:
+        before = client.get("/api/v1/admin/stats", headers=headers(admin_token)).json()[
+            "data"
+        ]
+        created = client.post(
+            "/api/v1/admin/books",
+            headers=headers(admin_token, **{"Idempotency-Key": f"statbook-{uuid4()}"}),
+            json=dict(BOOK_BODY, title=f"统计书-{uuid4()}"),
+        )
+        assert created.status_code == 201
+        uploaded = client.post(
+            "/api/v1/admin/knowledge/resources",
+            headers=headers(admin_token, **{"Idempotency-Key": f"statres-{uuid4()}"}),
+            files={
+                "file": (
+                    "stats.md",
+                    "# 统计\n\n内容".encode("utf-8"),
+                    "text/markdown",
+                )
+            },
+            data={
+                "source_name": "统计资源",
+                "source_url": f"https://test.shuangling.local/stats-{uuid4()}",
+                "license": "CC-BY-4.0",
+                "copyright_status": "测试",
+            },
+        )
+        assert uploaded.status_code == 201
+        after = client.get("/api/v1/admin/stats", headers=headers(admin_token)).json()[
+            "data"
+        ]
+        assert after["books_total"] == before["books_total"] + 1
+        assert after["resources_total"] == before["resources_total"] + 1
+
+    def test_upload_replay_returns_same_resource(
+        self, client: TestClient, admin_token: str
+    ) -> None:
+        key = f"upload-replay-{uuid4()}"
+        content = b"# replay\n\ncontent"
+        source_url = f"https://test.shuangling.local/replay-{uuid4()}"
+        first = client.post(
+            "/api/v1/admin/knowledge/resources",
+            headers=headers(admin_token, **{"Idempotency-Key": key}),
+            files={"file": ("replay.md", content, "text/markdown")},
+            data={
+                "source_name": "上传重放",
+                "source_url": source_url,
+                "license": "CC-BY-4.0",
+                "copyright_status": "测试",
+            },
+        )
+        assert first.status_code == 201
+        replay = client.post(
+            "/api/v1/admin/knowledge/resources",
+            headers=headers(admin_token, **{"Idempotency-Key": key}),
+            files={"file": ("replay.md", content, "text/markdown")},
+            data={
+                "source_name": "上传重放",
+                "source_url": source_url,
+                "license": "CC-BY-4.0",
+                "copyright_status": "测试",
+            },
+        )
+        assert replay.status_code == 200
+        assert replay.json()["data"]["resource_id"] == first.json()["data"]["resource_id"]
+
+    def test_create_book_invalid_grade_422(
+        self, client: TestClient, admin_token: str
+    ) -> None:
+        response = client.post(
+            "/api/v1/admin/books",
+            headers=headers(admin_token, **{"Idempotency-Key": f"badgrade-{uuid4()}"}),
+            json={
+                "title": "非法年级书",
+                "grade_min": 9,
+                "grade_max": 7,
+                "difficulty": "MEDIUM",
+                "estimated_minutes": 30,
+            },
+        )
+        assert response.status_code == 422
+
+    def test_create_chapter_missing_book_404(
+        self, client: TestClient, admin_token: str
+    ) -> None:
+        response = client.post(
+            f"/api/v1/admin/books/{uuid4()}/chapters",
+            headers=headers(admin_token, **{"Idempotency-Key": f"chbook-{uuid4()}"}),
+            json={"title": "章"},
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "BOOK_NOT_FOUND"
+
+    def test_create_content_block_missing_chapter_404(
+        self, client: TestClient, admin_token: str
+    ) -> None:
+        response = client.post(
+            f"/api/v1/admin/chapters/{uuid4()}/content-blocks",
+            headers=headers(admin_token, **{"Idempotency-Key": f"blkchapter-{uuid4()}"}),
+            json={"block_type": "PARAGRAPH", "content": {"text": "x"}},
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "CHAPTER_NOT_FOUND"
+
+    def test_create_knowledge_point_duplicate_slug_409(
+        self, client: TestClient, admin_token: str
+    ) -> None:
+        name = f"重复知识点-{uuid4()}"
+        first = client.post(
+            "/api/v1/admin/knowledge-points",
+            headers=headers(admin_token, **{"Idempotency-Key": f"kpq-{uuid4()}"}),
+            json={"name": name},
+        )
+        assert first.status_code == 201
+        duplicate = client.post(
+            "/api/v1/admin/knowledge-points",
+            headers=headers(admin_token, **{"Idempotency-Key": f"kpq2-{uuid4()}"}),
+            json={"name": name},
+        )
+        assert duplicate.status_code == 409
+        assert duplicate.json()["error"]["code"] == "KNOWLEDGE_POINT_SLUG_EXISTS"
+
+    def test_create_content_missing_idempotency_422(
+        self, client: TestClient, admin_token: str
+    ) -> None:
+        created = client.post(
+            "/api/v1/admin/books",
+            headers=headers(admin_token, **{"Idempotency-Key": f"nokey-{uuid4()}"}),
+            json=dict(BOOK_BODY, title=f"缺幂等键书-{uuid4()}"),
+        )
+        book_id = created.json()["data"]["book_id"]
+        response = client.post(
+            f"/api/v1/admin/books/{book_id}/chapters",
+            headers=headers(admin_token),
+            json={"title": "章"},
+        )
+        assert response.status_code == 422
