@@ -573,3 +573,141 @@ class ConversationSummary(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class StudentMemory(Base):
+    """student_memories（0-E §3.19；稳定记忆，软删除保留审计）。"""
+
+    __tablename__ = "student_memories"
+    __table_args__ = (
+        CheckConstraint(
+            "memory_type IN ('PROFILE','PREFERENCE','LEARNING','EPISODIC')",
+            name="ck_student_memories_type",
+        ),
+        CheckConstraint(
+            "confidence IN ('LOW','MEDIUM','HIGH')",
+            name="ck_student_memories_confidence",
+        ),
+        CheckConstraint(
+            "status IN ('ACTIVE','DISPUTED','SUPERSEDED','REMOVED')",
+            name="ck_student_memories_status",
+        ),
+        Index("ix_student_memories_student_status", "student_id", "status"),
+        Index(
+            "ix_student_memories_student_updated",
+            "student_id",
+            text("updated_at DESC"),
+        ),
+    )
+
+    memory_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    memory_type: Mapped[str] = mapped_column(String(16))
+    content: Mapped[str] = mapped_column(Text)
+    tags: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    confidence: Mapped[str] = mapped_column(String(8))
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'ACTIVE'"))
+    evidence_ids: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+    origin_candidate_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("memory_candidates.candidate_id", ondelete="SET NULL"),
+    )
+    user_confirmed: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MemoryCandidate(Base):
+    """memory_candidates（0-E §3.20；Memory Skill 的内部候选存储）。"""
+
+    __tablename__ = "memory_candidates"
+    __table_args__ = (
+        CheckConstraint(
+            "candidate_type IN ('PROFILE','PREFERENCE','LEARNING','EPISODIC')",
+            name="ck_memory_candidates_type",
+        ),
+        CheckConstraint(
+            "confidence IN ('LOW','MEDIUM','HIGH')",
+            name="ck_memory_candidates_confidence",
+        ),
+        CheckConstraint(
+            "status IN ('PENDING','APPROVED','REJECTED','MERGED')",
+            name="ck_memory_candidates_status",
+        ),
+        Index("ix_memory_candidates_student_status", "student_id", "status"),
+        Index(
+            "ix_memory_candidates_status_created", "status", "created_at"
+        ),
+    )
+
+    candidate_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    candidate_type: Mapped[str] = mapped_column(String(16))
+    content: Mapped[str] = mapped_column(Text)
+    proposed_memory: Mapped[dict] = mapped_column(JSONB)
+    evidence_ids: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+    confidence: Mapped[str] = mapped_column(String(8))
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'PENDING'"))
+    rule_version: Mapped[str] = mapped_column(String(64))
+    model_info: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MemoryEvidence(Base):
+    """memory_evidence（0-E §3.21；不可变事实聚合，事件以 JSONB 引用）。"""
+
+    __tablename__ = "memory_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "source_type IN ('QUIZ','LEARNING_SESSION','CONVERSATION','BOOK_PROGRESS')",
+            name="ck_memory_evidence_source_type",
+        ),
+        CheckConstraint("count >= 1", name="ck_memory_evidence_count"),
+        Index(
+            "ix_memory_evidence_student_derived",
+            "student_id",
+            text("derived_at DESC"),
+        ),
+    )
+
+    evidence_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    source_type: Mapped[str] = mapped_column(String(24))
+    event_ids: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+    payload: Mapped[dict] = mapped_column(JSONB)
+    count: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    first_occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    derived_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    rule_version: Mapped[str] = mapped_column(String(64))
