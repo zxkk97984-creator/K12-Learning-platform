@@ -711,3 +711,218 @@ class MemoryEvidence(Base):
     last_occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     derived_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     rule_version: Mapped[str] = mapped_column(String(64))
+
+
+class QuizSession(Base):
+    """quiz_sessions（0-E §3.15；题目快照创建后不可变）。"""
+
+    __tablename__ = "quiz_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "quiz_kind IN ('CHAPTER_QUIZ','AI_QUIZ')",
+            name="ck_quiz_sessions_kind",
+        ),
+        CheckConstraint(
+            "status IN ('GENERATING','ACTIVE','COMPLETED','ABANDONED')",
+            name="ck_quiz_sessions_status",
+        ),
+        CheckConstraint(
+            "duration_seconds >= 0", name="ck_quiz_sessions_duration"
+        ),
+        CheckConstraint(
+            "completed_at IS NULL OR completed_at >= created_at",
+            name="ck_quiz_sessions_completed_after_created",
+        ),
+        Index(
+            "ix_quiz_sessions_student_created",
+            "student_id",
+            text("created_at DESC"),
+        ),
+        Index("ix_quiz_sessions_conversation", "conversation_id"),
+        Index("ix_quiz_sessions_book_chapter", "book_id", "chapter_id"),
+    )
+
+    quiz_session_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    conversation_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("conversations.conversation_id", ondelete="RESTRICT"),
+    )
+    # FK→teacher_roles 延迟到 Phase 11；角色表尚未落地，本列可空且不建 FK。
+    teacher_role_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    book_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="RESTRICT")
+    )
+    chapter_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("chapters.chapter_id", ondelete="RESTRICT")
+    )
+    title: Mapped[str] = mapped_column(String(255))
+    quiz_kind: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(
+        String(16), server_default=text("'GENERATING'")
+    )
+    questions_snapshot: Mapped[list] = mapped_column(JSONB)
+    result_summary: Mapped[dict | None] = mapped_column(JSONB)
+    duration_seconds: Mapped[int] = mapped_column(
+        Integer, server_default=text("0")
+    )
+    ai_feedback: Mapped[str | None] = mapped_column(Text)
+    model_info: Mapped[dict] = mapped_column(JSONB)
+    skill_version: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class QuizQuestion(Base):
+    """quiz_questions（0-E §3.16；服务端 correct_answer 权威）。"""
+
+    __tablename__ = "quiz_questions"
+    __table_args__ = (
+        CheckConstraint(
+            "question_type IN ('SINGLE_CHOICE','MULTIPLE_CHOICE','TRUE_FALSE','FILL_BLANK')",
+            name="ck_quiz_questions_type",
+        ),
+        UniqueConstraint(
+            "quiz_session_id", "question_order", name="uq_quiz_questions_session_order"
+        ),
+    )
+
+    question_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    quiz_session_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("quiz_sessions.quiz_session_id", ondelete="RESTRICT"),
+    )
+    question_order: Mapped[int] = mapped_column(Integer)
+    question_type: Mapped[str] = mapped_column(String(24))
+    stem: Mapped[str] = mapped_column(Text)
+    options: Mapped[list] = mapped_column(JSONB)
+    correct_answer: Mapped[dict] = mapped_column(JSONB)
+    explanation: Mapped[str] = mapped_column(Text)
+    source_context: Mapped[dict | None] = mapped_column(JSONB)
+    interaction_policy: Mapped[dict] = mapped_column(
+        JSONB,
+        server_default=text(
+            "'{\"allow_hint\": true, \"max_hint_level\": 3}'::jsonb"
+        ),
+    )
+    knowledge_point_ids: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class QuizAnswer(Base):
+    """quiz_answers（0-E §3.17；attempt 唯一约束提供幂等兜底）。"""
+
+    __tablename__ = "quiz_answers"
+    __table_args__ = (
+        UniqueConstraint(
+            "quiz_session_id",
+            "question_id",
+            "attempt_no",
+            name="uq_quiz_answers_attempt",
+        ),
+        CheckConstraint("attempt_no >= 1", name="ck_quiz_answers_attempt_no"),
+        CheckConstraint(
+            "hint_level_at_submit >= 0", name="ck_quiz_answers_hint_level"
+        ),
+        Index(
+            "ix_quiz_answers_session_question_created",
+            "quiz_session_id",
+            "question_id",
+            "created_at",
+        ),
+    )
+
+    answer_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    quiz_session_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("quiz_sessions.quiz_session_id", ondelete="RESTRICT"),
+    )
+    question_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("quiz_questions.question_id", ondelete="RESTRICT"),
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    submitted_answer: Mapped[dict] = mapped_column(JSONB)
+    is_correct: Mapped[bool] = mapped_column(Boolean)
+    attempt_no: Mapped[int] = mapped_column(Integer)
+    hint_level_at_submit: Mapped[int] = mapped_column(
+        Integer, server_default=text("0")
+    )
+    is_final: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false")
+    )
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class QuizInteraction(Base):
+    """quiz_interactions（0-E §3.18；只追加审计日志）。"""
+
+    __tablename__ = "quiz_interactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "quiz_session_id", "sequence", name="uq_quiz_interactions_session_sequence"
+        ),
+        CheckConstraint(
+            "interaction_type IN ('HINT_REQUEST','HINT_RESPONSE','QUESTION_ASK',"
+            "'TEACHER_REPLY','ANSWER_SUBMIT','ANSWER_RESULT')",
+            name="ck_quiz_interactions_type",
+        ),
+        Index(
+            "ix_quiz_interactions_session_question_created",
+            "quiz_session_id",
+            "question_id",
+            "created_at",
+        ),
+        Index("ix_quiz_interactions_message", "message_id"),
+        Index("ix_quiz_interactions_answer", "answer_id"),
+    )
+
+    interaction_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    quiz_session_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("quiz_sessions.quiz_session_id", ondelete="RESTRICT"),
+    )
+    question_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("quiz_questions.question_id", ondelete="RESTRICT"),
+    )
+    interaction_type: Mapped[str] = mapped_column(String(24))
+    payload: Mapped[dict] = mapped_column(JSONB)
+    message_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("messages.message_id", ondelete="RESTRICT"),
+    )
+    answer_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("quiz_answers.answer_id", ondelete="RESTRICT"),
+    )
+    sequence: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
