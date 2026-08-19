@@ -3,66 +3,59 @@
 > 本文件由 Hermes（总控）维护，是会话恢复的权威进度来源。恢复时先读 `霜铃_V3_Hermes-Codex_多Agent协同开发总路线.md`（Execution Baseline）再读本文件。
 
 ## 当前阶段
-**Phase 8 — Knowledge Base 与 RAG**（Phase 7 已完成，自动进入）
+**Phase 9 — 语音输入 / TTS + 真实 LLM Provider**（Phase 8 已完成，自动进入）
 
-## 已完成 Checkpoint（编号已对齐总控 2026-08-19）
-- `phase-0-checkpoint`：仓库初始化 + 全套契约
-- `phase-1-checkpoint`：React 生产 UI 全 Mock 闭环
-- `phase-2-checkpoint`：学生身份与个人设置
-- `phase-3-checkpoint`：书库、书籍、章节与阅读器
-- `phase-4-checkpoint`：Conversation 与 Teacher Agent Runtime（SSE 流式 + 记忆 Domain）
-- `phase-5-checkpoint`：Screen Context（1-G/3-E 覆盖）+ Quiz Skill 全链路（原编号 Phase 5 合并说明见 git 历史）
-- `phase-7-checkpoint`（`2a3c535`）：长期记忆与 AI 学习画像
-  - Memory Pipeline 规则版（事件→Evidence→Candidate→Stable Memory/ProfileInsight）
-  - student_episodes/profile_insights 2 表 + pgvector 扩展（无 HNSW）
-  - 4 端点（insights 列表/详情+evidence、episodes 列表/详情）+ 前端画像页（5 档定性，无数字）
-  - .agent.md 渲染视图 + 「为什么这样判断」证据引用回答（§16.7 验收）
-  - 意图变体修复（怎么看出/凭什么判断）+ xfail 移除
-  - pytest 152 / Vitest 90 / E2E 5 全绿
+## 已完成 Checkpoint
+- `phase-0-checkpoint` ~ `phase-8-checkpoint`（`eb3637d`）：Phase 0~8 全部 PASS
+- Phase 8（Knowledge Base 与 RAG）：
+  - knowledge_resources/knowledge_chunks 2 表 + 2 处 HNSW 索引（episodes 补）
+  - mock embedding（64 维确定性）+ Ingestion CLI（Parser→Chunk→Embedding→入库，幂等）
+  - 4 端点（resources 列表/详情/chunks ADMIN_ONLY + search STUDENT，D9 source 溯源）
+  - RAG 注入对话流（retrieve + screen_context → TeacherContext → 引用来源回复）
+  - pytest 175 / Vitest 90 / E2E 5 全绿
+  - 修复：golden-path beforeAll 归档遗留 ACTIVE 会话（消除 .last() 偶发失败）
 
-## Phase 8 目标（总控 §17）
-Knowledge Base 与 RAG——knowledge_resources 表 + 解析管线 + 向量检索（HNSW 落地）+ 引用。
+## Phase 9 目标（总控 §18 + 0-D §16）
+语音输入 / TTS：
+- WebSocket 契约定稿实现（/api/v1/voice/ws?conversation_id&token，JSON 帧，audio_chunk/audio_end/cancel/ping ↔ state/partial/final/error/pong）
+- 状态机（IDLE→LISTENING→THINKING→SPEAKING→IDLE，barge-in）
+- STT/TTS provider 抽象 + Mock 实现；voice_preference 落地
+- 真实 LLM Provider（本 Phase 或独立任务：AI provider 接真实模型，Memory/Quiz Skill 换 LLM 生成；注意 mock embedding 检索质量 + 相似度阈值）
+- final 文本写入 Conversation（type=TEXT）走同一 SSE/Agent 流程（架构 §38）
 
-## Phase 8 待拆解（Hermes 规划，按总控 §17）
-- 8-A 后端 Knowledge Domain（knowledge_resources/knowledge_chunks 表 + pgvector HNSW 索引 + 上传/列表/详情 API + 解析管线骨架）
-- 8-B RAG 检索服务（向量检索 + 关键词混合；GET /knowledge/resources 检索端点 + 对话流引用注入）
-- 8-C 前端知识库页面/引用展示（若原型有；无则后端先行）
-- 8-D 测试 + Gate
-
-## 关键基线引用（Phase 8）
-- 总控 §17（Phase 8 完整定义）
-- `docs/contracts/api-contract.md`（0-D §12 Knowledge：GET /knowledge/resources 等）
-- `docs/architecture/database-design.md`（0-E knowledge_resources 表 + student_episodes.embedding HNSW 落地）
-- 现有：student_episodes.embedding 列已建（7-A），HNSW 索引 Phase 8 落地
+## Phase 9 待拆解（Hermes 规划）
+- 9-A 真实 LLM Provider（settings 配置 + OpenAI 兼容 provider；Memory/Quiz Skill/证据回答换 LLM 生成；search 相似度阈值）——注意 Codex 执行端当前为 deepseek 中转，真实 LLM 接入需用户提供密钥/端点（外部资源，可能触发人工介入）
+- 9-B 语音 WebSocket 定稿（ws 连接/帧/状态机/STT mock + TTS mock；voice_sessions 表）
+- 9-C 前端语音（录音 → WS → STT → 对话；TTS 播放；voice-overlay 状态动画）
+- 9-D 语音偏好落地（voice_preference 设置生效）+ 测试 + Gate
 
 ## 当前 blocker
-无
+无（9-A 若需真实 LLM 密钥属外部资源，届时暂停相关路径并询问）
 
 ## Follow-up backlog
 ### 跨 Phase 遗留
-- 全局 401 自动登出未接；JWT 默认密钥 dev 占位；seed 密码 demo123 仅本地
+- 全局 401 自动登出未接；JWT 默认密钥 dev 占位；seed 密码 demo123/admin123 仅本地
 - 宿主 8000 被 DAI 项目占用，后端联调用 8002 + VITE_API_PROXY_TARGET
 - BookDetailPage 仍是骨架；learning_events 并发 ACTIVE 竞态 500→409 映射待做
 - legacy b1/ch3 别名解析额外请求；tags[1] 顺序耦合 keywords
-- 其余 11 本书仅 1 个占位章节；幂等键全局基建待做（quiz answers 已用）
+- 其余 11 本书仅 1 个占位章节；幂等键全局基建待做
 - SSE 断流学生消息已落库不回滚；sequence max+1 高并发竞争
-### Phase 9 前
-- 真实 LLM Provider（AI provider 接真实模型；Memory/Quiz Skill 换 LLM 生成）；语音 WebSocket（§16 定稿实现）；STT/TTS provider 抽象
+- **knowledge search 无相似度阈值**（纯文本无命中仍返回 top-N，9-A 真实 embedding 时加）
 ### Phase 10 前
-- books.created_by FK→admins 延迟补；Admin API（书/章/块/知识点 CRUD + 知识资源管理）
+- books.created_by FK→admins 延迟补；Admin API（书/章/块/知识点 CRUD + 知识资源上传 HTTP 端点 + require_admin 已有）
 ### Phase 11 前
-- current_teacher_role_id/conversations.teacher_role_id/quiz_sessions.teacher_role_id FK 延迟补；TeacherRole 系统
+- current_teacher_role_id/conversations.teacher_role_id/quiz_sessions.teacher_role_id FK 延迟补；TeacherRole 系统（角色列表/切换/Persona）
 ### Phase 12 前
-- 隐私脱敏流程细节；生产化（CI、部署、监控）
+- 隐私脱敏流程细节；生产化（CI、部署、监控、比赛交付）
 
 ## 已裁定决策（长期有效）
 - PG18 + pgvector；uv 后端（Python 3.12）；DB 按需启动
 - 级联删除 RESTRICT；Quiz 幂等重放；ProfileInsight 5 档定性（无数字）；JWT Bearer；bcrypt 直调；PyJWT HS256
 - learning_sessions 单一 ACTIVE 部分唯一索引；稳定记忆 ≥2 证据；测试环境 NullPool
 - teacher_role_id 可空放宽（Phase 11 恢复）；「添加记忆」无 POST（Skill 创建）
-- vitest include *.test.tsx + env NODE_ENV=test；E2E workers=1（共享 seed 账号串行）
-- **自治模式**：默认继续不询问；普通技术决策自裁决；FAIL 自动修复；只在 6 类人工介入点暂停
+- mock embedding 64 维（Phase 9 换真实）；vitest include *.test.tsx + NODE_ENV=test；E2E workers=1 串行 + golden-path 归档遗留会话
+- **自治模式**：默认继续不询问；普通技术决策自裁决；FAIL 自动修复；只在 6 类人工介入点暂停（真实 LLM 密钥/端点=外部资源类）
 
 ## 执行端
-- Codex：herdr pane `w1:p6`，模型 **deepseek-v4-flash max**（gpt-5.6-luna OpenAI 配额 2026-08-19 耗尽后切回）
+- Codex：herdr pane `w1:p6`，模型 **deepseek-v4-flash max**（gpt-5.6-luna OpenAI 配额 2026-08-19 耗尽后切回；中转站可能不支持部分 tool 调用——遇 400 先报 Hermes 再处理）
 - git commit/tag 由 Hermes 执行（Codex 沙箱 .git 只读）
