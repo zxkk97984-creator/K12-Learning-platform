@@ -46,6 +46,8 @@ export interface ProfileInsight {
   valid_from: string
   valid_until: string | null
   rule_version: string
+  model_info?: Record<string, unknown> | null
+  created_at?: string
   updated_at: string
 }
 

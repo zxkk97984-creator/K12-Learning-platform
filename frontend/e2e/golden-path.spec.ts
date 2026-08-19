@@ -53,14 +53,18 @@ test.describe('黄金路径', () => {
     await expect(page.getByText('Quiz Skill 已创建 · 正式测验已记录').last()).toBeVisible({
       timeout: 10_000,
     })
-    await expect(page.getByRole('button', { name: /让机器从例子中发现可重复的规律/ }).last()).toBeVisible({
+    const latestQuizCard = page.locator('[data-od-id="chat-quiz-card"]').last()
+    await expect(latestQuizCard).toBeVisible({ timeout: 10_000 })
+    await expect(
+      latestQuizCard.getByRole('button', { name: /让机器从例子中发现可重复的规律/ }),
+    ).toBeVisible({
       timeout: 10_000,
     })
 
     // 6. 答题：选 B + 提交 → ✓ 已完成
-    await page.getByRole('button', { name: /让机器从例子中发现可重复的规律/ }).last().click()
-    await page.getByRole('button', { name: '提交答案' }).last().click()
-    await expect(page.getByText('✓ 已完成').last()).toBeVisible({ timeout: 10_000 })
+    await latestQuizCard.getByRole('button', { name: /让机器从例子中发现可重复的规律/ }).click()
+    await latestQuizCard.getByRole('button', { name: '提交答案' }).click()
+    await expect(latestQuizCard.getByText('✓ 已完成')).toBeVisible({ timeout: 10_000 })
 
     // 7. 去 quizzes：历史列表含随堂测验（5-C 起标题由后端生成，断言放宽）
     await page.keyboard.press('Escape')

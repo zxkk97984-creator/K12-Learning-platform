@@ -1,10 +1,13 @@
 import type {
+  EpisodeImportance,
+  InsightStatus,
   MemoryEvidence,
-  MemoryStatus,
-  MemoryType,
   ProfileInsight,
+  ProfileInsightType,
   StudentEpisode,
   StudentMemory,
+  MemoryStatus,
+  MemoryType,
 } from '@/entities/memory/types'
 
 /** 0-D §11.2 记忆状态机动作 */
@@ -15,11 +18,31 @@ export interface MemoryListParams {
   memory_type?: MemoryType
 }
 
+export interface InsightListParams {
+  status?: InsightStatus
+  insight_type?: ProfileInsightType
+  cursor?: string
+  limit?: number
+}
+
+export interface EpisodeListParams {
+  importance?: EpisodeImportance
+  cursor?: string
+  limit?: number
+}
+
+export interface InsightDetail {
+  insight: ProfileInsight
+  evidence: MemoryEvidence[]
+}
+
 export interface MemoryService {
   getMemories(params?: MemoryListParams): Promise<StudentMemory[]>
   updateMemory(memoryId: string, action: MemoryAction, content?: string): Promise<StudentMemory>
-  getInsights(): Promise<ProfileInsight[]>
+  getInsights(params?: InsightListParams): Promise<ProfileInsight[]>
   getInsight(insightId: string): Promise<ProfileInsight>
+  getInsightDetail(insightId: string): Promise<InsightDetail>
   getEvidence(evidenceId: string): Promise<MemoryEvidence>
-  getEpisodes(): Promise<StudentEpisode[]>
+  getEpisodes(params?: EpisodeListParams): Promise<StudentEpisode[]>
+  getEpisodeDetail(episodeId: string): Promise<StudentEpisode>
 }

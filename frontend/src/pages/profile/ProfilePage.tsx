@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import type { ProfileInsight, StudentMemory } from '@/entities/memory/types'
+import type {
+  MemoryEvidence,
+  ProfileInsight,
+  ProfileInsightType,
+  StudentEpisode,
+  StudentMemory,
+} from '@/entities/memory/types'
 import type { StudentPreference, StudentProfile } from '@/entities/student/types'
 import { useAuth } from '@/features/auth'
 import { useCompanionStore } from '@/features/companion'
@@ -25,6 +31,35 @@ const STYLE_LABEL: Record<string, string> = {
 
 const DIFFICULTY_LABEL: Record<string, string> = { EASY: '简单', MEDIUM: '中等', HARD: '较难' }
 const LENGTH_LABEL: Record<string, string> = { SHORT: '短时、多轮', MEDIUM: '中等时长', LONG: '较长连续' }
+
+const INSIGHT_TYPE_LABEL: Record<ProfileInsightType, string> = {
+  STRENGTH: '优势',
+  WEAKNESS: '薄弱',
+  UNDERSTANDING: '理解力',
+  HABIT: '习惯',
+  CHANGE: '变化',
+  INTEREST: '兴趣',
+}
+
+const SOURCE_LABEL: Record<MemoryEvidence['source_type'], string> = {
+  QUIZ: '测验记录',
+  LEARNING_SESSION: '学习时段',
+  CONVERSATION: '课程对话',
+  BOOK_PROGRESS: '阅读进度',
+}
+
+const IMPORTANCE_LABEL: Record<StudentEpisode['importance'], string> = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+}
+
+function payloadSummary(payload: Record<string, unknown>): string {
+  return Object.entries(payload)
+    .filter(([key]) => key !== 'dimension')
+    .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
+    .join(' · ')
+}
 
 function buildMarkdown(profile: StudentProfile, prefs: StudentPreference, insights: ProfileInsight[]): string {
   const lines = [
@@ -60,7 +95,15 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<StudentProfile | null>(null)
   const [prefs, setPrefs] = useState<StudentPreference | null>(null)
   const [insights, setInsights] = useState<ProfileInsight[]>([])
+  const [historyInsights, setHistoryInsights] = useState<ProfileInsight[]>([])
+  const [episodes, setEpisodes] = useState<StudentEpisode[]>([])
   const [memories, setMemories] = useState<StudentMemory[]>([])
+  const [expandedInsightId, setExpandedInsightId] = useState<string | null>(null)
+  const [insightEvidence, setInsightEvidence] = useState<Record<string, MemoryEvidence[]>>({})
+  const [evidenceLoadingId, setEvidenceLoadingId] = useState<string | null>(null)
+  const [expandedEpisodeId, setExpandedEpisodeId] = useState<string | null>(null)
+  const [episodeDetail, setEpisodeDetail] = useState<Record<string, StudentEpisode>>({})
+  const [episodeLoadingId, setEpisodeLoadingId] = useState<string | null>(null)
   const [view, setView] = useState<ProfileView>('student')
   const [docMode, setDocMode] = useState<DocMode>('preview')
   const [mdDraft, setMdDraft] = useState('')
@@ -68,14 +111,18 @@ export default function ProfilePage() {
 
   const load = useCallback(async () => {
     try {
-      const [preference, insightList, memoryList] = await Promise.all([
+      const [preference, insightList, historyList, memoryList, episodeList] = await Promise.all([
         studentService.getPreferences(),
         memoryService.getInsights(),
+        memoryService.getInsights({ status: 'SUPERSEDED' }),
         memoryService.getMemories(),
+        memoryService.getEpisodes(),
       ])
       setPrefs(preference)
       setInsights(insightList)
+      setHistoryInsights(historyList)
       setMemories(memoryList)
+      setEpisodes(episodeList)
     } catch {
       // 后端不可用时降级为空态
     }
@@ -94,6 +141,45 @@ export default function ProfilePage() {
   const triggerIntent = (intent: Parameters<typeof runIntent>[0]) => {
     runIntent(intent)
     useCompanionStore.getState().setOpen(true)
+  }
+
+  const toggleInsightEvidence = async (insight: ProfileInsight) => {
+    if (expandedInsightId === insight.insight_id) {
+      setExpandedInsightId(null)
+      return
+    }
+    setExpandedInsightId(insight.insight_id)
+    if (insightEvidence[insight.insight_id] || insight.evidence_ids.length === 0) return
+    setEvidenceLoadingId(insight.insight_id)
+    try {
+      const detail = await memoryService.getInsightDetail(insight.insight_id)
+      setInsightEvidence((current) => ({
+        ...current,
+        [insight.insight_id]: detail.evidence,
+      }))
+    } catch {
+      showToast('证据详情暂时不可用')
+    } finally {
+      setEvidenceLoadingId(null)
+    }
+  }
+
+  const toggleEpisode = async (episode: StudentEpisode) => {
+    if (expandedEpisodeId === episode.episode_id) {
+      setExpandedEpisodeId(null)
+      return
+    }
+    setExpandedEpisodeId(episode.episode_id)
+    if (episodeDetail[episode.episode_id]) return
+    setEpisodeLoadingId(episode.episode_id)
+    try {
+      const detail = await memoryService.getEpisodeDetail(episode.episode_id)
+      setEpisodeDetail((current) => ({ ...current, [episode.episode_id]: detail }))
+    } catch {
+      showToast('情节详情暂时不可用')
+    } finally {
+      setEpisodeLoadingId(null)
+    }
   }
 
   const saveDoc = () => {
@@ -124,9 +210,6 @@ export default function ProfilePage() {
   }
 
   const overview = insights.find((item) => item.dimension === 'explanation_preference')
-  const concept = insights.find((item) => item.dimension === 'concept')
-  const transfer = insights.find((item) => item.dimension === 'application_transfer')
-  const question = insights.find((item) => item.dimension === 'questioning_habit')
   const change = insights.find((item) => item.dimension === 'questioning_habit' && item.insight_type === 'CHANGE')
 
   return (
@@ -170,39 +253,161 @@ export default function ProfilePage() {
               <article className="rounded-[14px] border border-border bg-surface p-6">
                 <h2 className="border-b border-border pb-3 font-display text-xl text-fg">当前表现</h2>
                 <ul className="mt-3 overflow-hidden rounded-[10px] border border-border">
-                  {[
-                    { insight: concept, label: '概念理解', intent: 'profile-why-transfer' },
-                    { insight: transfer, label: '应用迁移', intent: 'profile-why-transfer' },
-                    { insight: question, label: '提问习惯', intent: 'profile-why-question' },
-                  ].map(({ insight, label, intent }) => (
-                    <li key={label} className="border-t border-border p-4 first:border-t-0">
-                      <div className="flex items-center gap-2.5">
-                        <strong className="text-sm text-fg">{label}</strong>
-                        <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[10px] text-muted">
-                          {insight?.level ?? '—'}
-                        </span>
-                        <button
-                          type="button"
-                          className="ml-auto text-[11px] text-muted hover:text-fg hover:underline"
-                          onClick={() => triggerIntent(intent as Parameters<typeof runIntent>[0])}
-                        >
-                          问霜铃 →
-                        </button>
-                      </div>
-                      <p className="mt-1.5 text-[13px] text-muted">{insight?.description ?? '暂无判断'}</p>
+                  {insights.length === 0 ? (
+                    <li className="p-4 text-sm text-muted">
+                      暂无画像判断。持续学习后，霜铃会在这里给出定性观察。
                     </li>
-                  ))}
+                  ) : (
+                    insights.map((insight) => {
+                      const evidence = insightEvidence[insight.insight_id] ?? []
+                      const expanded = expandedInsightId === insight.insight_id
+                      return (
+                        <li key={insight.insight_id} className="border-t border-border p-4 first:border-t-0">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <span className="rounded-full bg-fg-soft px-2 py-0.5 font-mono text-[10px] text-fg">
+                              {INSIGHT_TYPE_LABEL[insight.insight_type] ?? insight.insight_type}
+                            </span>
+                            <strong className="text-sm text-fg">{insight.dimension}</strong>
+                            <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[10px] text-muted">
+                              {insight.level}
+                            </span>
+                            <button
+                              type="button"
+                              aria-expanded={expanded}
+                              className="ml-auto text-[11px] text-muted hover:text-fg hover:underline"
+                              onClick={() => void toggleInsightEvidence(insight)}
+                            >
+                              {expanded ? '收起' : '为什么？'}
+                            </button>
+                          </div>
+                          <p className="mt-1.5 text-[13px] text-muted">{insight.description}</p>
+                          {expanded ? (
+                            <div className="mt-3 border-t border-border pt-3">
+                              <p className="font-mono text-[10px] text-muted">判断依据（真实学习记录）：</p>
+                              {evidenceLoadingId === insight.insight_id ? (
+                                <p className="mt-2 text-[11px] text-muted">正在读取依据…</p>
+                              ) : evidence.length === 0 ? (
+                                <p className="mt-2 text-[11px] text-muted">暂无证据记录。</p>
+                              ) : (
+                                <div className="mt-2 grid gap-2">
+                                  {evidence.map((item) => (
+                                    <div key={item.evidence_id} className="rounded-lg bg-fg-soft p-2 text-[11px] text-muted">
+                                      <strong className="text-fg">{SOURCE_LABEL[item.source_type] ?? item.source_type}</strong>
+                                      <p className="mt-1">{payloadSummary(item.payload)}</p>
+                                      <p className="mt-1 font-mono text-[9px]">
+                                        {item.count} 条事件 · {item.last_occurred_at?.slice(0, 10) ?? '时间未知'}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+                        </li>
+                      )
+                    })
+                  )}
                 </ul>
               </article>
 
               <article className="rounded-[14px] border border-border bg-surface p-6">
                 <h2 className="border-b border-border pb-3 font-display text-xl text-fg">最近变化</h2>
                 <blockquote className="mt-3 border-l-2 border-fg pl-4 font-display text-lg leading-relaxed text-fg">
-                  你的问题从“这是什么”走到了“为什么会这样”。
+                  {change?.description ?? '你的问题从“这是什么”走到了“为什么会这样”。'}
                 </blockquote>
                 <p className="mt-2 font-mono text-[11px] text-muted">
                   依据：{change?.description ?? '最近 3 次对话记录'}
                 </p>
+              </article>
+
+              <article className="rounded-[14px] border border-border bg-surface p-6">
+                <h2 className="border-b border-border pb-3 font-display text-xl text-fg">画像版本记录</h2>
+                {historyInsights.length === 0 ? (
+                  <p className="mt-3 text-sm text-muted">
+                    还没有被新判断替代的历史版本。
+                  </p>
+                ) : (
+                  <ul className="mt-3 grid gap-2">
+                    {[...historyInsights]
+                      .sort((a, b) => b.valid_from.localeCompare(a.valid_from))
+                      .map((insight) => (
+                        <li key={insight.insight_id} className="rounded-[10px] bg-fg-soft p-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono text-[10px] text-fg">
+                              {INSIGHT_TYPE_LABEL[insight.insight_type] ?? insight.insight_type} · {insight.dimension}
+                            </span>
+                            <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[9px] text-muted">
+                              {insight.level}
+                            </span>
+                            <time className="ml-auto font-mono text-[10px] text-muted">
+                              {insight.valid_until?.slice(0, 10) ?? insight.valid_from.slice(0, 10)}
+                            </time>
+                          </div>
+                          <p className="mt-1.5 text-xs leading-relaxed text-muted">{insight.description}</p>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              </article>
+
+              <article className="rounded-[14px] border border-border bg-surface p-6">
+                <h2 className="border-b border-border pb-3 font-display text-xl text-fg">学习情节</h2>
+                {episodes.length === 0 ? (
+                  <p className="mt-3 text-sm text-muted">
+                    还没有沉淀出值得记住的学习情节。
+                  </p>
+                ) : (
+                  <ul className="mt-3 grid gap-2">
+                    {episodes.map((episode) => {
+                      const expanded = expandedEpisodeId === episode.episode_id
+                      const detail = episodeDetail[episode.episode_id]
+                      return (
+                        <li key={episode.episode_id} className="rounded-[10px] border border-border p-3">
+                          <div className="flex items-center gap-2">
+                            <strong className="text-sm text-fg">{episode.title}</strong>
+                            <span
+                              className={`rounded-full border px-2 py-0.5 font-mono text-[9px] ${
+                                episode.importance === 'HIGH'
+                                  ? 'border-fg text-fg'
+                                  : episode.importance === 'MEDIUM'
+                                    ? 'border-accent text-accent'
+                                    : 'border-border text-muted'
+                              }`}
+                            >
+                              {IMPORTANCE_LABEL[episode.importance]}
+                            </span>
+                            <button
+                              type="button"
+                              aria-expanded={expanded}
+                              className="ml-auto text-[11px] text-muted hover:text-fg hover:underline"
+                              onClick={() => void toggleEpisode(episode)}
+                            >
+                              {expanded ? '收起详情' : '详情'}
+                            </button>
+                          </div>
+                          <p className="mt-1.5 text-[13px] leading-relaxed text-muted">{episode.summary}</p>
+                          {expanded ? (
+                            <div className="mt-3 border-t border-border pt-3 text-[11px] text-muted">
+                              {episodeLoadingId === episode.episode_id ? (
+                                <p>正在读取情节详情…</p>
+                              ) : (
+                                <div className="grid gap-1.5">
+                                  <p>
+                                    发生时间：<time>{detail?.occurred_at.slice(0, 10) ?? episode.occurred_at.slice(0, 10)}</time>
+                                  </p>
+                                  <p>关联事件：{detail?.event_ids.length ?? episode.event_ids.length} 条</p>
+                                  {detail?.tags.length ? (
+                                    <p>标签：{detail.tags.join(' · ')}</p>
+                                  ) : null}
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
               </article>
             </>
           ) : (

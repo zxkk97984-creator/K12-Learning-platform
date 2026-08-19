@@ -126,4 +126,104 @@ describe('ApiMemoryService', () => {
       }),
     )
   })
+
+  it('读取真实 insights，带 status/insight_type 筛选', async () => {
+    const insight = {
+      insight_id: 'insight-1',
+      insight_type: 'INTEREST',
+      dimension: 'example_learning',
+      level: '较稳定',
+      description: '多次主动请求解释。',
+      evidence_ids: ['evidence-1'],
+      status: 'ACTIVE',
+      valid_from: '2026-08-19T08:00:00Z',
+      valid_until: null,
+      rule_version: 'profile-rule-v1',
+      updated_at: '2026-08-19T08:00:00Z',
+    }
+    const fetchMock = vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(200, { data: [insight] }),
+    )
+
+    await expect(
+      service.getInsights({ status: 'ACTIVE', insight_type: 'INTEREST' }),
+    ).resolves.toEqual([
+      {
+        ...insight,
+        student_id: '',
+        model_info: null,
+        created_at: insight.updated_at,
+      },
+    ])
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      '/api/v1/me/insights?status=ACTIVE&insight_type=INTEREST',
+    )
+  })
+
+  it('读取 insight 详情并展开 meta.evidence', async () => {
+    const evidence = {
+      evidence_id: 'evidence-1',
+      source_type: 'CONVERSATION',
+      event_ids: ['event-1'],
+      payload: { explain_requested_count: 2 },
+      count: 2,
+      first_occurred_at: '2026-08-19T08:00:00Z',
+      last_occurred_at: '2026-08-19T08:00:00Z',
+      derived_at: '2026-08-19T08:00:00Z',
+      rule_version: 'memory-rule-v1',
+    }
+    const insight = {
+      insight_id: 'insight-1',
+      insight_type: 'INTEREST',
+      dimension: 'example_learning',
+      level: '较稳定',
+      description: '多次主动请求解释。',
+      evidence_ids: ['evidence-1'],
+      status: 'ACTIVE',
+      valid_from: '2026-08-19T08:00:00Z',
+      valid_until: null,
+      rule_version: 'profile-rule-v1',
+      updated_at: '2026-08-19T08:00:00Z',
+    }
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(200, { data: insight, meta: { evidence: [evidence] } }),
+    )
+
+    await expect(service.getInsightDetail('insight-1')).resolves.toEqual({
+      insight: expect.objectContaining({ insight_id: 'insight-1', level: '较稳定' }),
+      evidence: [expect.objectContaining({ evidence_id: 'evidence-1' })],
+    })
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/api/v1/me/insights/insight-1')
+  })
+
+  it('读取 episodes 列表与详情', async () => {
+    const episode = {
+      episode_id: 'episode-1',
+      title: '主动向霜铃提问',
+      summary: '多次请求解释当前内容。',
+      occurred_at: '2026-08-19T08:00:00Z',
+      event_ids: ['event-1'],
+      book_id: null,
+      chapter_id: null,
+      knowledge_point_ids: [],
+      importance: 'MEDIUM',
+      tags: ['conversation'],
+      created_at: '2026-08-19T08:00:00Z',
+    }
+    const fetchMock = vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse(200, { data: [episode] }))
+      .mockResolvedValueOnce(jsonResponse(200, { data: episode }))
+
+    await expect(service.getEpisodes({ importance: 'MEDIUM' })).resolves.toEqual([
+      { ...episode, student_id: '' },
+    ])
+    await expect(service.getEpisodeDetail('episode-1')).resolves.toEqual({
+      ...episode,
+      student_id: '',
+    })
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/v1/me/episodes?importance=MEDIUM',
+      '/api/v1/me/episodes/episode-1',
+    ])
+  })
 })
