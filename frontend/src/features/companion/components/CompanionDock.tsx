@@ -62,7 +62,9 @@ export function CompanionDock({ dockRef }: CompanionDockProps) {
           {/* sprite 占位：真实 spritesheet（spritesheet-extended.webp）资产缺失，
               以渐变圆形 + emoji + 帧号呈现状态变化；Phase 11 / 资产接入时替换 */}
           <span
-            className="relative z-1 grid h-32 w-32 place-items-center rounded-full text-5xl"
+            className={`relative z-1 grid h-32 w-32 place-items-center rounded-full text-5xl ${
+              aiState === 'speaking' ? 'animate-pulse' : ''
+            }`}
             style={{
               background:
                 'radial-gradient(circle at 35% 30%, var(--color-accent-soft), var(--color-accent))',

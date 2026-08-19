@@ -54,6 +54,7 @@ test.describe('黄金路径', () => {
     // 3. 打开 companion
     await page.getByRole('button', { name: '打开霜铃 AI 教师' }).click()
     await expect(page.getByRole('complementary', { name: '霜铃对话面板' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '语音输入' })).toBeVisible()
 
     // 4. 发送消息 → 流式 AI 回复
     await page.getByLabel('消息输入').fill('那它为什么会出错？')

@@ -107,6 +107,8 @@ interface ConversationStore {
   conversationId: string | null
   loaded: boolean
   load: () => Promise<void>
+  ensureConversationId: () => Promise<string>
+  refresh: () => Promise<void>
   send: (raw: string, screenContext?: ScreenContext) => Promise<void>
   abortCurrent: () => void
   runIntent: (intent: ConversationIntent, selectedText?: string) => void
@@ -165,9 +167,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     return loadPromise
   },
 
-  async send(raw: string, screenContext?: ScreenContext) {
-    const text = raw.trim()
-    if (!text) return
+  async ensureConversationId() {
     await get().load()
     let conversationId = get().conversationId
     if (!conversationId) {
@@ -175,6 +175,27 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       conversationId = conversation.conversation_id
       set({ conversationId })
     }
+    return conversationId
+  },
+
+  async refresh() {
+    const conversationId = get().conversationId
+    if (!conversationId) return
+    try {
+      const serviceMessages = await conversationService.getMessages(conversationId, {
+        sort: 'asc',
+      })
+      set({ messages: serviceMessages.map(toChatMessage), loaded: true })
+    } catch {
+      // 语音 final 后的历史刷新失败不阻塞状态机。
+    }
+  },
+
+  async send(raw: string, screenContext?: ScreenContext) {
+    const text = raw.trim()
+    if (!text) return
+    await get().load()
+    const conversationId = await get().ensureConversationId()
 
     const userMessage: ChatMessage = {
       id: nextId(),
