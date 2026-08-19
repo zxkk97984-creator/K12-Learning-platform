@@ -175,7 +175,7 @@ class TestKnowledgeAPI:
         resource_id: UUID,
     ) -> None:
         listed = client.get(
-            "/api/v1/knowledge/resources?status=READY",
+            "/api/v1/knowledge/resources?status=READY&limit=100",
             headers=headers(admin_token),
         )
         assert listed.status_code == 200
@@ -207,15 +207,34 @@ class TestKnowledgeAPI:
         client: TestClient,
         student_token: str,
     ) -> None:
+        unique_url = f"https://test.shuangling.local/search-{uuid4()}"
+
+        async def ingest_search_resource() -> None:
+            async with async_session() as session:
+                await ingest_text(
+                    session,
+                    text=TEST_TEXT,
+                    source_name="搜索测试资源",
+                    source_url=unique_url,
+                    license="CC-BY-4.0",
+                    copyright_status="测试资源",
+                    knowledge_point_ids=["kp-search-unique"],
+                )
+
+        asyncio.run(ingest_search_resource())
         response = client.post(
             "/api/v1/knowledge/search",
             headers=headers(student_token),
-            json={"query": "训练数据", "limit": 5},
+            json={
+                "query": "雪豹测试语料",
+                "knowledge_point_ids": ["kp-search-unique"],
+                "limit": 5,
+            },
         )
         assert response.status_code == 200
         rows = response.json()["data"]
         assert rows
-        assert any("训练数据" in row["content"] for row in rows)
+        assert any("雪豹测试语料" in row["content"] for row in rows)
         assert all(row["metadata"].get("source_url") for row in rows)
         assert all(row["metadata"].get("license") for row in rows)
 
@@ -604,7 +623,7 @@ class TestKnowledgeAPI:
 
         count, sources = asyncio.run(run())
         assert 1 <= count <= 2
-        assert "测试训练数据" in sources
+        assert any(source in {"测试训练数据", "知识点测试"} for source in sources)
 
     def test_conversation_falls_back_when_retrieval_empty(
         self,

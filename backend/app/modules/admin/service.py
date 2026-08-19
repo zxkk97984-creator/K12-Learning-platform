@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 from uuid import UUID, uuid4
 
@@ -35,7 +36,13 @@ from app.modules.admin.schemas import (
     PatchChapterRequest,
     PatchContentBlockRequest,
     PatchKnowledgePointRequest,
+    PatchKnowledgeResourceRequest,
 )
+from app.modules.knowledge.ingestion import ingest_text
+from app.modules.knowledge.schemas import KnowledgeResourceDTO
+
+
+STORAGE_ROOT = Path(__file__).resolve().parents[3] / "storage" / "knowledge"
 
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
@@ -121,6 +128,12 @@ class IdempotencyService:
 
 
 class AdminService:
+    def _storage_path(self, storage_key: str) -> Path:
+        path = STORAGE_ROOT / storage_key
+        if not str(path.resolve()).startswith(str(STORAGE_ROOT.resolve())):
+            raise _error(422, "VALIDATION_ERROR", "invalid storage key")
+        return path
+
     async def stats(self, session: AsyncSession) -> AdminStatsDTO:
         async def count(model, *filters) -> int:
             query = select(func.count()).select_from(model)
@@ -398,3 +411,95 @@ class AdminService:
             "name": point.name,
             "slug": point.slug,
         }
+
+    async def upload_knowledge_resource(
+        self,
+        session: AsyncSession,
+        admin: AdminPrincipal,
+        *,
+        file_bytes: bytes,
+        filename: str,
+        source_name: str,
+        source_url: str,
+        author: str | None,
+        license: str,
+        copyright_status: str,
+    ) -> KnowledgeResourceDTO:
+        if admin.admin_id is None:
+            raise _error(422, "ADMIN_NOT_REGISTERED", "admin profile not registered")
+        ext = Path(filename).suffix.lower().lstrip(".")
+        file_type = {"md": "MARKDOWN", "markdown": "MARKDOWN", "txt": "TXT", "html": "HTML"}.get(
+            ext
+        )
+        if file_type is None:
+            raise _error(
+                422,
+                "UNSUPPORTED_FILE_TYPE",
+                "only MARKDOWN/TXT/HTML are supported; PDF parsing lands in Phase 12",
+            )
+        if not source_name.strip() or not source_url.strip():
+            raise _error(422, "VALIDATION_ERROR", "source_name and source_url are required")
+        if not license.strip() or not copyright_status.strip():
+            raise _error(422, "VALIDATION_ERROR", "license and copyright_status are required")
+
+        storage_key = f"{admin.admin_id}/{uuid4()}.{ext}"
+        path = self._storage_path(storage_key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(file_bytes)
+        text = file_bytes.decode("utf-8", errors="replace")
+        resource_id, _ = await ingest_text(
+            session,
+            text=text,
+            source_name=source_name,
+            source_url=source_url,
+            license=license,
+            copyright_status=copyright_status,
+            author=author,
+            storage_key=storage_key,
+        )
+        resource = await session.get(KnowledgeResource, resource_id)
+        if resource is None:
+            raise _error(404, "RESOURCE_NOT_FOUND", "resource not found")
+        return KnowledgeResourceDTO.model_validate(resource)
+
+    async def patch_knowledge_resource(
+        self,
+        session: AsyncSession,
+        resource_id: UUID,
+        request: PatchKnowledgeResourceRequest,
+    ) -> KnowledgeResourceDTO:
+        resource = await session.get(KnowledgeResource, resource_id)
+        if resource is None:
+            raise _error(404, "RESOURCE_NOT_FOUND", "resource not found")
+        for key, value in request.model_dump(exclude_unset=True).items():
+            setattr(resource, key, value)
+        resource.updated_at = datetime.now(timezone.utc)
+        await session.flush()
+        return KnowledgeResourceDTO.model_validate(resource)
+
+    async def reprocess_knowledge_resource(
+        self,
+        session: AsyncSession,
+        resource_id: UUID,
+    ) -> KnowledgeResourceDTO:
+        resource = await session.get(KnowledgeResource, resource_id)
+        if resource is None:
+            raise _error(404, "RESOURCE_NOT_FOUND", "resource not found")
+        path = self._storage_path(str(resource.storage_key))
+        if not path.exists():
+            raise _error(422, "SOURCE_FILE_MISSING", "stored source file is missing")
+        text = path.read_text(encoding="utf-8", errors="replace")
+        await ingest_text(
+            session,
+            text=text,
+            source_name=resource.source_name,
+            source_url=resource.source_url,
+            license=resource.license,
+            copyright_status=resource.copyright_status,
+            author=resource.author,
+            storage_key=str(resource.storage_key),
+            force_reprocess=True,
+        )
+        resource = await session.get(KnowledgeResource, resource_id)
+        await session.refresh(resource)
+        return KnowledgeResourceDTO.model_validate(resource)

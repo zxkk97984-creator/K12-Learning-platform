@@ -129,3 +129,11 @@ class PatchKnowledgePointRequest(BaseModel):
     topic: str | None = Field(default=None, max_length=64)
     parent_id: UUID | None = None
     status: KnowledgePointStatus | None = None
+
+
+class PatchKnowledgeResourceRequest(BaseModel):
+    source_name: str | None = Field(default=None, min_length=1, max_length=255)
+    source_url: str | None = Field(default=None, min_length=1, max_length=512)
+    author: str | None = Field(default=None, max_length=255)
+    license: str | None = Field(default=None, min_length=1, max_length=128)
+    copyright_status: str | None = Field(default=None, min_length=1, max_length=128)

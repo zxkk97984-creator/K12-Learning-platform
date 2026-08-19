@@ -11,6 +11,7 @@ import QuizDetailPage from '@/pages/quizzes/QuizDetailPage'
 import ProfilePage from '@/pages/profile/ProfilePage'
 import MemoriesPage from '@/pages/profile/MemoriesPage'
 import SettingsPage from '@/pages/settings/SettingsPage'
+import { AdminBooks, AdminDashboard, AdminKnowledge, AdminLayout } from '@/pages/admin'
 import LoginPage from '@/pages/login/LoginPage'
 import { AppLayout } from '@/shared/ui/AppLayout'
 
@@ -24,7 +25,7 @@ function NotFoundPage() {
 }
 
 function RequireAuth({ children }: { children: ReactNode }) {
-  const { currentUser, loading } = useAuth()
+  const { currentUser, authUser, loading } = useAuth()
   const location = useLocation()
   if (loading) {
     return (
@@ -33,13 +34,25 @@ function RequireAuth({ children }: { children: ReactNode }) {
       </div>
     )
   }
-  if (!currentUser) {
+  if (!currentUser && !authUser) {
     return (
       <Navigate
         to="/login"
         replace
         state={{ from: `${location.pathname}${location.search}` }}
       />
+    )
+  }
+  return <>{children}</>
+}
+
+function AdminGuard({ children }: { children: ReactNode }) {
+  const { authUser } = useAuth()
+  if (!authUser || authUser.user_type !== 'ADMIN') {
+    return (
+      <section className="py-10">
+        <h1 className="font-display text-3xl text-fg">403 · 仅管理员可访问</h1>
+      </section>
     )
   }
   return <>{children}</>
@@ -63,6 +76,19 @@ export const router = createBrowserRouter([
       { path: '/profile', element: <ProfilePage /> },
       { path: '/profile/memories', element: <MemoriesPage /> },
       { path: '/settings', element: <SettingsPage /> },
+      {
+        path: '/admin',
+        element: (
+          <AdminGuard>
+            <AdminLayout />
+          </AdminGuard>
+        ),
+        children: [
+          { index: true, element: <AdminDashboard /> },
+          { path: 'books', element: <AdminBooks /> },
+          { path: 'knowledge', element: <AdminKnowledge /> },
+        ],
+      },
     ],
   },
   { path: '/login', element: <LoginPage /> },

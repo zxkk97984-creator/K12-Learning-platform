@@ -285,3 +285,77 @@ class TestAdminAPI:
         constraints = asyncio.run(run())
         assert "fk_books_created_by_admin" in constraints
         assert "fk_knowledge_resources_uploaded_by_admin" in constraints
+
+    def test_knowledge_upload_reprocess_and_metadata_patch(
+        self,
+        client: TestClient,
+        admin_token: str,
+    ) -> None:
+        content = "# 上传测试\n\n这是一段用于验证上传管线的知识内容。".encode("utf-8")
+        uploaded = client.post(
+            "/api/v1/admin/knowledge/resources",
+            headers=headers(admin_token, **{"Idempotency-Key": f"upload-{uuid4()}"}),
+            files={"file": ("upload-test.md", content, "text/markdown")},
+            data={
+                "source_name": "上传测试资源",
+                "source_url": "https://test.shuangling.local/upload-test",
+                "license": "CC-BY-4.0",
+                "copyright_status": "测试",
+            },
+        )
+        assert uploaded.status_code == 201
+        data = uploaded.json()["data"]
+        assert data["status"] == "READY"
+        resource_id = data["resource_id"]
+
+        listed = client.get(
+            "/api/v1/knowledge/resources?status=READY",
+            headers=headers(admin_token),
+        )
+        assert any(row["resource_id"] == resource_id for row in listed.json()["data"])
+
+        patched = client.patch(
+            f"/api/v1/admin/knowledge/resources/{resource_id}",
+            headers=headers(
+                admin_token, **{"Idempotency-Key": f"patch-resource-{uuid4()}"}
+            ),
+            json={"source_name": "上传测试资源（已更新）"},
+        )
+        assert patched.status_code == 200
+        assert patched.json()["data"]["source_name"] == "上传测试资源（已更新）"
+
+        reprocessed = client.post(
+            f"/api/v1/admin/knowledge/resources/{resource_id}/reprocess",
+            headers=headers(
+                admin_token, **{"Idempotency-Key": f"reprocess-{uuid4()}"}
+            ),
+        )
+        assert reprocessed.status_code == 200
+        assert reprocessed.json()["data"]["status"] == "READY"
+
+        pdf = client.post(
+            "/api/v1/admin/knowledge/resources",
+            headers=headers(admin_token, **{"Idempotency-Key": "upload-pdf-1"}),
+            files={"file": ("book.pdf", b"%PDF-1.4", "application/pdf")},
+            data={
+                "source_name": "PDF 测试",
+                "source_url": "https://test.shuangling.local/book.pdf",
+                "license": "CC-BY-4.0",
+                "copyright_status": "测试",
+            },
+        )
+        assert pdf.status_code == 422
+        assert pdf.json()["error"]["code"] == "UNSUPPORTED_FILE_TYPE"
+
+        missing_key = client.post(
+            "/api/v1/admin/knowledge/resources",
+            headers=headers(admin_token),
+            files={"file": ("upload-test.md", content, "text/markdown")},
+            data={
+                "source_name": "无幂等键",
+                "source_url": "https://test.shuangling.local/no-key",
+                "license": "CC-BY-4.0",
+                "copyright_status": "测试",
+            },
+        )
+        assert missing_key.status_code == 422

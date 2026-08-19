@@ -89,6 +89,7 @@ async def ingest_text(
     author: str | None = None,
     storage_key: str | None = None,
     knowledge_point_ids: list[str] | None = None,
+    force_reprocess: bool = False,
 ) -> tuple[UUID, int]:
     storage_key = storage_key or storage_key_for(source_url, source_name)
     existing = (
@@ -99,7 +100,11 @@ async def ingest_text(
             )
         )
     ).scalar_one_or_none()
-    if existing is not None and existing.status == "READY":
+    if (
+        existing is not None
+        and existing.status == "READY"
+        and not force_reprocess
+    ):
         return existing.resource_id, 0
 
     now = datetime.now(timezone.utc)

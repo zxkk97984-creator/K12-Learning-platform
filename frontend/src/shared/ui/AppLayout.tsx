@@ -14,8 +14,9 @@ const NAV_ITEMS = [
 ] as const
 
 export function AppLayout() {
-  const { currentUser, logout } = useAuth()
+  const { currentUser, authUser, logout } = useAuth()
   const navigate = useNavigate()
+  const isAdmin = authUser?.user_type === 'ADMIN'
 
   // 学段适配恢复（对齐原型 localStorage['shuangling-age']；1-B html[data-age]）
   useEffect(() => {
@@ -54,14 +55,31 @@ export function AppLayout() {
                 {item.label}
               </NavLink>
             ))}
+            {isAdmin ? (
+              <NavLink
+                to="/admin"
+                className={({ isActive }) =>
+                  [
+                    'min-h-[44px] rounded-[10px] px-3.5 py-2.5 text-sm transition-colors',
+                    isActive
+                      ? 'border border-border bg-surface text-fg shadow-sm'
+                      : 'text-muted hover:bg-fg-soft hover:text-fg',
+                  ].join(' ')
+                }
+              >
+                管理
+              </NavLink>
+            ) : null}
           </nav>
           <div className="flex items-center gap-2.5">
-            {currentUser ? (
+            {currentUser || authUser ? (
               <>
                 <span className="grid h-[30px] w-[30px] place-items-center rounded-full bg-fg font-display text-sm text-surface">
-                  {currentUser.nickname.slice(0, 1)}
+                  {(currentUser?.nickname ?? authUser?.username ?? '管').slice(0, 1)}
                 </span>
-                <span className="text-sm text-fg">{currentUser.nickname}</span>
+                <span className="text-sm text-fg">
+                  {currentUser?.nickname ?? (isAdmin ? '管理员' : authUser?.username)}
+                </span>
                 <button
                   type="button"
                   aria-label="退出登录"

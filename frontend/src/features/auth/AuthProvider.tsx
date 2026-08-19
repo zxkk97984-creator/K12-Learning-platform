@@ -8,13 +8,14 @@ import {
   type ReactNode,
 } from 'react'
 
-import type { StudentProfile } from '@/entities/student/types'
+import type { AuthUser, StudentProfile } from '@/entities/student/types'
 import { clearToken, getToken } from '@/shared/api/auth'
 import { ApiError } from '@/shared/api/http'
 import { studentService } from '@/mocks/services'
 
 interface AuthContextValue {
   token: string | null
+  authUser: AuthUser | null
   currentUser: StudentProfile | null
   loading: boolean
   login: (username: string, password: string) => Promise<void>
@@ -22,10 +23,26 @@ interface AuthContextValue {
   refreshMe: () => Promise<void>
 }
 
+function decodeAuthUser(token: string): AuthUser | null {
+  try {
+    const payload = JSON.parse(
+      atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')),
+    )
+    return {
+      user_id: String(payload.sub ?? ''),
+      username: String(payload.username ?? ''),
+      user_type: payload.user_type === 'ADMIN' ? 'ADMIN' : 'STUDENT',
+    }
+  } catch {
+    return null
+  }
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setTokenState] = useState<string | null>(() => getToken())
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [currentUser, setCurrentUser] = useState<StudentProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -37,9 +54,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     setTokenState(stored)
+    const decoded = decodeAuthUser(stored)
+    setAuthUser(decoded)
+    if (decoded?.user_type === 'ADMIN') {
+      setLoading(false)
+      return
+    }
     studentService
       .getMe()
       .then(setCurrentUser)
+      .then(() => setAuthUser(decoded))
       .catch((error: unknown) => {
         if (error instanceof ApiError && error.status === 401) clearToken()
       })
@@ -55,6 +79,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (username: string, password: string) => {
       const dto = await studentService.login(username, password)
       setTokenState(dto.access_token)
+      setAuthUser(dto.user)
+      if (dto.user.user_type === 'ADMIN') return
       await refreshMe()
     },
     [refreshMe],
@@ -66,13 +92,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       clearToken()
       setTokenState(null)
+      setAuthUser(null)
       setCurrentUser(null)
     }
   }, [])
 
   const value = useMemo(
-    () => ({ token, currentUser, loading, login, logout, refreshMe }),
-    [token, currentUser, loading, login, logout, refreshMe],
+    () => ({ token, authUser, currentUser, loading, login, logout, refreshMe }),
+    [token, authUser, currentUser, loading, login, logout, refreshMe],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

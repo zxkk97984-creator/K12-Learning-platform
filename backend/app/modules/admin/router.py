@@ -1,7 +1,18 @@
+import hashlib
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+)
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +28,7 @@ from app.modules.admin.schemas import (
     PatchChapterRequest,
     PatchContentBlockRequest,
     PatchKnowledgePointRequest,
+    PatchKnowledgeResourceRequest,
 )
 from app.modules.admin.service import (
     AdminService,
@@ -273,3 +285,112 @@ async def patch_knowledge_point(
 
 async def _patch_knowledge_point(session, knowledge_point_id, body):
     return ok(await service.patch_knowledge_point(session, knowledge_point_id, body))
+
+
+@router.post("/admin/knowledge/resources", status_code=201)
+async def upload_knowledge_resource(
+    _admin: Annotated[AdminPrincipal, Depends(require_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    file: Annotated[UploadFile, File()],
+    source_name: Annotated[str, Form()],
+    source_url: Annotated[str, Form()],
+    license: Annotated[str, Form()],
+    copyright_status: Annotated[str, Form()],
+    key: Annotated[str, Depends(require_idempotency_key)],
+    response: Response,
+    author: Annotated[str | None, Form()] = None,
+):
+    file_bytes = await file.read()
+    request_hash = canonical_request_hash(
+        {
+            "filename": file.filename,
+            "source_name": source_name,
+            "source_url": source_url,
+            "author": author,
+            "license": license,
+            "copyright_status": copyright_status,
+            "file_sha256": hashlib.sha256(file_bytes).hexdigest(),
+        }
+    )
+    result, replayed = await idempotency.execute(
+        session,
+        actor_id=actor_id(_admin),
+        actor_type="ADMIN",
+        key=key,
+        request_hash=request_hash,
+        handler=lambda: _upload_knowledge_resource(
+            session,
+            _admin,
+            file_bytes=file_bytes,
+            filename=file.filename or "resource.txt",
+            source_name=source_name,
+            source_url=source_url,
+            author=author,
+            license=license,
+            copyright_status=copyright_status,
+        ),
+    )
+    if replayed:
+        response.status_code = 200
+    return result
+
+
+async def _upload_knowledge_resource(session, admin, **kwargs):
+    return ok(
+        jsonable_encoder(
+            await service.upload_knowledge_resource(session, admin, **kwargs)
+        )
+    )
+
+
+@router.patch("/admin/knowledge/resources/{resource_id}")
+async def patch_knowledge_resource(
+    _admin: Annotated[AdminPrincipal, Depends(require_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    resource_id: UUID,
+    body: PatchKnowledgeResourceRequest,
+    key: Annotated[str, Depends(require_idempotency_key)],
+):
+    result, _ = await idempotency.execute(
+        session,
+        actor_id=actor_id(_admin),
+        actor_type="ADMIN",
+        key=key,
+        request_hash=canonical_request_hash(body.model_dump(exclude_unset=True)),
+        handler=lambda: _patch_knowledge_resource(session, resource_id, body),
+    )
+    return result
+
+
+async def _patch_knowledge_resource(session, resource_id, body):
+    return ok(
+        jsonable_encoder(
+            await service.patch_knowledge_resource(session, resource_id, body)
+        )
+    )
+
+
+@router.post("/admin/knowledge/resources/{resource_id}/reprocess")
+async def reprocess_knowledge_resource(
+    _admin: Annotated[AdminPrincipal, Depends(require_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    resource_id: UUID,
+    key: Annotated[str, Depends(require_idempotency_key)],
+):
+    result, _ = await idempotency.execute(
+        session,
+        actor_id=actor_id(_admin),
+        actor_type="ADMIN",
+        key=key,
+        request_hash=canonical_request_hash({"resource_id": str(resource_id)}),
+        handler=lambda: _reprocess_knowledge_resource(session, resource_id),
+    )
+    return result
+
+
+async def _reprocess_knowledge_resource(session, resource_id):
+    return ok(
+        jsonable_encoder(
+            await service.reprocess_knowledge_resource(session, resource_id)
+        )
+    )
