@@ -13,6 +13,8 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.factory import get_ai_provider
+from app.config import settings
 from app.infrastructure.database.models import (
     LearningEvent,
     MemoryCandidate,
@@ -171,6 +173,18 @@ def _episode_meta(source_type: str, facts: dict[str, Any]) -> tuple[str, str, st
 class MemoryPipeline:
     """Deterministic, idempotent pipeline over LearningEvent facts."""
 
+    async def _llm_text(self, prompt: str) -> str | None:
+        if settings.ai_provider.strip().lower() != "openai_compatible":
+            return None
+        try:
+            chunks = []
+            async for chunk in get_ai_provider().stream_chat([], prompt):
+                chunks.append(chunk)
+            text = "".join(chunks).strip()
+            return text or None
+        except Exception:
+            return None
+
     async def _all_evidence(
         self, session: AsyncSession, student_id: UUID
     ) -> list[MemoryEvidence]:
@@ -224,7 +238,17 @@ class MemoryPipeline:
         total_count = len(event_ids) + sum(
             len(row.event_ids or []) for row in related
         )
-        content = _candidate_content(source_type, facts)
+        llm_prompt = (
+            "请用一句中文描述这位学生的稳定学习表现，只描述事实与表现，不评分。"
+            f"来源类型：{source_type}；事实：{facts}"
+        )
+        llm_content = await self._llm_text(llm_prompt)
+        content = llm_content or _candidate_content(source_type, facts)
+        candidate_model_info = (
+            {"provider": "openai_compatible", "model": settings.ai_model}
+            if llm_content
+            else MODEL_INFO
+        )
         candidate_type = _candidate_type(source_type)
         confidence = "MEDIUM" if total_count >= 2 else "LOW"
         existing_candidate = (
@@ -253,7 +277,7 @@ class MemoryPipeline:
                 candidate_type=candidate_type,
                 content=content,
                 proposed_memory={
-                    "content": _memory_content(source_type, facts),
+                    "content": llm_content or _memory_content(source_type, facts),
                     "tags": [source_type.lower()],
                     "confidence": confidence,
                 },
@@ -261,13 +285,13 @@ class MemoryPipeline:
                 confidence=confidence,
                 status="APPROVED" if total_count >= 2 else "PENDING",
                 rule_version=RULE_VERSION,
-                model_info=MODEL_INFO,
+                model_info=candidate_model_info,
             )
             session.add(candidate)
             await session.flush()
 
         if total_count >= 2:
-            memory_content = _memory_content(source_type, facts)
+            memory_content = llm_content or _memory_content(source_type, facts)
             existing_memory = (
                 await session.execute(
                     select(StudentMemory)
@@ -462,6 +486,20 @@ class MemoryPipeline:
 
         if not candidates:
             return
+        for candidate in candidates:
+            llm_description = await self._llm_text(
+                "请用一句中文、定性描述学生的画像表现，不要使用数字评分。"
+                f"类型：{candidate['insight_type']}；维度：{candidate['dimension']}；"
+                f"档位：{candidate['level']}；原描述：{candidate['description']}"
+            )
+            if llm_description:
+                candidate["description"] = llm_description
+                candidate["model_info"] = {
+                    "provider": "openai_compatible",
+                    "model": settings.ai_model,
+                }
+            else:
+                candidate["model_info"] = MODEL_INFO
         now = datetime.now(timezone.utc)
         active_rows = (
             await session.execute(
@@ -488,7 +526,7 @@ class MemoryPipeline:
                     valid_from=now,
                     valid_until=None,
                     rule_version=INSIGHT_RULE_VERSION,
-                    model_info=MODEL_INFO,
+                    model_info=candidate["model_info"],
                 )
             )
 

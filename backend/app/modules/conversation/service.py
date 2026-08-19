@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.base import AIProvider
 from app.ai.factory import get_ai_provider
+from app.config import settings
 from app.infrastructure.database.models import (
     Conversation,
     ConversationSummary,
@@ -32,7 +33,11 @@ from app.modules.conversation.schemas import (
     PatchConversationRequest,
     SendMessageRequest,
 )
-from app.modules.memory.agent_md import build_evidence_reply, is_evidence_question
+from app.modules.memory.agent_md import (
+    build_evidence_context,
+    build_evidence_reply,
+    is_evidence_question,
+)
 from app.modules.knowledge.retrieval import retrieve
 from app.modules.identity.service import IdentityService
 from app.modules.quiz.schemas import CreateQuizSessionRequest
@@ -348,13 +353,35 @@ class ConversationService:
         request_id = str(uuid4())
         quiz_intent = _is_quiz_intent(request.content)
         evidence_reply: str | None = None
+        evidence_context: str | None = None
+        evidence_model_info = {"provider": "rule", "model": "memory-rule-v1"}
         try:
             if is_evidence_question(request.content):
                 evidence_reply = await build_evidence_reply(
                     session, profile.student_id, request.content
                 )
+                evidence_context = await build_evidence_context(
+                    session, profile.student_id, request.content
+                )
         except Exception:  # pragma: no cover - evidence citation must not break chat
             evidence_reply = None
+        real_provider = settings.ai_provider.strip().lower() == "openai_compatible"
+        if real_provider and evidence_context:
+            try:
+                evidence_prompt = (
+                    "你是霜铃，一位严谨、可解释的中文 K12 数字教师。\n"
+                    f"【证据上下文】\n{evidence_context}\n"
+                    "请基于以上真实证据回答学生为什么这样判断，只引用证据中出现的事实。"
+                )
+                provider = get_ai_provider()
+                llm_chunks = []
+                async for chunk in provider.stream_chat([], evidence_prompt):
+                    llm_chunks.append(chunk)
+                if "".join(llm_chunks).strip():
+                    evidence_reply = "".join(llm_chunks)
+                    evidence_model_info = provider.model_info
+            except Exception:
+                evidence_reply = evidence_reply or None
         retrieved_chunks = []
         try:
             if not quiz_intent and evidence_reply is None:
@@ -375,27 +402,33 @@ class ConversationService:
                 lines.append(f"- 来源：{item.source_name}")
                 lines.append(f"- 链接：{url}")
             reference_block = "\n".join(lines)
-        system_prompt = (
-            "你是霜铃，一位耐心、清晰的中文 K12 数字教师。"
-            "请根据学生的问题循序解释，鼓励学生自己思考。"
-            f"当前页面上下文：{json.dumps(current_context, ensure_ascii=False)}"
-        )
+        persona_block = ""
         role_id = conversation.teacher_role_id or profile.current_teacher_role_id
         if role_id is not None:
             role = await session.get(TeacherRole, role_id)
             if role is not None:
                 persona = role.persona or {}
-                system_prompt += (
-                    "\n\n【教师人格】\n"
+                persona_block = (
+                    "【教师人格】\n"
                     f"base_persona：{persona.get('base_persona', '')}\n"
                     f"tone：{role.tone}\n"
                     f"teaching_style：{role.teaching_style}"
                 )
-        if reference_block:
-            system_prompt += (
-                f"\n\n{reference_block}\n"
-                "请优先基于知识库参考回答，并在末尾注明（参考：来源名称）。"
-            )
+        instruction_block = (
+            "你是霜铃，一位耐心、清晰、不编造事实的中文 K12 数字教师。"
+            "请根据学生的问题循序解释，鼓励学生自己思考；引用知识库或证据时必须注明来源。"
+            f"当前页面上下文：{json.dumps(current_context, ensure_ascii=False)}"
+        )
+        system_prompt = "\n\n".join(
+            part
+            for part in [
+                persona_block,
+                reference_block,
+                f"【证据上下文】\n{evidence_context}" if evidence_context else "",
+                instruction_block,
+            ]
+            if part
+        )
 
         async def stream() -> AsyncIterator[str]:
             yield _sse_frame(
@@ -514,7 +547,7 @@ class ConversationService:
                     event_id=teacher_message_id,
                 )
                 content = "".join(chunks)
-                model_info = dict(self.quiz_service.skill.model_info)
+                model_info = dict(quiz_session.model_info or {})
                 yield _sse_frame(
                     "text.done",
                     {
@@ -568,7 +601,7 @@ class ConversationService:
 
             if evidence_reply is not None:
                 content = evidence_reply
-                model_info = {"provider": "rule", "model": "memory-rule-v1"}
+                model_info = evidence_model_info
                 delta_index = 0
                 for index in range(0, len(content), 8):
                     chunk = content[index : index + 8]

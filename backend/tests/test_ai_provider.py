@@ -2,6 +2,7 @@ import asyncio
 
 from app.ai.factory import get_ai_provider
 from app.ai.mock import MockAIProvider
+from app.ai.openai_compatible import OpenAICompatibleProvider
 from app.config import settings
 
 
@@ -96,3 +97,79 @@ def test_mock_provider_truncates_long_reference_content() -> None:
     assert "长文档" in reply
     snippet = reply.removeprefix("根据知识库资料：").split("（参考：")[0]
     assert len(snippet) <= 140
+
+
+def test_factory_switches_to_openai_compatible_and_validates_config() -> None:
+    original = (
+        settings.ai_provider,
+        settings.ai_base_url,
+        settings.ai_api_key,
+        settings.ai_model,
+    )
+    try:
+        settings.ai_provider = "openai_compatible"
+        settings.ai_base_url = "https://api.example.com"
+        settings.ai_api_key = "secret-key"
+        settings.ai_model = "test-model"
+        provider = get_ai_provider()
+        assert isinstance(provider, OpenAICompatibleProvider)
+        assert provider.model == "test-model"
+
+        settings.ai_api_key = ""
+        try:
+            get_ai_provider()
+        except ValueError as exc:
+            assert "required" in str(exc)
+        else:
+            raise AssertionError("missing key should raise ValueError")
+    finally:
+        (
+            settings.ai_provider,
+            settings.ai_base_url,
+            settings.ai_api_key,
+            settings.ai_model,
+        ) = original
+
+
+def test_openai_compatible_provider_returns_full_text(
+    monkeypatch,
+) -> None:
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"content": "真实的 DeepSeek 回复"}}]}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, *args, **kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr("app.ai.openai_compatible.httpx.AsyncClient", FakeClient)
+    provider = OpenAICompatibleProvider(
+        base_url="https://api.example.com/v1",
+        api_key="key",
+        model="deepseek-chat",
+    )
+
+    async def collect():
+        return [
+            chunk
+            async for chunk in provider.stream_chat(
+                [{"role": "user", "content": "你好"}],
+                "你是霜铃",
+            )
+        ]
+
+    assert "".join(asyncio.run(collect())) == "真实的 DeepSeek 回复"

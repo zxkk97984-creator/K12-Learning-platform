@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     ai_provider: str = "mock"
     ai_model: str = "mock-model"
     ai_max_tokens: int = 512
+    ai_base_url: str = ""
+    ai_api_key: str = ""
     embedding_provider: str = "mock"
     embedding_dimension: int = 64
     voice_provider: str = "mock"

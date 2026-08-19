@@ -286,3 +286,43 @@ async def build_evidence_reply(
             f"我判断：{insight.description}"
         )
     return "我还在观察中，暂时没有足够证据来回答这个判断。"
+
+
+async def build_evidence_context(
+    session: AsyncSession,
+    student_id: UUID,
+    content: str,
+) -> str | None:
+    """Return structured evidence context for the real LLM evidence branch."""
+    if not is_evidence_question(content):
+        return None
+    insights = (
+        await session.execute(
+            select(ProfileInsight)
+            .where(
+                ProfileInsight.student_id == student_id,
+                ProfileInsight.status == "ACTIVE",
+            )
+            .order_by(ProfileInsight.valid_from.desc())
+        )
+    ).scalars().all()
+    if not insights:
+        return None
+    blocks: list[str] = []
+    for insight in insights[:3]:
+        evidence = await _evidence_by_ids(
+            session, student_id, list(insight.evidence_ids or [])
+        )
+        if not evidence:
+            continue
+        facts = []
+        for evidence_id in list(evidence.keys()):
+            row = evidence[evidence_id]
+            facts.append(
+                f"{row.source_type}：{_payload_summary(row.payload)}（证据：{evidence_id}）"
+            )
+        blocks.append(
+            f"画像：{insight.dimension}（{insight.level}）——{insight.description}；"
+            f"证据：{'；'.join(facts)}"
+        )
+    return "\n".join(blocks) if blocks else None
