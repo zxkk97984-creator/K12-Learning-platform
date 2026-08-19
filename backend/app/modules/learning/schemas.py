@@ -101,6 +101,13 @@ class BookProgressDTO(BaseModel):
     updated_at: datetime
 
 
+class UpsertBookProgressRequest(BaseModel):
+    chapter_id: UUID | None = None
+    block_id: UUID | None = None
+    status: BookProgressStatus | None = None
+    position_percent: int | None = Field(default=None, ge=0, le=100)
+
+
 class EventPageMeta(BaseModel):
     next_cursor: str | None
     has_more: bool

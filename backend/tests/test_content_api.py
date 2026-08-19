@@ -31,10 +31,17 @@ KP2_ID = UUID("10000000-0000-0000-0000-000000000002")
 
 
 def _ensure_content() -> None:
+    """幂等 seed：按固定 UUID 逐项检查，缺什么补什么（不与 3-C seed_content 随机 UUID 冲突）。"""
+
     async def run() -> None:
         async with async_session() as session:
-            result = await session.execute(select(Book).where(Book.book_id == BOOK_ID))
-            if result.scalar_one_or_none() is not None:
+            existing_books = {
+                row[0]
+                for row in (
+                    await session.execute(select(Book.book_id).where(Book.book_id == BOOK_ID))
+                ).all()
+            }
+            if BOOK_ID in existing_books:
                 return
             session.add(
                 Book(
@@ -70,24 +77,36 @@ def _ensure_content() -> None:
                     status="PUBLISHED",
                 )
             )
-            session.add(
-                KnowledgePoint(
-                    knowledge_point_id=KP1_ID,
-                    name="训练数据",
-                    slug="training_data",
-                    description="训练数据是一组用来帮助机器发现规律的例子。",
-                    topic="AI 基础",
+            existing_kps = {
+                row[0]
+                for row in (
+                    await session.execute(
+                        select(KnowledgePoint.knowledge_point_id).where(
+                            KnowledgePoint.knowledge_point_id.in_([KP1_ID, KP2_ID])
+                        )
+                    )
+                ).all()
+            }
+            if KP1_ID not in existing_kps:
+                session.add(
+                    KnowledgePoint(
+                        knowledge_point_id=KP1_ID,
+                        name="训练数据",
+                        slug="training_data",
+                        description="训练数据是一组用来帮助机器发现规律的例子。",
+                        topic="AI 基础",
+                    )
                 )
-            )
-            session.add(
-                KnowledgePoint(
-                    knowledge_point_id=KP2_ID,
-                    name="标签",
-                    slug="label",
-                    description="我们希望机器学会的答案。",
-                    topic="AI 基础",
+            if KP2_ID not in existing_kps:
+                session.add(
+                    KnowledgePoint(
+                        knowledge_point_id=KP2_ID,
+                        name="标签",
+                        slug="label",
+                        description="我们希望机器学会的答案。",
+                        topic="AI 基础",
+                    )
                 )
-            )
             session.add(
                 ContentBlock(
                     block_id=BLK1_ID,

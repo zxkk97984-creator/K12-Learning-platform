@@ -12,6 +12,7 @@ from app.modules.learning.schemas import (
     CreateLearningEventRequest,
     CreateLearningSessionRequest,
     PatchLearningSessionRequest,
+    UpsertBookProgressRequest,
 )
 from app.modules.learning.service import LearningService
 
@@ -62,6 +63,16 @@ async def get_book_progress(
     book_id: UUID,
 ):
     return ok(await service.get_book_progress(session, user.user_id, book_id))
+
+
+@router.put("/me/progress/{book_id}")
+async def upsert_book_progress(
+    user: Annotated[User, Depends(require_student)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    book_id: UUID,
+    body: UpsertBookProgressRequest,
+):
+    return ok(await service.upsert_book_progress(session, user.user_id, book_id, body))
 
 
 @router.get("/me/learning-events")

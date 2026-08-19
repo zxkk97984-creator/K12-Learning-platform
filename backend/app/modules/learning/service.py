@@ -24,6 +24,7 @@ from app.modules.learning.schemas import (
     LearningEventDTO,
     LearningSessionDTO,
     PatchLearningSessionRequest,
+    UpsertBookProgressRequest,
 )
 
 
@@ -231,6 +232,76 @@ class LearningService:
             )
         ).scalar_one_or_none()
         return BookProgressDTO.model_validate(progress) if progress is not None else None
+
+    async def upsert_book_progress(
+        self,
+        session: AsyncSession,
+        user_id: UUID,
+        book_id: UUID,
+        request: UpsertBookProgressRequest,
+    ) -> BookProgressDTO:
+        student_id = await self._get_student_id(session, user_id)
+        book = await session.get(Book, book_id)
+        if book is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "BOOK_NOT_FOUND", "message": "book not found"},
+            )
+
+        if request.chapter_id is not None:
+            chapter = await session.get(Chapter, request.chapter_id)
+            if chapter is None or chapter.book_id != book_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "VALIDATION_ERROR",
+                        "message": "chapter does not belong to book",
+                    },
+                )
+
+        progress = (
+            await session.execute(
+                select(BookProgress).where(
+                    BookProgress.student_id == student_id,
+                    BookProgress.book_id == book_id,
+                )
+            )
+        ).scalar_one_or_none()
+        now = datetime.now(timezone.utc)
+
+        if progress is None:
+            status = request.status or "READING"
+            progress = BookProgress(
+                student_id=student_id,
+                book_id=book_id,
+                chapter_id=request.chapter_id,
+                block_id=request.block_id,
+                status=status,
+                position_percent=request.position_percent
+                if request.position_percent is not None
+                else 0,
+                last_read_at=now,
+                started_at=now if status != "NOT_STARTED" else None,
+                completed_at=now if status == "COMPLETED" else None,
+            )
+            session.add(progress)
+        else:
+            if request.chapter_id is not None:
+                progress.chapter_id = request.chapter_id
+            if request.block_id is not None:
+                progress.block_id = request.block_id
+            if request.status is not None:
+                progress.status = request.status
+                progress.completed_at = now if request.status == "COMPLETED" else None
+            if request.position_percent is not None:
+                progress.position_percent = request.position_percent
+            if progress.started_at is None and progress.status != "NOT_STARTED":
+                progress.started_at = now
+            progress.last_read_at = now
+
+        await session.commit()
+        await session.refresh(progress)
+        return BookProgressDTO.model_validate(progress)
 
     async def list_events(
         self,

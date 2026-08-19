@@ -6,10 +6,11 @@ from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.infrastructure.database.models import (
     Book,
+    BookProgress,
     Chapter,
     StudentPreference,
     StudentProfile,
@@ -141,6 +142,15 @@ def headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _clear_book_progress() -> None:
+    async def run() -> None:
+        async with async_session() as session:
+            await session.execute(delete(BookProgress).where(BookProgress.book_id == BOOK1_ID))
+            await session.commit()
+
+    asyncio.run(run())
+
+
 class TestLearningAPI:
     def test_requires_auth(self, client: TestClient) -> None:
         assert client.get("/api/v1/me/progress").status_code == 401
@@ -245,6 +255,89 @@ class TestLearningAPI:
         )
         assert missing.status_code == 404
         assert missing.json()["error"]["code"] == "BOOK_NOT_FOUND"
+
+    def test_upsert_progress_creates_with_defaults(self, client: TestClient, token: str) -> None:
+        _clear_book_progress()
+        response = client.put(
+            f"/api/v1/me/progress/{BOOK1_ID}",
+            headers=headers(token),
+            json={"chapter_id": str(CH1_ID), "position_percent": 42},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["book_id"] == str(BOOK1_ID)
+        assert data["chapter_id"] == str(CH1_ID)
+        assert data["status"] == "READING"
+        assert data["position_percent"] == 42
+        assert data["last_read_at"] is not None
+
+    def test_upsert_progress_updates_existing_row_partially(
+        self, client: TestClient, token: str
+    ) -> None:
+        _clear_book_progress()
+        created = client.put(
+            f"/api/v1/me/progress/{BOOK1_ID}",
+            headers=headers(token),
+            json={"chapter_id": str(CH1_ID), "position_percent": 20},
+        )
+        assert created.status_code == 200
+        progress_id = created.json()["data"]["progress_id"]
+
+        updated = client.put(
+            f"/api/v1/me/progress/{BOOK1_ID}",
+            headers=headers(token),
+            json={"status": "COMPLETED", "position_percent": 100},
+        )
+        assert updated.status_code == 200
+        data = updated.json()["data"]
+        assert data["progress_id"] == progress_id
+        assert data["chapter_id"] == str(CH1_ID)
+        assert data["status"] == "COMPLETED"
+        assert data["position_percent"] == 100
+        assert data["last_read_at"] is not None
+
+    def test_upsert_progress_rejects_chapter_from_another_book(
+        self, client: TestClient, token: str
+    ) -> None:
+        _clear_book_progress()
+        response = client.put(
+            f"/api/v1/me/progress/{BOOK1_ID}",
+            headers=headers(token),
+            json={"chapter_id": str(CH2_ID)},
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    @pytest.mark.parametrize("position_percent", [-1, 101])
+    def test_upsert_progress_rejects_position_out_of_range(
+        self, client: TestClient, token: str, position_percent: int
+    ) -> None:
+        response = client.put(
+            f"/api/v1/me/progress/{BOOK1_ID}",
+            headers=headers(token),
+            json={"position_percent": position_percent},
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    def test_upsert_progress_rejects_invalid_status(self, client: TestClient, token: str) -> None:
+        response = client.put(
+            f"/api/v1/me/progress/{BOOK1_ID}",
+            headers=headers(token),
+            json={"status": "PAUSED"},
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    def test_upsert_progress_rejects_missing_book(self, client: TestClient, token: str) -> None:
+        missing_book_id = UUID("b9999999-0000-0000-0000-000000000009")
+        response = client.put(
+            f"/api/v1/me/progress/{missing_book_id}",
+            headers=headers(token),
+            json={"position_percent": 10},
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "BOOK_NOT_FOUND"
 
     def test_list_events_with_filter(self, client: TestClient, token: str) -> None:
         response = client.get("/api/v1/me/learning-events", headers=headers(token))
