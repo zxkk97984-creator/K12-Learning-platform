@@ -22,6 +22,25 @@ FRONTEND_PORT=5174
 WITH_MINIO="${1:-}"
 BACKEND_ONLY="${2:-}"
 
+# 图形化启动器通常不会读取 ~/.bashrc，因而不会加载 NVM 的 Node/pnpm 路径。
+# 先补常见用户级路径，避免「终端里有 pnpm、双击脚本却找不到」的环境差异。
+export PATH="$HOME/.local/bin:$HOME/.local/share/pnpm:$PATH"
+if [ -d "$HOME/.nvm/versions/node" ]; then
+  for node_bin in "$HOME"/.nvm/versions/node/*/bin; do
+    [ -x "$node_bin/node" ] && export PATH="$node_bin:$PATH"
+  done
+fi
+
+PNPM_CMD=()
+if command -v pnpm >/dev/null 2>&1; then
+  PNPM_CMD=(pnpm)
+elif command -v corepack >/dev/null 2>&1; then
+  # Node 自带 Corepack 时，不要求用户额外建立 pnpm 全局软链接。
+  PNPM_CMD=(corepack pnpm)
+else
+  PNPM_CMD=()
+fi
+
 for arg in "$@"; do
   case "$arg" in
     --with-minio) WITH_MINIO=1 ;;
@@ -36,7 +55,7 @@ die()  { echo -e "\033[1;31m[ERROR]\033[0m $*" >&2; exit 1; }
 # ---------- 1. 依赖检查 ----------
 command -v docker >/dev/null || die "docker 未安装"
 command -v uv     >/dev/null || die "uv 未安装（后端包管理器）"
-command -v pnpm   >/dev/null || die "pnpm 未安装（前端包管理器）"
+[ "${#PNPM_CMD[@]}" -gt 0 ] || die "pnpm 未安装（前端包管理器）；请先安装 pnpm 或启用 Node Corepack"
 cd "$ROOT"
 
 # ---------- 2. 数据库 ----------
@@ -89,9 +108,9 @@ if [ -z "$BACKEND_ONLY" ]; then
     warn "    :${FRONTEND_PORT} 已被占用，跳过启动（可能已在运行）"
   else
     cd "$ROOT/frontend"
-    [ -d node_modules ] || { warn "    未找到 node_modules，执行 pnpm install..."; pnpm install; }
+    [ -d node_modules ] || { warn "    未找到 node_modules，执行 pnpm install..."; "${PNPM_CMD[@]}" install; }
     VITE_API_PROXY_TARGET="http://localhost:${BACKEND_PORT}" \
-      nohup pnpm dev --port "$FRONTEND_PORT" --strictPort > /tmp/k12-frontend.log 2>&1 &
+      nohup "${PNPM_CMD[@]}" dev --port "$FRONTEND_PORT" --strictPort > /tmp/k12-frontend.log 2>&1 &
     echo $! > .server.pid
     for i in $(seq 1 30); do
       if curl -sf "http://localhost:${FRONTEND_PORT}" >/dev/null 2>&1; then
