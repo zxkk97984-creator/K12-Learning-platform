@@ -55,6 +55,7 @@ die()  { echo -e "\033[1;31m[ERROR]\033[0m $*" >&2; exit 1; }
 # ---------- 1. 依赖检查 ----------
 command -v docker >/dev/null || die "docker 未安装"
 command -v uv     >/dev/null || die "uv 未安装（后端包管理器）"
+[ -x "$(command -v setsid 2>/dev/null || true)" ] || die "setsid 未安装（用于关闭时清理子进程）"
 [ "${#PNPM_CMD[@]}" -gt 0 ] || die "pnpm 未安装（前端包管理器）；请先安装 pnpm 或启用 Node Corepack"
 cd "$ROOT"
 
@@ -88,7 +89,7 @@ if lsof -ti :"$BACKEND_PORT" >/dev/null 2>&1; then
 else
   cd "$ROOT/backend"
   [ -d .venv ] || { warn "    未找到 .venv，执行 uv sync..."; uv sync; }
-  nohup uv run uvicorn app.main:app --host 0.0.0.0 --port "$BACKEND_PORT" \
+  nohup setsid uv run uvicorn app.main:app --host 0.0.0.0 --port "$BACKEND_PORT" \
     > /tmp/k12-backend.log 2>&1 &
   echo $! > .server.pid
   for i in $(seq 1 30); do
@@ -110,7 +111,7 @@ if [ -z "$BACKEND_ONLY" ]; then
     cd "$ROOT/frontend"
     [ -d node_modules ] || { warn "    未找到 node_modules，执行 pnpm install..."; "${PNPM_CMD[@]}" install; }
     VITE_API_PROXY_TARGET="http://localhost:${BACKEND_PORT}" \
-      nohup "${PNPM_CMD[@]}" dev --port "$FRONTEND_PORT" --strictPort > /tmp/k12-frontend.log 2>&1 &
+      nohup setsid "${PNPM_CMD[@]}" dev --port "$FRONTEND_PORT" --strictPort > /tmp/k12-frontend.log 2>&1 &
     echo $! > .server.pid
     for i in $(seq 1 30); do
       if curl -sf "http://localhost:${FRONTEND_PORT}" >/dev/null 2>&1; then
