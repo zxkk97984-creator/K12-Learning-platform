@@ -52,3 +52,6 @@ tmp/
 .codex/
 .hermes-tasks/
 backend/storage/
+
+# ---- Runtime pid files ----
+.server.pid
