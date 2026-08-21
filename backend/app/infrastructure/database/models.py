@@ -502,6 +502,50 @@ class BookProgress(Base):
     )
 
 
+class Recommendation(Base):
+    """recommendations（规则式学生推荐；Redis 不承担事实存储）。"""
+
+    __tablename__ = "recommendations"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ACTIVE','DISMISSED')",
+            name="ck_recommendations_status",
+        ),
+        Index(
+            "ix_recommendations_student_status_created",
+            "student_id",
+            "status",
+            text("created_at DESC"),
+        ),
+    )
+
+    recommendation_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    recommendation_type: Mapped[str] = mapped_column(String(32))
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text)
+    reason: Mapped[str] = mapped_column(Text)
+    evidence_ids: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+    related_book_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("books.book_id", ondelete="SET NULL"),
+    )
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'ACTIVE'"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class Conversation(Base):
     """conversations（0-E §3.12；学生对话上下文）。"""
 

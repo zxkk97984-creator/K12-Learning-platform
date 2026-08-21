@@ -8,8 +8,14 @@ import type { QuizSession } from '@/entities/quiz/types'
 import { CompanionSprite, useCompanionStore } from '@/features/companion'
 import type { ConversationIntent } from '@/features/conversation'
 import { useConversationStore } from '@/features/conversation'
-import { homeRecommendation } from '@/mocks/data/recommendations'
-import { contentService, memoryService, quizService, studentService } from '@/mocks/services'
+import type { Recommendation } from '@/shared/api/recommendation-service'
+import {
+  contentService,
+  memoryService,
+  quizService,
+  recommendationService,
+  studentService,
+} from '@/mocks/services'
 
 export default function HomePage() {
   const navigate = useNavigate()
@@ -22,6 +28,9 @@ export default function HomePage() {
   const [episodes, setEpisodes] = useState<StudentEpisode[]>([])
   const [memories, setMemories] = useState<StudentMemory[]>([])
   const [quizzes, setQuizzes] = useState<QuizSession[]>([])
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([])
+  const [recommendationsLoading, setRecommendationsLoading] = useState(true)
+  const [recommendationsError, setRecommendationsError] = useState(false)
   const [demoNew, setDemoNew] = useState(false)
 
   useEffect(() => {
@@ -77,6 +86,29 @@ export default function HomePage() {
         setQuizzes([])
       }
     })()
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    void recommendationService
+      .getRecommendations()
+      .then((items) => {
+        if (!active) return
+        setRecommendations(items.filter((item) => item.status === 'ACTIVE').slice(0, 3))
+        setRecommendationsError(false)
+      })
+      .catch(() => {
+        if (!active) return
+        setRecommendations([])
+        setRecommendationsError(true)
+      })
+      .finally(() => {
+        if (active) setRecommendationsLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
   }, [])
 
   useEffect(() => {
@@ -267,19 +299,12 @@ export default function HomePage() {
           )}
         </article>
 
-        <aside className="flex min-h-[232px] flex-col justify-between rounded-[22px] border border-border bg-surface p-5">
-          <div>
-            <p className="font-mono text-[10px] text-accent">霜铃的下一步建议</p>
-            <h2 className="mt-3 max-w-[16ch] font-display text-xl leading-snug text-fg">
-              {homeRecommendation.title}
-            </h2>
-            <p className="mt-2 text-[13px] leading-relaxed text-muted">{homeRecommendation.copy}</p>
-          </div>
-          <div className="border-t border-border pt-3 text-xs text-muted">
-            <strong className="block text-fg">{homeRecommendation.evidenceTitle}</strong>
-            <span className="mt-1 block">{homeRecommendation.evidence}</span>
-          </div>
-        </aside>
+        <RecommendationPanel
+          recommendations={recommendations}
+          loading={recommendationsLoading}
+          error={recommendationsError}
+          onOpen={(bookId) => navigate(`/books/${bookId}`)}
+        />
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-4 max-md:grid-cols-1">
@@ -374,6 +399,89 @@ export default function HomePage() {
         )}
       </div>
     </section>
+  )
+}
+
+function RecommendationPanel({
+  recommendations,
+  loading,
+  error,
+  onOpen,
+}: {
+  recommendations: Recommendation[]
+  loading: boolean
+  error: boolean
+  onOpen: (bookId: string) => void
+}) {
+  return (
+    <aside
+      className="flex min-h-[232px] flex-col rounded-[22px] border border-border bg-surface p-5"
+      aria-label="今日推荐"
+    >
+      <div>
+        <p className="font-mono text-[10px] text-accent">霜铃的下一步建议</p>
+        <h2 className="mt-3 font-display text-xl leading-snug text-fg">今日推荐</h2>
+      </div>
+
+      {loading ? (
+        <div role="status" className="mt-5 text-[13px] text-muted">
+          正在准备今日推荐…
+        </div>
+      ) : error ? (
+        <div role="status" className="mt-5 text-[13px] text-muted">
+          推荐暂时不可用，稍后再试。
+        </div>
+      ) : recommendations.length === 0 ? (
+        <div role="status" className="mt-5 text-[13px] leading-relaxed text-muted">
+          <p>暂时没有新的推荐。</p>
+          <p className="mt-1">去书库找找想学的内容吧。</p>
+        </div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {recommendations.map((recommendation) => {
+            const content = (
+              <>
+                <span className="font-mono text-[10px] text-muted">
+                  {recommendation.recommendation_type === 'REVIEW_WEAK'
+                    ? '复习建议'
+                    : recommendation.recommendation_type === 'READ_NEXT'
+                      ? '下一步阅读'
+                      : '继续学习'}
+                </span>
+                <strong className="mt-1 block text-[15px] leading-snug text-fg">
+                  {recommendation.title}
+                </strong>
+                <span className="mt-1.5 block text-[12px] leading-relaxed text-muted">
+                  {recommendation.description}
+                </span>
+                <span className="mt-2 block border-t border-border pt-2 text-[11px] leading-relaxed text-muted">
+                  <strong className="text-fg">为什么推荐？</strong> {recommendation.reason}
+                </span>
+              </>
+            )
+
+            return recommendation.related_book_id ? (
+              <button
+                key={recommendation.recommendation_id}
+                type="button"
+                className="block w-full rounded-[12px] border border-border bg-surface p-3 text-left transition hover:border-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                aria-label={`打开推荐：${recommendation.title}`}
+                onClick={() => onOpen(recommendation.related_book_id as string)}
+              >
+                {content}
+              </button>
+            ) : (
+              <article
+                key={recommendation.recommendation_id}
+                className="rounded-[12px] border border-border bg-surface p-3"
+              >
+                {content}
+              </article>
+            )
+          })}
+        </div>
+      )}
+    </aside>
   )
 }
 

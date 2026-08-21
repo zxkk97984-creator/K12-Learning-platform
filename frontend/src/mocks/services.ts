@@ -10,6 +10,8 @@ import { ApiContentService } from '@/shared/api/api-content-service'
 import { ApiConversationService } from '@/shared/api/api-conversation-service'
 import { ApiMemoryService } from '@/shared/api/api-memory-service'
 import { ApiQuizService } from '@/shared/api/api-quiz-service'
+import { ApiRecommendationService } from '@/shared/api/api-recommendation'
+import type { RecommendationService } from '@/shared/api/recommendation-service'
 
 import { MockTeacherRoleService } from './services/teacher-role-service'
 
@@ -24,3 +26,4 @@ export const conversationService: ConversationService = new ApiConversationServi
 export const quizService: QuizService = new ApiQuizService()
 export const memoryService: MemoryService = new ApiMemoryService()
 export const teacherRoleService: TeacherRoleService = new MockTeacherRoleService()
+export const recommendationService: RecommendationService = new ApiRecommendationService()
