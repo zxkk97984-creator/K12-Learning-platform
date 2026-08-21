@@ -2,7 +2,7 @@
 
 > 依据：`docs/plans/current-phase.md`（Phase 12 已完成）+ 2026-08-21《项目实施情况》审计报告
 > 执行模式：Hermes 编排 → herdr 驱动 Codex（同一窗口 w5:p2，同一 Codex 会话）→ Hermes 独立验收 → PASS 才进入下一阶段
-> 状态：**P0-1 PASS（a9e5934）/ P0-2 PASS（891917c）/ P1-1 PASS（56c2ab1）→ P1-2 进行中**（2026-08-21）
+> 状态：**P0-1~P1-2 PASS（a9e5934/891917c/56c2ab1/9dcbbdd）→ P1-3 进行中**（2026-08-21）
 
 ---
 
