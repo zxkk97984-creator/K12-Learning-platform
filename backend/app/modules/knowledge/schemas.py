@@ -49,3 +49,4 @@ class KnowledgeSearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=500)
     knowledge_point_ids: list[str] = Field(default_factory=list)
     limit: int = Field(default=5, ge=1, le=20)
+    min_similarity: float | None = Field(default=None, ge=0.0, le=1.0)

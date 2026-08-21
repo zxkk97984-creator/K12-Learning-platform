@@ -131,10 +131,12 @@ class KnowledgeService:
     ) -> list[KnowledgeChunkDTO]:
         embedding = get_embedding(request.query)
         embedding_value = "[" + ",".join(f"{value:.8f}" for value in embedding) + "]"
+        embedding_dimension = len(embedding)
         params: dict = {
             "query_embedding": embedding_value,
             "limit": request.limit,
             "kp_ids": request.knowledge_point_ids,
+            "embedding_dimension": embedding_dimension,
         }
         kp_filter = ""
         if request.knowledge_point_ids:
@@ -143,20 +145,36 @@ class KnowledgeService:
                 "knowledge_chunks.knowledge_point_ids) AS kp "
                 "WHERE kp = ANY(:kp_ids))"
             )
+        distance_expression = (
+            "CASE WHEN vector_dims(embedding) = :embedding_dimension "
+            "THEN embedding <=> CAST(:query_embedding AS vector) END"
+        )
+        similarity_filter = ""
+        if request.min_similarity is not None:
+            params["max_distance"] = 1.0 - request.min_similarity
+            similarity_filter = f"AND ({distance_expression}) <= :max_distance "
         sql = text(
             "SELECT chunk_id, resource_id, chunk_index, content, content_type, "
             "metadata, knowledge_point_ids, token_count, status, created_at, "
-            "embedding <=> CAST(:query_embedding AS vector) AS distance "
+            f"{distance_expression} AS distance "
             "FROM knowledge_chunks "
-            "WHERE status = 'READY' "
+            "WHERE status = 'READY' AND embedding IS NOT NULL "
+            "AND vector_dims(embedding) = :embedding_dimension "
             + kp_filter
-            + " ORDER BY embedding <=> CAST(:query_embedding AS vector) "
+            + similarity_filter
+            + f" ORDER BY {distance_expression} "
             "LIMIT :limit"
         )
         result = await session.execute(sql, params)
         rows = result.mappings().all()
         if not rows:
             return await self._keyword_fallback(session, request)
+        if request.min_similarity is None and not any(
+            request.query in row["content"] for row in rows
+        ):
+            keyword_rows = await self._keyword_fallback(session, request)
+            if keyword_rows:
+                return keyword_rows
         rows = sorted(
             rows,
             key=lambda row: (

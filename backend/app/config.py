@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,7 +29,10 @@ class Settings(BaseSettings):
     ai_base_url: str = ""
     ai_api_key: str = ""
     embedding_provider: str = "mock"
-    embedding_dimension: int = 64
+    embedding_base_url: str = ""
+    embedding_api_key: str = ""
+    embedding_model: str = ""
+    embedding_dimension: int = Field(default=64, gt=0)
     voice_provider: str = "mock"
     tts_provider: str = "mock"
     aliyun_dashscope_api_key: str = ""

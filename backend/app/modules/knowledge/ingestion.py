@@ -1,4 +1,4 @@
-"""Rule-based ingestion: Parser -> Chunker -> Mock Embedding -> DB (Phase 8)."""
+"""Rule-based ingestion: Parser -> Chunker -> Embedding Provider -> DB."""
 
 import hashlib
 from datetime import datetime, timezone

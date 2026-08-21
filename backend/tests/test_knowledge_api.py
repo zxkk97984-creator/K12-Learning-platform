@@ -414,6 +414,123 @@ class TestKnowledgeAPI:
             )
             assert response.status_code == 422
 
+        for bad_similarity in (-0.1, 1.1):
+            response = client.post(
+                "/api/v1/knowledge/search",
+                headers=headers(student_token),
+                json={"query": "训练数据", "min_similarity": bad_similarity},
+            )
+            assert response.status_code == 422
+
+    def test_search_min_similarity_filters_vectors_and_uses_keyword_fallback(
+        self,
+        client: TestClient,
+        student_token: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        query = "threshold query"
+        run_id = str(uuid4())
+        axis_one = [1.0] + [0.0] * 63
+        axis_two = [0.0, 1.0] + [0.0] * 62
+
+        def query_embedding(_text: str) -> list[float]:
+            return axis_one
+
+        def content_embedding(text: str) -> list[float]:
+            if "高相似内容" in text:
+                return axis_one
+            return axis_two
+
+        monkeypatch.setattr(
+            "app.modules.knowledge.service.get_embedding", query_embedding
+        )
+        monkeypatch.setattr(
+            "app.modules.knowledge.ingestion.get_embedding", content_embedding
+        )
+
+        async def ingest_threshold_rows() -> None:
+            async with async_session() as session:
+                await ingest_text(
+                    session,
+                    text="# 高相似\n\n高相似内容",
+                    source_name="阈值高相似",
+                    source_url=f"https://test.shuangling.local/threshold-high-{uuid4()}",
+                    license="CC-BY-4.0",
+                    copyright_status="测试资源",
+                    knowledge_point_ids=[f"kp-threshold-high-{run_id}"],
+                )
+                await ingest_text(
+                    session,
+                    text="# 低相似\n\n低相似内容",
+                    source_name="阈值低相似",
+                    source_url=f"https://test.shuangling.local/threshold-low-{uuid4()}",
+                    license="CC-BY-4.0",
+                    copyright_status="测试资源",
+                    knowledge_point_ids=[f"kp-threshold-low-{run_id}"],
+                )
+                await ingest_text(
+                    session,
+                    text=f"# 关键词回退\n\n{query} 关键词内容",
+                    source_name="阈值关键词回退",
+                    source_url=f"https://test.shuangling.local/threshold-fallback-{uuid4()}",
+                    license="CC-BY-4.0",
+                    copyright_status="测试资源",
+                    knowledge_point_ids=[f"kp-threshold-fallback-{run_id}"],
+                )
+
+        asyncio.run(ingest_threshold_rows())
+
+        high = client.post(
+            "/api/v1/knowledge/search",
+            headers=headers(student_token),
+            json={
+                "query": query,
+                "knowledge_point_ids": [f"kp-threshold-high-{run_id}"],
+                "min_similarity": 0.9,
+            },
+        )
+        assert high.status_code == 200
+        assert [row["content"] for row in high.json()["data"]] == ["高相似内容"]
+
+        low = client.post(
+            "/api/v1/knowledge/search",
+            headers=headers(student_token),
+            json={
+                "query": query,
+                "knowledge_point_ids": [f"kp-threshold-low-{run_id}"],
+                "min_similarity": 0.9,
+            },
+        )
+        assert low.status_code == 200
+        assert low.json()["data"] == []
+
+        fallback = client.post(
+            "/api/v1/knowledge/search",
+            headers=headers(student_token),
+            json={
+                "query": query,
+                "knowledge_point_ids": [f"kp-threshold-fallback-{run_id}"],
+                "min_similarity": 0.9,
+            },
+        )
+        assert fallback.status_code == 200
+        assert [row["content"] for row in fallback.json()["data"]] == [
+            f"{query} 关键词内容"
+        ]
+
+        without_threshold = client.post(
+            "/api/v1/knowledge/search",
+            headers=headers(student_token),
+            json={
+                "query": query,
+                "knowledge_point_ids": [f"kp-threshold-low-{run_id}"],
+            },
+        )
+        assert without_threshold.status_code == 200
+        assert [row["content"] for row in without_threshold.json()["data"]] == [
+            "低相似内容"
+        ]
+
     def test_search_knowledge_point_filter(
         self,
         client: TestClient,
