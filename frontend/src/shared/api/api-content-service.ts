@@ -225,8 +225,9 @@ export class ApiContentService implements ContentService {
   }
 
   async getBookProgress(bookId: string): Promise<BookProgress | null> {
+    const resolvedBookId = await this.resolveBookId(bookId)
     try {
-      return await apiRequest<BookProgress>(`/me/progress/${encodeURIComponent(bookId)}`)
+      return await apiRequest<BookProgress>(`/me/progress/${encodeURIComponent(resolvedBookId)}`)
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null
       throw error
