@@ -25,11 +25,23 @@ class Settings(BaseSettings):
     ai_provider: str = "mock"
     ai_model: str = "mock-model"
     ai_max_tokens: int = 512
+    ai_thinking_mode: Literal["auto", "enabled", "disabled"] = "auto"
     ai_base_url: str = ""
     ai_api_key: str = ""
     embedding_provider: str = "mock"
     embedding_dimension: int = 64
     voice_provider: str = "mock"
+    tts_provider: str = "mock"
+    aliyun_dashscope_api_key: str = ""
+    aliyun_asr_models: list[str] = [
+        "fun-asr-realtime",
+        "fun-asr-realtime-2026-02-28",
+        "fun-asr-realtime-2025-11-07",
+        "fun-asr-realtime-2025-09-15",
+    ]
+    aliyun_asr_ws_url: str = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+    speech_sample_rate: int = 16000
+    asr_max_frame_bytes: int = 6400
 
     @model_validator(mode="after")
     def _reject_placeholder_secret_in_prod(self) -> "Settings":

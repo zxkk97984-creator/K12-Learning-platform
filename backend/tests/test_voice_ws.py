@@ -124,7 +124,7 @@ def test_voice_ws_full_flow(
         assert listening == {"type": "state", "state": "LISTENING"}
 
         websocket.send_text(json.dumps({"type": "audio_end"}))
-        frames = [json.loads(websocket.receive_text()) for _ in range(6)]
+        frames = [json.loads(websocket.receive_text()) for _ in range(7)]
         states = [frame["state"] for frame in frames if frame["type"] == "state"]
         assert states[:2] == ["THINKING", "SPEAKING"]
         assert states[-1] == "IDLE"
@@ -135,6 +135,9 @@ def test_voice_ws_full_flow(
         final = next(frame for frame in frames if frame["type"] == "final")
         assert final["text"] == "这里是什么意思"
         assert final["conversation_id"] == conversation_id
+        reply = next(frame for frame in frames if frame["type"] == "reply")
+        assert reply["text"]
+        assert reply["conversation_id"] == conversation_id
         audio_frame = next(frame for frame in frames if frame["type"] == "audio")
         assert base64.b64decode(audio_frame["data"]).startswith(b"RIFF")
 

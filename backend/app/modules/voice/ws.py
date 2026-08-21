@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
-from app.ai.voice import get_asr_provider, get_tts_provider
+from app.ai.voice import ASRProvider, get_asr_provider, get_tts_provider
 from app.infrastructure.database.models import (
     Conversation,
     StudentProfile,
@@ -81,13 +81,18 @@ async def _handle_utterance(
     user_id: UUID,
     conversation_id: UUID,
     voice_session: VoiceSession,
+    asr_provider: ASRProvider,
 ) -> None:
     transcript_id = str(uuid4())
     try:
         audio_data = b"".join(
             base64.b64decode(chunk) for chunk in voice_session.chunks if chunk
         )
-        text = get_asr_provider().transcribe(audio_data)
+        transcribe_async = getattr(asr_provider, "transcribe_async", None)
+        if transcribe_async is not None:
+            text = await transcribe_async(audio_data)
+        else:
+            text = asr_provider.transcribe(audio_data)
         await _send(
             websocket,
             {"type": "partial", "text": text, "transcript_id": transcript_id},
@@ -110,6 +115,17 @@ async def _handle_utterance(
                 SendMessageRequest(content=text, type="TEXT"),
             )
             reply = await _collect_reply(stream)
+
+        # 文字回复和 TTS 是两条独立能力：即使 TTS 被关闭、返回静音音频或播放失败，
+        # 前端也应该先收到可展示的文字回复。
+        await _send(
+            websocket,
+            {
+                "type": "reply",
+                "text": reply,
+                "conversation_id": str(conversation_id),
+            },
+        )
 
         audio = get_tts_provider().synthesize(reply)
         if voice_session.state == "THINKING":
@@ -186,6 +202,7 @@ async def voice_ws(websocket: WebSocket):
         voice_session = SESSIONS.setdefault(
             str(profile.student_id), VoiceSession()
         )
+        asr_provider = get_asr_provider()
         await _send(websocket, {"type": "state", "state": voice_session.state})
         try:
             while True:
@@ -223,6 +240,7 @@ async def voice_ws(websocket: WebSocket):
                             user_id=user.user_id,
                             conversation_id=conversation_id,
                             voice_session=voice_session,
+                            asr_provider=asr_provider,
                         )
                     )
                 else:
