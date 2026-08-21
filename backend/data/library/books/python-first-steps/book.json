@@ -1,0 +1,98 @@
+{
+  "slug": "python-first-steps",
+  "title": "Python 第一步：从打印到循环",
+  "description": "从第一行 print 出发，学会变量、条件与循环，最后亲手做出一个能玩的猜数字游戏。",
+  "grade_min": 7,
+  "grade_max": 9,
+  "difficulty": "EASY",
+  "estimated_minutes": 90,
+  "author": null,
+  "tags": [
+    "编程",
+    "入门"
+  ],
+  "topic": "编程",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "program-instruction",
+      "name": "程序与指令",
+      "description": "程序是写给计算机的一串指令，计算机会严格按顺序逐步执行。",
+      "topic": "编程"
+    },
+    {
+      "slug": "python-print",
+      "name": "print 输出",
+      "description": "print 是 Python 里最常用的输出工具，负责把括号里的内容显示到屏幕上。",
+      "topic": "编程"
+    },
+    {
+      "slug": "variable",
+      "name": "变量",
+      "description": "变量是给数据起的名字，程序可以随时用它取回或更新保存的值。",
+      "topic": "编程"
+    },
+    {
+      "slug": "data-type",
+      "name": "数据类型",
+      "description": "数据的种类，如整数、浮点数、字符串、布尔值，决定了对它能做哪些操作。",
+      "topic": "编程"
+    },
+    {
+      "slug": "condition-if",
+      "name": "条件判断",
+      "description": "if 语句根据条件是否成立，让程序在不同做法之间选择一条路执行。",
+      "topic": "编程"
+    },
+    {
+      "slug": "loop",
+      "name": "循环",
+      "description": "循环让计算机重复执行某段代码，直到满足停止条件为止。",
+      "topic": "编程"
+    },
+    {
+      "slug": "random-number",
+      "name": "随机数",
+      "description": "随机数是无法提前确定的数，程序里常用它来制造变化和惊喜。",
+      "topic": "编程"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "你好，世界：第一次让计算机听话",
+      "minutes": 15,
+      "summary": "认识什么是程序，写出并运行人生第一行 Python 代码。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "变量与数据类型：给数据安个家",
+      "minutes": 18,
+      "summary": "学会用变量记住数据，分清整数、浮点数、字符串和布尔值四种常见类型。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "条件判断：让程序学会做选择",
+      "minutes": 17,
+      "summary": "用 if、elif 和 else 让程序根据情况自动选择不同的做法。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "循环：把重复的事交给计算机",
+      "minutes": 20,
+      "summary": "用 for 和 while 让计算机替你重复干活，理解循环变量、range 与终止条件。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "小项目：猜数字游戏",
+      "minutes": 20,
+      "summary": "综合前四章的知识，从零做出一个能反复玩的猜数字游戏。"
+    }
+  ]
+}

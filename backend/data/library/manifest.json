@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "description": "霜铃 K12 AI 数字教师 · 图书馆语料索引。新增书必须在此登记。",
+  "books": [
+    {
+      "slug": "python-first-steps",
+      "title": "Python 第一步：从打印到循环",
+      "topic": "编程",
+      "grade_min": 7,
+      "grade_max": 9,
+      "difficulty": "EASY",
+      "chapters": 5
+    }
+  ]
+}
