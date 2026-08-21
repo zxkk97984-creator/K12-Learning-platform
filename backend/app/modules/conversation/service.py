@@ -171,6 +171,15 @@ def _conversation_dto(
     )
 
 
+def _latest_summary_query(conversation_id: UUID):
+    return (
+        select(ConversationSummary)
+        .where(ConversationSummary.conversation_id == conversation_id)
+        .order_by(ConversationSummary.summary_version.desc())
+        .limit(1)
+    )
+
+
 def _message_dto(message: Message) -> MessageDTO:
     return MessageDTO(
         message_id=message.message_id,
@@ -423,6 +432,17 @@ class ConversationService:
             }.get(message.role, "user")
             history.append({"role": role, "content": message.content})
 
+        summary_context = ""
+        if len(history_rows) >= settings.summary_message_threshold:
+            summary = (
+                await session.execute(_latest_summary_query(conversation_id))
+            ).scalar_one_or_none()
+            if summary is not None and summary.summary.strip():
+                summary_context = (
+                    f"【本会话长对话摘要（v{summary.summary_version}）】\n"
+                    f"{summary.summary.strip()}"
+                )
+
         teacher_message_id = uuid4()
         teacher_sequence = student_sequence + 1
         teacher_created_at = datetime.now(timezone.utc)
@@ -499,6 +519,7 @@ class ConversationService:
             part
             for part in [
                 persona_block,
+                summary_context,
                 reference_block,
                 f"【证据上下文】\n{evidence_context}" if evidence_context else "",
                 instruction_block,
@@ -891,11 +912,7 @@ class ConversationService:
     ) -> ConversationDTO:
         conversation = await self._get_owned_conversation(session, user_id, conversation_id)
         summary = (
-            await session.execute(
-                select(ConversationSummary).where(
-                    ConversationSummary.conversation_id == conversation_id
-                )
-            )
+            await session.execute(_latest_summary_query(conversation_id))
         ).scalar_one_or_none()
         return _conversation_dto(conversation, summary)
 
@@ -969,11 +986,7 @@ class ConversationService:
     ) -> ConversationSummaryDTO | None:
         await self._get_owned_conversation(session, user_id, conversation_id)
         summary = (
-            await session.execute(
-                select(ConversationSummary).where(
-                    ConversationSummary.conversation_id == conversation_id
-                )
-            )
+            await session.execute(_latest_summary_query(conversation_id))
         ).scalar_one_or_none()
         return ConversationSummaryDTO.model_validate(summary) if summary else None
 

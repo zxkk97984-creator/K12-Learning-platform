@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.ai.base import AIProvider
-from app.infrastructure.database.models import StudentProfile, User
+from app.infrastructure.database.models import ConversationSummary, Message, StudentProfile, User
 from app.infrastructure.database.session import async_session
 from app.main import app
 from app.modules.identity.security import hash_password
@@ -147,6 +147,49 @@ class OneChunkProvider(AIProvider):
         yield "心跳后内容"
 
 
+class CapturingProvider(AIProvider):
+    provider = "capturing"
+    model = "capturing-model"
+
+    def __init__(self) -> None:
+        self.system_prompts: list[str] = []
+
+    async def stream_chat(self, history, system_prompt):
+        del history
+        self.system_prompts.append(system_prompt)
+        yield "上下文已收到"
+
+
+def _insert_long_summary(conversation_id: UUID, summary: str) -> None:
+    async def run() -> None:
+        async with async_session() as session:
+            session.add_all(
+                [
+                    Message(
+                        conversation_id=conversation_id,
+                        role="STUDENT" if index % 2 else "TEACHER",
+                        type="TEXT",
+                        content=f"长对话消息 {index}",
+                        sequence=index,
+                    )
+                    for index in range(1, 21)
+                ]
+            )
+            session.add(
+                ConversationSummary(
+                    conversation_id=conversation_id,
+                    summary=summary,
+                    token_count=len(summary),
+                    summary_version=3,
+                    source_message_ids=["source-1", "source-20"],
+                    model_info={"provider": "rule", "model": "test-summary"},
+                )
+            )
+            await session.commit()
+
+    asyncio.run(run())
+
+
 class EmptyProvider(AIProvider):
     provider = "empty"
     model = "empty-model"
@@ -210,6 +253,65 @@ class TestConversationSSE:
         context = detail.json()["data"]["current_page_context"]
         assert context["route"] == "/reader"
         assert context["selected_text"] == "训练数据"
+
+    def test_summary_is_injected_into_teacher_context(
+        self,
+        client: TestClient,
+        token: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        conversation_id = create_conversation(client, token)
+        summary = "学生已经掌握训练数据的定义，正在追问推荐系统的原因。"
+        _insert_long_summary(UUID(conversation_id), summary)
+        provider = CapturingProvider()
+
+        async def no_retrieval(*args, **kwargs):
+            del args, kwargs
+            return []
+
+        monkeypatch.setattr(
+            "app.modules.conversation.service.get_ai_provider", lambda: provider
+        )
+        monkeypatch.setattr("app.modules.conversation.service.retrieve", no_retrieval)
+
+        response = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(token),
+            json={"content": "我还想继续追问"},
+        )
+
+        assert response.status_code == 200
+        assert provider.system_prompts
+        assert "【本会话长对话摘要（v3）】" in provider.system_prompts[0]
+        assert summary in provider.system_prompts[0]
+
+    def test_summary_is_not_injected_before_threshold(
+        self,
+        client: TestClient,
+        token: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        conversation_id = create_conversation(client, token)
+        provider = CapturingProvider()
+
+        async def no_retrieval(*args, **kwargs):
+            del args, kwargs
+            return []
+
+        monkeypatch.setattr(
+            "app.modules.conversation.service.get_ai_provider", lambda: provider
+        )
+        monkeypatch.setattr("app.modules.conversation.service.retrieve", no_retrieval)
+
+        response = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(token),
+            json={"content": "新会话问题"},
+        )
+
+        assert response.status_code == 200
+        assert provider.system_prompts
+        assert "【本会话长对话摘要" not in provider.system_prompts[0]
 
     def test_quiz_intent_emits_tool_events_and_persists_quiz_session(
         self, client: TestClient, token: str

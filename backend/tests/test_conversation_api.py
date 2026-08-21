@@ -372,6 +372,10 @@ class TestConversationAPI:
                     session,
                     {"conversation_id": str(conversation_id)},
                 )
+                await handle_conversation_summary(
+                    session,
+                    {"conversation_id": str(conversation_id)},
+                )
 
         asyncio.run(seed_and_summarize())
 
@@ -380,9 +384,17 @@ class TestConversationAPI:
             headers=headers(token),
         )
         assert summary.status_code == 200
-        assert summary.json()["data"]["summary_version"] == 1
-        assert "摘要测试消息 1" in summary.json()["data"]["summary"]
-        assert "摘要测试消息 20" in summary.json()["data"]["summary"]
+        data = summary.json()["data"]
+        assert data["summary_version"] == 2
+        assert data["token_count"] > 0
+        assert len(data["source_message_ids"]) == 2
+        assert data["model_info"] == {
+            "provider": "rule",
+            "model": "conversation-summary-v1",
+        }
+        assert data["updated_at"]
+        assert "摘要测试消息 1" in data["summary"]
+        assert "摘要测试消息 20" in data["summary"]
 
     def test_messages_pagination_and_summary_dto(
         self, client: TestClient, token: str
