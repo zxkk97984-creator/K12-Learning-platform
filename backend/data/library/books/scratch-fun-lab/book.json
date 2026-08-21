@@ -1,0 +1,89 @@
+{
+  "slug": "scratch-fun-lab",
+  "title": "Scratch 趣味实验室",
+  "description": "像搭积木一样学编程：让小猫动起来、说话、做游戏，五步做出自己的接苹果作品。",
+  "grade_min": 3,
+  "grade_max": 6,
+  "difficulty": "EASY",
+  "estimated_minutes": 80,
+  "author": null,
+  "tags": ["编程", "图形化"],
+  "topic": "编程",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "scratch-stage",
+      "name": "舞台与角色",
+      "description": "舞台是程序表演的地方，角色是在舞台上活动的演员，每个角色都有自己的积木脚本。",
+      "topic": "编程"
+    },
+    {
+      "slug": "event-block",
+      "name": "事件积木",
+      "description": "事件积木是程序的开关，比如点击绿旗或按下空格，它一被触发，后面的积木才开始工作。",
+      "topic": "编程"
+    },
+    {
+      "slug": "sequence-execution",
+      "name": "顺序执行",
+      "description": "顺序执行指积木从上往下一块一块依次运行，先后顺序不同，结果就不同。",
+      "topic": "编程"
+    },
+    {
+      "slug": "repeat-block",
+      "name": "重复执行积木",
+      "description": "重复执行积木能把包在里面的积木反复运行指定次数，是偷懒又可靠的好帮手。",
+      "topic": "编程"
+    },
+    {
+      "slug": "score-variable",
+      "name": "计分变量",
+      "description": "计分变量像一个会自动加减数字的记分牌，游戏里用它记住分数并显示在舞台上。",
+      "topic": "编程"
+    },
+    {
+      "slug": "broadcast-message",
+      "name": "广播消息",
+      "description": "广播消息是角色之间传悄悄话的方式：一个角色喊一声，所有听到这个消息的角色同时开始行动。",
+      "topic": "编程"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "你好，小猫！——认识新朋友",
+      "minutes": 14,
+      "summary": "认识舞台和角色，学会打开 Scratch 并和默认的小猫打招呼。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "让小猫动起来",
+      "minutes": 16,
+      "summary": "用运动积木和绿旗事件，让小猫走路、转圈、碰到边缘反弹。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "会说话的小猫",
+      "minutes": 15,
+      "summary": "用外观和声音积木，让小猫说话、换造型、发出叫声。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "神奇的如果和重复",
+      "minutes": 17,
+      "summary": "学会如果…那么积木和重复执行积木，让程序学会选择和偷懒。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "小项目：接苹果游戏",
+      "minutes": 18,
+      "summary": "综合四章本领，做出一个能计分、能加难度的接苹果小游戏。"
+    }
+  ]
+}

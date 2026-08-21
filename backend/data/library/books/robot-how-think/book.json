@@ -1,0 +1,89 @@
+{
+  "slug": "robot-how-think",
+  "title": "机器人会怎么想？",
+  "description": "拆开机器人的身体与大脑，认识传感器、决策规则和反馈修正，亲手设计一台小机器人。",
+  "grade_min": 7,
+  "grade_max": 9,
+  "difficulty": "EASY",
+  "estimated_minutes": 85,
+  "author": null,
+  "tags": ["机器人", "入门"],
+  "topic": "机器人",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "sense-think-act",
+      "name": "感知—决策—行动",
+      "description": "机器人工作的基本循环：先用传感器感知环境，再依据规则做出决策，最后由执行器完成动作，然后进入下一轮。",
+      "topic": "机器人"
+    },
+    {
+      "slug": "robot-sensor",
+      "name": "传感器",
+      "description": "传感器是机器人的感觉器官，把光线、距离、温度等物理信息转换成电信号供机器人大脑使用。",
+      "topic": "机器人"
+    },
+    {
+      "slug": "robot-actuator",
+      "name": "执行器",
+      "description": "执行器是机器人的肌肉，把电信号转换成实际动作，常见的有马达、舵机和喇叭。",
+      "topic": "机器人"
+    },
+    {
+      "slug": "feedback-control",
+      "name": "反馈控制",
+      "description": "反馈控制指不断用传感器的最新读数修正动作：走偏了就调回来，直到接近目标为止。",
+      "topic": "机器人"
+    },
+    {
+      "slug": "noise-interference",
+      "name": "干扰与噪声",
+      "description": "干扰与噪声指让传感器读数不可靠的因素，如强光、回声、地面反光，机器人必须学会应对不可靠的感觉。",
+      "topic": "机器人"
+    },
+    {
+      "slug": "robot-state",
+      "name": "状态与状态切换",
+      "description": "把机器人的行为分成几种状态（如巡逻、避障、返回），根据传感器信息在状态之间切换，是编写机器人程序的常用思路。",
+      "topic": "机器人"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "什么是机器人：身体与大脑",
+      "minutes": 15,
+      "summary": "认识机器人的三大件——传感器、大脑、执行器，理解它与普通机器的区别。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "机器人的五官：传感器",
+      "minutes": 17,
+      "summary": "认识常见传感器如何工作，体会「感觉」也会出错这件事。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "大脑如何决定：规则与状态",
+      "minutes": 18,
+      "summary": "学习用如果…就…的规则和状态切换的思路给机器人写决策。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "从指令到动作：执行与反馈",
+      "minutes": 17,
+      "summary": "理解执行器如何产生动作，以及反馈如何让机器人越走越准。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "小项目：设计图书搬运机器人",
+      "minutes": 18,
+      "summary": "综合运用四大件知识，完成一份完整的机器人设计方案。"
+    }
+  ]
+}

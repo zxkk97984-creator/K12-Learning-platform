@@ -1,0 +1,89 @@
+{
+  "slug": "data-detective",
+  "title": "数据侦探：从图表发现真相",
+  "description": "学会收集、读懂和质疑数据，识破坐标轴把戏与平均数陷阱，像侦探一样用证据说话。",
+  "grade_min": 7,
+  "grade_max": 9,
+  "difficulty": "MEDIUM",
+  "estimated_minutes": 90,
+  "author": null,
+  "tags": ["数据素养", "思维"],
+  "topic": "数据素养",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "data-collection",
+      "name": "数据收集",
+      "description": "数据收集是围绕一个明确问题，选择对象、确定指标并如实记录的过程，收集方式决定了结论的可信度。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "chart-choice",
+      "name": "图表选择",
+      "description": "不同图表擅长回答不同问题：条形图比多少，折线图看变化，饼图讲占比，选错图表会扭曲信息。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "mean-median-mode",
+      "name": "平均数、中位数与众数",
+      "description": "三种代表值从不同角度概括一组数据：平均数怕极端值，中位数站中间，众数是出现最多的那个。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "axis-truncation",
+      "name": "坐标轴截断",
+      "description": "坐标轴截断指纵轴不从零开始或刻度不均匀，会让微小的差异在图上显得惊天动地。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "correlation-causation",
+      "name": "相关与因果",
+      "description": "两个量一起变化叫相关；其中一个导致另一个才是因果。相关可能是巧合，也可能由第三个因素造成。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "sample-bias",
+      "name": "样本偏差",
+      "description": "样本偏差指调查对象不能代表整体，比如只在篮球场调查身高，结论自然偏高。",
+      "topic": "数据素养"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "侦探的第一课：数据是什么",
+      "minutes": 16,
+      "summary": "认识数据的本质是记录，理解一个好问题如何决定收集什么数据。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "三种放大镜：条形、折线与饼图",
+      "minutes": 17,
+      "summary": "掌握三大常用图表各自擅长的任务，学会为数据挑对工具。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "平均数的陷阱：谁拉高了工资",
+      "minutes": 18,
+      "summary": "分清平均数、中位数与众数，识破「被平均」的话术。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "图表如何说谎：坐标轴的魔术",
+      "minutes": 19,
+      "summary": "拆解截断坐标轴、比例失真等常见手法，练就一眼识图的本领。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "完整破案：从提问到结论",
+      "minutes": 20,
+      "summary": "走完「提问—收集—分析—结论」全流程，完成一次真正的数据侦探行动。"
+    }
+  ]
+}

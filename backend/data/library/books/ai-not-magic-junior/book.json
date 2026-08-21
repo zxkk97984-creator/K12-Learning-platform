@@ -1,0 +1,89 @@
+{
+  "slug": "ai-not-magic-junior",
+  "title": "AI 不是魔法·初中进阶",
+  "description": "掀开智能的幕布：看模型如何从数据中学习，理解幻觉与偏差的来源，学会聪明地使用 AI。",
+  "grade_min": 7,
+  "grade_max": 9,
+  "difficulty": "MEDIUM",
+  "estimated_minutes": 90,
+  "author": null,
+  "tags": ["AI 基础", "进阶"],
+  "topic": "AI 基础",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "model-training",
+      "name": "模型训练",
+      "description": "模型训练是让程序反复对照大量例子、不断调整内部参数，直到输出越来越接近正确答案的过程。",
+      "topic": "AI 基础"
+    },
+    {
+      "slug": "next-token-prediction",
+      "name": "下一词预测",
+      "description": "语言模型根据前文逐个预测下一个最可能出现的词，生成式 AI 的回答就是这样一词一词接出来的。",
+      "topic": "AI 基础"
+    },
+    {
+      "slug": "ai-hallucination",
+      "name": "幻觉",
+      "description": "幻觉指 AI 生成内容看似流畅可信、实际却与事实不符的现象，根源是它只会按概率续写而非查证事实。",
+      "topic": "AI 基础"
+    },
+    {
+      "slug": "adversarial-example",
+      "name": "对抗样本",
+      "description": "对抗样本是被刻意加入微小干扰后能让模型判断出错的输入，人眼几乎看不出差别。",
+      "topic": "AI 基础"
+    },
+    {
+      "slug": "data-bias-source",
+      "name": "数据偏差来源",
+      "description": "训练数据的收集范围和方式会带入偏差，模型学到的规律因此对某些人群或场景不公平。",
+      "topic": "AI 基础"
+    },
+    {
+      "slug": "human-in-the-loop",
+      "name": "人在回路",
+      "description": "人在回路指把人的审核与判断嵌入 AI 工作流程的关键节点，由人对最终结果负责。",
+      "topic": "AI 基础"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "魔法背后的统计：AI 是怎么「学」的",
+      "minutes": 18,
+      "summary": "区分规则程序和学习型程序，理解模型训练的循环：猜测、对照、调整。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "超级文字接龙：生成式 AI 在做什么",
+      "minutes": 17,
+      "summary": "理解大语言模型的本质是逐词预测，以及为什么它能写出通顺的长文。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "一本正经地胡说：幻觉从哪来",
+      "minutes": 16,
+      "summary": "认识 AI 幻觉现象，分析它产生的原因并学会识别可疑回答。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "看不见的陷阱：偏差与对抗样本",
+      "minutes": 19,
+      "summary": "了解数据偏差如何进入模型，以及微小的干扰如何骗过强大的识别系统。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "聪明的使用者：什么时候信，什么时候查",
+      "minutes": 20,
+      "summary": "建立一套使用 AI 的核查习惯，让 AI 成为助手而不是替你思考的机器。"
+    }
+  ]
+}

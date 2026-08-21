@@ -1,0 +1,89 @@
+{
+  "slug": "algorithm-everyday",
+  "title": "藏在生活里的算法",
+  "description": "用排序、查找与复杂度的眼光重新审视世界，掌握大 O 思想、贪心与分治的核心权衡。",
+  "grade_min": 10,
+  "grade_max": 12,
+  "difficulty": "HARD",
+  "estimated_minutes": 100,
+  "author": null,
+  "tags": ["算法思维", "进阶"],
+  "topic": "算法思维",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "algorithm-definition",
+      "name": "算法定义",
+      "description": "算法是为解决一类问题而设计的明确、有限的操作步骤序列，同一问题可以有多种正确算法。",
+      "topic": "算法思维"
+    },
+    {
+      "slug": "time-complexity",
+      "name": "时间复杂度",
+      "description": "时间复杂度描述算法运行步数随输入规模增长的趋势，用大 O 记号忽略常数与低阶项。",
+      "topic": "算法思维"
+    },
+    {
+      "slug": "sorting-algorithm",
+      "name": "排序算法",
+      "description": "排序是把一组数据按规则排好顺序的过程，不同排序算法在速度与空间上各有取舍。",
+      "topic": "算法思维"
+    },
+    {
+      "slug": "binary-search",
+      "name": "二分查找",
+      "description": "二分查找在有序数据中每次排除一半候选，n 个元素最多约 log₂n 步即可定位目标。",
+      "topic": "算法思维"
+    },
+    {
+      "slug": "greedy-algorithm",
+      "name": "贪心算法",
+      "description": "贪心算法每一步都选当前看起来最优的选择，不回头；并非所有问题都保证得到全局最优。",
+      "topic": "算法思维"
+    },
+    {
+      "slug": "dynamic-programming",
+      "name": "动态规划",
+      "description": "动态规划把大问题拆成重叠的小问题，把小问题的答案存表复用，避免重复计算。",
+      "topic": "算法思维"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "算法是什么：从菜谱到伪代码",
+      "minutes": 18,
+      "summary": "给出算法定义，学会用伪代码描述步骤，理解「同一问题多种解法」。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "排序的艺术：从冒泡到归并",
+      "minutes": 20,
+      "summary": "亲手推演冒泡排序与归并排序，体会分治策略如何碾压蛮力。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "查找的智慧：二分的力量",
+      "minutes": 18,
+      "summary": "掌握二分查找的前提、流程与对数级效率，理解有序性的价值。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "度量快慢：时间复杂度与大 O",
+      "minutes": 20,
+      "summary": "学会用增长趋势而非秒表评价算法，建立常见复杂度等级的直觉。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "权衡与拆解：贪心与动态规划",
+      "minutes": 24,
+      "summary": "理解贪心的适用条件与失效场景，入门动态规划的记表思想。"
+    }
+  ]
+}

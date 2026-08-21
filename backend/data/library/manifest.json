@@ -10,6 +10,51 @@
       "grade_max": 9,
       "difficulty": "EASY",
       "chapters": 5
+    },
+    {
+      "slug": "ai-not-magic-junior",
+      "title": "AI 不是魔法·初中进阶",
+      "topic": "AI 基础",
+      "grade_min": 7,
+      "grade_max": 9,
+      "difficulty": "MEDIUM",
+      "chapters": 5
+    },
+    {
+      "slug": "data-detective",
+      "title": "数据侦探：从图表发现真相",
+      "topic": "数据素养",
+      "grade_min": 7,
+      "grade_max": 9,
+      "difficulty": "MEDIUM",
+      "chapters": 5
+    },
+    {
+      "slug": "robot-how-think",
+      "title": "机器人会怎么想？",
+      "topic": "机器人",
+      "grade_min": 7,
+      "grade_max": 9,
+      "difficulty": "EASY",
+      "chapters": 5
+    },
+    {
+      "slug": "scratch-fun-lab",
+      "title": "Scratch 趣味实验室",
+      "topic": "编程",
+      "grade_min": 3,
+      "grade_max": 6,
+      "difficulty": "EASY",
+      "chapters": 5
+    },
+    {
+      "slug": "algorithm-everyday",
+      "title": "藏在生活里的算法",
+      "topic": "算法思维",
+      "grade_min": 10,
+      "grade_max": 12,
+      "difficulty": "HARD",
+      "chapters": 5
     }
   ]
 }
