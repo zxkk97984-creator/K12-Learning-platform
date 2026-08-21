@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 from datetime import datetime, timezone
 from uuid import UUID
@@ -7,6 +8,8 @@ from fastapi import HTTPException
 from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
+from app.infrastructure.cache.redis import cache_get, cache_set
 from app.infrastructure.database.models import Book, Chapter, ContentBlock, KnowledgePoint
 from app.modules.content.schemas import (
     BookDTO,
@@ -38,6 +41,32 @@ def _decode_cursor(cursor: str) -> tuple[datetime, UUID]:
         ) from exc
 
 
+def _books_cache_key(
+    *,
+    cursor: str | None,
+    limit: int,
+    grade_min: int | None,
+    grade_max: int | None,
+    tag: str | None,
+    status: str,
+) -> str:
+    """Namespace every filter so one cached page cannot satisfy another query."""
+    fingerprint = json.dumps(
+        {
+            "cursor": cursor,
+            "grade_max": grade_max,
+            "grade_min": grade_min,
+            "status": status,
+            "tag": tag,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:16]
+    return f"cache:books:list:{limit}:{digest}"
+
+
 class ContentService:
     """Content 只读 Domain Service（Router 只做编排，SQL 在此层）。"""
 
@@ -52,6 +81,22 @@ class ContentService:
         tag: str | None,
         status: str,
     ) -> BookPageDTO:
+        cache_key = _books_cache_key(
+            cursor=cursor,
+            limit=limit,
+            grade_min=grade_min,
+            grade_max=grade_max,
+            tag=tag,
+            status=status,
+        )
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            try:
+                return BookPageDTO.model_validate(cached)
+            except (TypeError, ValueError):
+                # A malformed/old cache entry is treated as a miss.
+                pass
+
         query = select(Book).where(Book.status == status)
         if grade_min is not None:
             query = query.where(Book.grade_min >= grade_min)
@@ -102,7 +147,16 @@ class ContentService:
         next_cursor = (
             _encode_cursor(books[-1].created_at, books[-1].book_id) if has_more and books else None
         )
-        return BookPageDTO(items=items, meta=BookPageMeta(next_cursor=next_cursor, has_more=has_more))
+        page = BookPageDTO(
+            items=items,
+            meta=BookPageMeta(next_cursor=next_cursor, has_more=has_more),
+        )
+        await cache_set(
+            cache_key,
+            page.model_dump(mode="json"),
+            settings.redis_cache_ttl_seconds,
+        )
+        return page
 
     async def get_book(self, session: AsyncSession, book_id: UUID) -> BookDTO:
         book = await session.get(Book, book_id)

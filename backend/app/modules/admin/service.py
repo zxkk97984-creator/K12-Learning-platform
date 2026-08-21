@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminPrincipal
 from app.config import settings
+from app.infrastructure.cache.redis import cache_delete_prefix
 from app.infrastructure.database.models import (
     Admin,
     Book,
@@ -231,6 +232,7 @@ class AdminService:
         )
         session.add(book)
         await session.flush()
+        await cache_delete_prefix("cache:books:list:")
         return AdminBookDTO.model_validate(book)
 
     async def patch_book(
@@ -273,6 +275,7 @@ class AdminService:
         book.status = new_status or book.status
         book.updated_at = datetime.now(timezone.utc)
         await session.flush()
+        await cache_delete_prefix("cache:books:list:")
         return AdminBookDTO.model_validate(book)
 
     async def create_chapter(
@@ -302,6 +305,8 @@ class AdminService:
         )
         session.add(chapter)
         await session.flush()
+        # The student books list exposes a derived chapter_count.
+        await cache_delete_prefix("cache:books:list:")
         return {
             "chapter_id": str(chapter.chapter_id),
             "book_id": str(chapter.book_id),

@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     worker_max_attempts: int = Field(default=3, ge=1, le=10)
     summary_message_threshold: int = Field(default=20, ge=1)
     knowledge_upload_max_bytes: int = Field(default=20 * 1024 * 1024, ge=1)
+    redis_url: str = "redis://localhost:6379/0"
+    redis_enabled: bool = True
+    redis_lock_ttl_seconds: int = Field(default=120, ge=1, le=3600)
+    redis_cache_ttl_seconds: int = Field(default=60, ge=1, le=86400)
     voice_provider: str = "mock"
     tts_provider: str = "mock"
     aliyun_dashscope_api_key: str = ""

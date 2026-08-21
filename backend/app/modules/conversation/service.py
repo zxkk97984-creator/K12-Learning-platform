@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.base import AIProvider
 from app.ai.factory import get_ai_provider
 from app.config import settings
+from app.infrastructure.cache.redis import acquire_lock, release_lock
 from app.infrastructure.database.models import (
     Conversation,
     ConversationSummary,
@@ -324,14 +325,23 @@ class ConversationService:
         request: SendMessageRequest,
     ) -> AsyncIterator[str]:
         """Serialize turns in one conversation until its SSE stream finishes."""
-        lock = _conversation_lock(conversation_id)
-        await lock.acquire()
+        lock_key = f"lock:conversation:{conversation_id}"
+        redis_token = await acquire_lock(
+            lock_key, settings.redis_lock_ttl_seconds
+        )
+        local_lock: asyncio.Lock | None = None
+        if redis_token is None:
+            local_lock = _conversation_lock(conversation_id)
+            await local_lock.acquire()
         try:
             stream = await self._send_message_locked(
                 session, user_id, conversation_id, request
             )
         except BaseException:
-            lock.release()
+            if redis_token is not None:
+                await release_lock(lock_key, redis_token)
+            elif local_lock is not None:
+                local_lock.release()
             raise
 
         async def guarded_stream() -> AsyncIterator[str]:
@@ -339,7 +349,10 @@ class ConversationService:
                 async for frame in stream:
                     yield frame
             finally:
-                lock.release()
+                if redis_token is not None:
+                    await release_lock(lock_key, redis_token)
+                elif local_lock is not None:
+                    local_lock.release()
 
         return guarded_stream()
 

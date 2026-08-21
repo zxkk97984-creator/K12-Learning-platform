@@ -477,3 +477,42 @@ class TestConversationSSE:
 
         assert asyncio.run(run()) == [["ok"], ["ok"]]
         assert peak_streams == 1
+
+    def test_redis_lock_is_released_after_stream_finishes(self, monkeypatch) -> None:
+        from app.modules.conversation import service as conversation_module
+        from app.modules.conversation.service import ConversationService
+
+        service = ConversationService()
+        conversation_id = uuid4()
+        released: list[tuple[str, str]] = []
+
+        async def fake_acquire(key: str, ttl: int) -> str:
+            assert key == f"lock:conversation:{conversation_id}"
+            assert ttl == 120
+            return "redis-token"
+
+        async def fake_release(key: str, token: str) -> bool:
+            released.append((key, token))
+            return True
+
+        async def fake_send_message_locked(*args, **kwargs):
+            del args, kwargs
+
+            async def stream():
+                yield "ok"
+
+            return stream()
+
+        monkeypatch.setattr(conversation_module, "acquire_lock", fake_acquire)
+        monkeypatch.setattr(conversation_module, "release_lock", fake_release)
+        service._send_message_locked = fake_send_message_locked  # type: ignore[method-assign]
+
+        async def run() -> list[str]:
+            stream = await service.send_message(
+                uuid4(), uuid4(), conversation_id, SendMessageRequest(content="锁测试")
+            )
+            assert released == []
+            return [frame async for frame in stream]
+
+        assert asyncio.run(run()) == ["ok"]
+        assert released == [(f"lock:conversation:{conversation_id}", "redis-token")]
