@@ -22,6 +22,9 @@
 - P1-3：ConversationSummary 读取 API 与 TeacherContext 注入闭环，PASS
 - P2-1（`fc2ff48`）：Recommendation 实体、规则生成 API 与首页真实推荐，PASS
 - P2-2：架构/API 契约/需求状态同步，完成
+- P3-1（`d696641`）：书库卡片详情入口补齐（精选+全部书籍两区，无进度书籍可达），PASS
+
+**Post-Audit 整改全部完成（2026-08-21）**：pytest 257 / Vitest 139 / build 绿；审计缺口全部关闭。
 
 ## Phase 12 目标（总控 §21）
 将「功能完成」变成「可稳定比赛演示」：
