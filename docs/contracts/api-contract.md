@@ -13,6 +13,7 @@
 ### 1.1 Base URL 与版本
 
 - 所有端点前缀：`/api/v1`（例如 `https://api.example.com/api/v1/books`）。
+- 运行探针 `GET /health` 与 `GET /api/v1/ping` 由应用入口直接注册，仅用于健康检查，不计入下文业务 API 端点总数。
 - 版本策略：路径版本 `v1`；不兼容变更必须升 `v2`，不破坏 v1 语义；同版本内只做向后兼容的字段追加（新增可选字段）。
 - 开发环境 base URL 由前端配置项提供（Mock Service Layer 与 API 客户端同接口，总控 §27）。
 
@@ -90,7 +91,7 @@
 | 409 | `MEMORY_INVALID_TRANSITION` | 记忆状态机不允许该动作 |
 | 409 | `CONVERSATION_INVALID_STATUS` | 会话状态不允许该操作（如 DELETED） |
 | 409 | `LEARNING_SESSION_INVALID_STATUS` | 学习时段状态不允许该操作（如已 ENDED） |
-| 409 | `RECOMMENDATION_INVALID_STATUS` | 推荐状态不允许该操作（如已 EXPIRED） |
+| 409 | `RECOMMENDATION_INVALID_STATUS` | 推荐状态不允许该操作（如已 DISMISSED） |
 | 422 | `VALIDATION_ERROR` | 请求字段校验失败；details 含字段错误列表 |
 | 422 | `SCREEN_CONTEXT_INVALID` | screen_context 不符合架构 §8 结构 |
 | 422 | `QUIZ_INVALID_OUTPUT` | Quiz Skill 输出未通过 Pydantic/Rule 校验（AI 输出校验失败，业务可重试） |
@@ -342,7 +343,7 @@
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `recommendation_id` / `recommendation_type` / `book_id?` / `chapter_id?` / `title` / `reason` / `evidence_ids?` / `source_ids?` / `license?` / `source_url?` / `status` / `expires_at?` / `skill_version` / `created_at` | 按实体 | 实体字段原样 |
+| `recommendation_id` / `student_id` / `recommendation_type` / `title` / `description` / `reason` / `evidence_ids` / `related_book_id?` / `status` / `created_at` / `updated_at` | 按实体 | 实体字段原样；`reason` 与 `evidence_ids` 用于解释推荐依据 |
 
 ### 3.9 Knowledge（骨架）
 
@@ -372,17 +373,21 @@
 
 | 模块 | 端点数 | 说明 |
 | --- | --- | --- |
-| Identity / Auth | 4 | 登录/登出/me |
+| Identity / Auth | 5 | 登录/登出/me/教师角色 |
 | Students | 2 | 偏好读写 |
 | Content | 5 | 书/章/块/知识点读取 |
-| Learning | 6 | 时段、事件、进度 |
+| Learning | 7 | 时段、事件、进度 |
 | Conversations | 7 | CRUD + 消息 + SSE + 摘要 |
 | Assessment | 8 | 测验生成/历史/答题/提示/互动 |
-| Memory | 7 | 记忆/画像/情节/证据 |
+| Memory | 8 | 记忆/画像/情节/证据/agent.md |
 | Knowledge | 4 | 骨架（资源/块/检索） |
-| Personalization | 4 | 推荐 |
-| Admin | 19 | 骨架（统计 1 / 书 4 / 章·块·知识点 6 / 知识资源 5 / 教师角色 3） |
-| **合计** | **66** | |
+| Personalization | 2 | 推荐列表/忽略 |
+| Admin | 17 | 统计 1 / 书 4 / 章·块·知识点 6 / 知识资源 3 / 教师角色 3 |
+| **HTTP 业务端点合计** | **65** | |
+| Voice WebSocket | 1 | `/api/v1/voice/ws` |
+| **API 路由合计** | **66** | |
+
+> **实现核对（2026-08-21）**：以 `backend/app/main.py` 注册的业务 router 及其 `@router` 装饰器为事实源，当前实际为 Identity 7、Admin 17、Content 5、Knowledge 4、Learning 7、Conversation 7、Memory 8、Quiz 8、Recommendation 2 个 HTTP 端点，合计 65 个 HTTP；Voice 另有 1 个 WebSocket。契约总表按 Identity/Auth 与 Students 拆分，因此两行合计仍与 router 计数一致。`GET /health` 与 `GET /api/v1/ping` 是运行探针，不计入业务 API 契约总数。
 
 ---
 
@@ -444,6 +449,13 @@
 
 - 响应 `200` `data: StudentProfileDTO`。
 - 错误：`422 VALIDATION_ERROR`（含 grade 范围）、`404 TEACHER_ROLE_NOT_FOUND`、`403 FORBIDDEN`（角色未启用按 403 或 422，见 §11 歧义）。
+
+### 5.5 GET `/api/v1/teacher-roles`
+
+- 用途：读取当前可用的 AI 教师角色列表，供学生端设置页切换。
+- 鉴权：STUDENT。
+- 查询：`enabled`（默认 `true`）。
+- 响应 `200` `data: TeacherRoleDTO[]`；错误：`401`。
 
 ---
 
@@ -601,6 +613,13 @@
 - 鉴权：STUDENT。
 - 查询：`cursor/limit`、`event_type`（可选）。
 - 响应 `200` `data: LearningEventDTO[]` + `meta`；错误：`401`。
+
+### 8.8 PUT `/api/v1/me/progress/{book_id}`
+
+- 用途：创建或更新当前学生的单书学习进度。
+- 鉴权：STUDENT。
+- 请求体：`chapter_id?`、`block_id?`、`status?`（`NOT_STARTED/READING/COMPLETED`）、`position_percent?`（0~100）。
+- 响应 `200` `data: BookProgressDTO`；错误：`404 BOOK_NOT_FOUND`、`422 VALIDATION_ERROR`。
 
 ---
 
@@ -834,6 +853,12 @@
 - 鉴权：STUDENT（仅本人）。
 - 响应 `200` `data: StudentEpisodeDTO`；错误：`404 EPISODE_NOT_FOUND`、`403 FORBIDDEN`。
 
+### 11.8 GET `/api/v1/me/agent.md`
+
+- 用途：读取当前学生的可供 Agent 使用的 Markdown 画像摘要。
+- 鉴权：STUDENT。
+- 响应 `200` `text/markdown`；错误：`401`。
+
 > MemoryCandidate 是 Pipeline 内部产物，无学生端点；管理端调试端点属 Admin 骨架（§14），不在本轮展开。
 
 ---
@@ -872,31 +897,17 @@
 
 ### 13.1 GET `/api/v1/me/recommendations`
 
-- 用途：当前推荐列表（首页「霜铃的下一步建议」「为你精选」）。
+- 用途：惰性生成并读取当前学生的 ACTIVE 推荐列表（首页「霜铃的下一步建议」「为你精选」）。
 - 鉴权：STUDENT。
-- 查询：`status`（默认 ACTIVE）、`recommendation_type`、`cursor/limit`。
-- 响应 `200` `data: RecommendationDTO[]` + `meta`；错误：`401`。
+- 响应 `200` `data: RecommendationDTO[]`；无推荐时返回空数组；错误：`401`。
 
-### 13.2 GET `/api/v1/me/recommendations/{recommendation_id}`
-
-- 用途：推荐详情（「为什么推荐？」证据）。
-- 鉴权：STUDENT（仅本人）。
-- 响应 `200` `data: RecommendationDTO` + `meta.evidence: MemoryEvidenceDTO[]`；错误：`404 RECOMMENDATION_NOT_FOUND`、`403 FORBIDDEN`。
-
-### 13.3 POST `/api/v1/me/recommendations/{recommendation_id}/dismiss`
+### 13.2 POST `/api/v1/me/recommendations/{recommendation_id}/dismiss`
 
 - 用途：忽略推荐（ACTIVE→DISMISSED）。
 - 鉴权：STUDENT（仅本人）。
-- 幂等：建议。
-- 响应 `204`；错误：`404`、`403`、`409 RECOMMENDATION_INVALID_STATUS`（已补录 §1.4）。
+- 响应 `200` `data: RecommendationDTO`；错误：`404 RECOMMENDATION_NOT_FOUND`、`403 FORBIDDEN`、`409 RECOMMENDATION_INVALID_STATUS`。
 
-### 13.4 POST `/api/v1/me/recommendations/refresh`
-
-- 用途：触发推荐 Skill 异步重算（首页/学习后）。
-- 鉴权：STUDENT。
-- 幂等：建议。
-- 响应 `202`：`data: { job_accepted: true }`；推荐更新由后续 GET 观察。
-- 错误：`422 AI_OUTPUT_VALIDATION_FAILED`（Skill 输出校验失败）、`500 AI_PROVIDER_ERROR`。
+> 当前实现未提供推荐详情 GET 或独立 refresh 端点；GET 列表会基于学习数据惰性重算并写入推荐实体。
 
 ---
 
@@ -934,10 +945,10 @@
 | 端点 | 用途 | 幂等 |
 | --- | --- | --- |
 | `POST /api/v1/admin/knowledge/resources` | 上传（multipart：文件 + source_name/source_url/author/license/copyright_status）；创建 KnowledgeResource + Worker Job | 建议 |
-| `GET /api/v1/admin/knowledge/resources` | 资源列表（同 12.1） | N/A |
-| `GET /api/v1/admin/knowledge/resources/{resource_id}` | 资源详情 | N/A |
 | `PATCH /api/v1/admin/knowledge/resources/{resource_id}` | 更新元数据（license/status 等） | N/A |
 | `POST /api/v1/admin/knowledge/resources/{resource_id}/reprocess` | 触发重处理 | 建议 |
+
+> 资源列表、详情与 chunks 读取实际注册在 Knowledge router（§12），路径为 `/api/v1/knowledge/resources...`；本 Admin router 仅提供上传、元数据更新和重处理 3 个端点。
 
 ### 14.5 TeacherRoles（Phase 11 骨架）
 
@@ -947,7 +958,7 @@
 | `POST /api/v1/admin/teacher-roles` | 创建角色（persona/sprite_manifest/grade_rules 等 Schema 校验） | 建议 |
 | `PATCH /api/v1/admin/teacher-roles/{role_id}` | 更新角色 / 启停 | N/A |
 
-> 学生端角色切换：`PATCH /me.current_teacher_role_id`（§5.4）；角色列表（仅 enabled）供设置页：`GET /api/v1/teacher-roles?enabled=true`（骨架，归属 Identity 模块，见 §11 歧义）。
+> 学生端角色切换：`PATCH /me.current_teacher_role_id`（§5.4）；角色列表（仅 enabled）供设置页：`GET /api/v1/teacher-roles?enabled=true`（归属 Identity 模块，详见 §5.5）。
 
 ---
 

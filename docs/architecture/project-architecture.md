@@ -131,18 +131,15 @@ PostgreSQL 不能丢
 采用：
 
 ```text
-PydanticAI
-=
-通用 Agent Runtime
-
-自研 Domain
-=
-K12 Teacher / Quiz / Memory / Context / Persona
+自研轻量 Teacher Agent Runtime
++
+自研 Teacher Agent Domain
 ```
 
-即：
-
-> 框架负责 Agent 运行，项目负责教学。
+实际运行时由 `backend/app/ai/` 的 Provider 工厂、
+`modules/conversation/service.py` 的 TeacherContext 组装，
+以及 `modules/quiz/skill.py` 的结构化输出共同构成。
+PydanticAI 保留为可选演进方向，不构成当前实现的缺失。
 
 ---
 
@@ -207,12 +204,12 @@ Persistence
 | 向量 | pgvector | Knowledge + Memory 向量检索 |
 | Cache / Ephemeral | Redis | Cache、Lock、Rate Limit、临时状态 |
 | Object Storage | S3-Compatible Adapter | MinIO / OSS / S3 可替换 |
-| Agent Runtime | PydanticAI | Tool、Streaming、Structured Output |
+| Agent Runtime | 自研轻量 Teacher Agent Runtime | Provider 工厂、TeacherContext、Structured Output |
 | Agent Domain | 自研 | Teacher / Memory / Quiz / Persona |
 | AI Provider | Gateway Adapter | LLM / Embedding / ASR / TTS 解耦 |
 | 文本流 | SSE / Event Stream | AI Chat 流式输出 |
 | 语音流 | WebSocket | 实时双向音频 |
-| Background Job | Worker + Redis Queue | PDF、Embedding、Memory 等异步处理 |
+| Background Job | Worker + PostgreSQL Job Table | PDF、Embedding、Memory 等异步处理 |
 | 前端测试 | Vitest + Playwright | 单元 + 浏览器真流程 |
 | 后端测试 | Pytest | Domain / API / Agent |
 | 部署 | Docker Compose | 开发与比赛环境简单稳定 |
@@ -506,23 +503,15 @@ Jobs
 
 # 12. Teacher Agent 架构
 
-正式采用：
+正式采用路线图 §2.3 的自研轻量 Teacher Agent Runtime：
 
 ```text
-PydanticAI Runtime
+backend/app/ai/ Provider Factory
 +
-自研 Teacher Agent Domain
+ConversationService TeacherContext
++
+QuizSkill Structured Output
 ```
-
-PydanticAI 负责：
-
-- Agent Loop；
-- Tool Calling；
-- Structured Output；
-- Streaming；
-- Runtime Events；
-- Model Invocation；
-- 基础 Validation / Retry。
 
 项目自己负责：
 
@@ -537,6 +526,9 @@ PydanticAI 负责：
 - Recommendation；
 - Domain Persistence。
 
+当前不引入 `pydantic-ai`。PydanticAI 仅作为可选演进方向，
+不构成当前实现的缺失。
+
 ---
 
 # 13. Teacher Agent 核心结构
@@ -548,8 +540,8 @@ TeacherAgentService
 │
 ├── PersonaResolver
 │
-├── AgentRuntimeAdapter
-│   └── PydanticAI
+├── Teacher Agent Runtime
+│   └── Provider Factory（`backend/app/ai/`）
 │
 ├── ToolRegistry
 │
@@ -1110,6 +1102,8 @@ KnowledgeChunk
 
 Worker 是正式架构组件。
 
+> 落地状态（P1-1）：已实现 PostgreSQL 表驱动的独立 Worker 与 Job 生命周期；知识资源 PDF/Markdown/TXT/HTML 处理、会话摘要和记忆合并均可由 Worker 执行。
+
 不要在 HTTP Request 中执行重任务。
 
 Worker 首版负责：
@@ -1121,9 +1115,9 @@ Embedding
 Knowledge Index
 Conversation Summary
 Memory Consolidation
-Learning Profile Refresh
-Recommendation Refresh
 ```
+
+学习画像刷新仍沿用现有记忆管线；推荐刷新当前采用学生端 GET 的惰性规则生成，暂不作为 Worker Job。
 
 ---
 
@@ -1165,6 +1159,8 @@ finished_at
 
 # 33. Redis 职责
 
+> 落地状态（P1-2）：Redis Cache 与 Conversation Distributed Lock 已实现；Redis 不可用时保留本地锁降级。Worker Job Queue 当前由 PostgreSQL `background_jobs` 表承载。
+
 Redis 负责：
 
 ```text
@@ -1174,7 +1170,6 @@ Rate Limit
 Ephemeral Session
 Temporary Agent State
 WebSocket Connection Metadata
-Job Queue
 Pub/Sub
 ```
 
@@ -1508,7 +1503,7 @@ backend/
 │   │   │   └── persona.py
 │   │   │
 │   │   ├── runtime/
-│   │   │   ├── pydantic_ai_adapter.py
+│   │   │   ├── teacher_runtime.py
 │   │   │   └── events.py
 │   │   │
 │   │   ├── skills/
@@ -1878,7 +1873,7 @@ Phase 2：
 
 # 55. Agent Framework 替换原则
 
-业务层不得直接高度绑定 PydanticAI。
+业务层不得直接高度绑定任何具体 Agent Runtime（包括未来可选的 PydanticAI）。
 
 通过：
 
@@ -1891,14 +1886,17 @@ AgentRuntimeAdapter
 当前：
 
 ```text
-AgentRuntimeAdapter
+TeacherContext + QuizSkill
 ↓
-PydanticAI
+Provider Factory（`backend/app/ai/`）
+↓
+LLM / Embedding / ASR / TTS Provider
 ```
 
-未来可以替换：
+未来可以替换或引入：
 
 ```text
+PydanticAI
 OpenAI Agents SDK
 LangGraph
 Custom Runtime
@@ -1948,7 +1946,7 @@ Memory Retrieval
 ↓
 Screen Context
 ↓
-PydanticAI Runtime
+自研 Teacher Agent Runtime
 ↓
 LLM
 ↓
@@ -2176,7 +2174,7 @@ TeacherRole
 接入：
 
 ```text
-PydanticAI
+自研轻量 Teacher Agent Runtime
 Provider Gateway
 TeacherContext
 Streaming
@@ -2260,7 +2258,7 @@ Redis
 S3-Compatible Object Storage
 
 AI
-PydanticAI Runtime
+自研轻量 Teacher Agent Runtime
 Custom Teacher Domain
 Custom Skills
 TeacherContext
@@ -2274,7 +2272,7 @@ WebSocket Voice
 
 Async
 Worker
-Redis Job Queue
+PostgreSQL Job Table
 
 Test
 Vitest
@@ -2293,7 +2291,7 @@ Docker Compose
 
 1. **前端优先，先把完整学习体验跑通。**
 2. **PostgreSQL 是业务事实源，Redis 只是辅助层。**
-3. **PydanticAI 负责 Agent Runtime，不从零造通用 Agent Framework。**
+3. **采用自研轻量 Teacher Agent Runtime，PydanticAI 仅作为可选演进方向。**
 4. **Teacher / Quiz / Memory / Persona / Context 是我们自己的核心 Domain。**
 5. **正式 AI 业务输出必须经过 Pydantic Schema。**
 6. **Agent 不能直接操作数据库，必须调用 Domain Tool / Service。**
@@ -2306,4 +2304,4 @@ Docker Compose
 
 # 67. 一句话总结
 
-> **K12 AI 数字教师 V3 采用 React + FastAPI + PostgreSQL/pgvector 为核心技术底座，以 PydanticAI 作为轻量 Agent Runtime，在其上自研 Teacher Context、Persona、Memory、Quiz Skills 与学习 Domain，并通过 Provider Gateway、Worker、SSE/WebSocket 和统一数据契约构建一个可扩展、可测试、可长期演进的 AI 教育平台。**
+> **K12 AI 数字教师 V3 采用 React + FastAPI + PostgreSQL/pgvector 为核心技术底座，以自研轻量 Teacher Agent Runtime 连接 Provider Gateway，并在其上实现 Teacher Context、Persona、Memory、Quiz Skills 与学习 Domain，通过 Worker、SSE/WebSocket 和统一数据契约构建一个可扩展、可测试、可长期演进的 AI 教育平台；PydanticAI 保留为可选演进方向。**
