@@ -13,6 +13,7 @@ from app.infrastructure.database.models import StudentProfile, User
 from app.infrastructure.database.session import async_session
 from app.main import app
 from app.modules.identity.security import hash_password
+from app.modules.conversation.schemas import SendMessageRequest
 
 
 OWNER_NAME = "test_conversation_sse_user"
@@ -144,6 +145,15 @@ class OneChunkProvider(AIProvider):
     async def stream_chat(self, history, system_prompt):
         del history, system_prompt
         yield "心跳后内容"
+
+
+class EmptyProvider(AIProvider):
+    provider = "empty"
+    model = "empty-model"
+
+    async def stream_chat(self, history, system_prompt):
+        del history, system_prompt
+        yield ""
 
 
 class TestConversationSSE:
@@ -368,6 +378,33 @@ class TestConversationSSE:
             ("STUDENT", "provider 失败后的落库检查")
         ]
 
+    def test_empty_provider_response_is_not_persisted(
+        self, client: TestClient, token: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        conversation_id = create_conversation(client, token)
+        monkeypatch.setattr(
+            "app.modules.conversation.service.get_ai_provider",
+            lambda: EmptyProvider(),
+        )
+
+        response = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(token),
+            json={"content": "空回复保护"},
+        )
+
+        assert response.status_code == 200
+        events = parse_sse(response.text)
+        assert [event["event"] for event in events] == ["message.start", "error"]
+        assert events[-1]["data"]["code"] == "AI_EMPTY_RESPONSE"
+        rows = client.get(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers(token),
+        ).json()["data"]
+        assert [(row["role"], row["content"]) for row in rows] == [
+            ("STUDENT", "空回复保护")
+        ]
+
     def test_provider_chunks_emits_heartbeat_without_waiting_fifteen_seconds(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -399,3 +436,44 @@ class TestConversationSSE:
 
         chunks = asyncio.run(collect_chunks())
         assert chunks == [None, "心跳后内容"]
+
+    def test_concurrent_streams_for_one_conversation_are_serialized(self) -> None:
+        from app.modules.conversation.service import ConversationService
+
+        service = ConversationService()
+        conversation_id = uuid4()
+        active_streams = 0
+        peak_streams = 0
+
+        async def fake_send_message_locked(*args, **kwargs):
+            del args, kwargs
+
+            async def stream():
+                nonlocal active_streams, peak_streams
+                active_streams += 1
+                peak_streams = max(peak_streams, active_streams)
+                try:
+                    yield "ok"
+                    await asyncio.sleep(0.01)
+                finally:
+                    active_streams -= 1
+
+            return stream()
+
+        service._send_message_locked = fake_send_message_locked  # type: ignore[method-assign]
+
+        async def collect(stream) -> list[str]:
+            return [frame async for frame in stream]
+
+        async def run() -> list[list[str]]:
+            request = SendMessageRequest(content="并发测试")
+            async def send_and_collect() -> list[str]:
+                stream = await service.send_message(
+                    uuid4(), uuid4(), conversation_id, request
+                )
+                return await collect(stream)
+
+            return await asyncio.gather(send_and_collect(), send_and_collect())
+
+        assert asyncio.run(run()) == [["ok"], ["ok"]]
+        assert peak_streams == 1

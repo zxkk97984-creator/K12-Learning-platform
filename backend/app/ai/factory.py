@@ -18,5 +18,6 @@ def get_ai_provider() -> AIProvider:
             api_key=settings.ai_api_key,
             model=settings.ai_model,
             max_tokens=settings.ai_max_tokens,
+            thinking_mode=settings.ai_thinking_mode,
         )
     raise ValueError(f"unsupported AI provider: {settings.ai_provider}")

@@ -173,3 +173,52 @@ def test_openai_compatible_provider_returns_full_text(
         ]
 
     assert "".join(asyncio.run(collect())) == "真实的 DeepSeek 回复"
+
+
+def test_openai_compatible_provider_can_disable_deepseek_thinking(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"content": "最终回答"}}]}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, *args, **kwargs):
+            captured["payload"] = kwargs["json"]
+            return FakeResponse()
+
+    monkeypatch.setattr("app.ai.openai_compatible.httpx.AsyncClient", FakeClient)
+    provider = OpenAICompatibleProvider(
+        base_url="https://api.example.com",
+        api_key="key",
+        model="deepseek-v4-flash",
+        thinking_mode="disabled",
+    )
+
+    async def collect():
+        return [
+            chunk
+            async for chunk in provider.stream_chat(
+                [{"role": "user", "content": "你好"}],
+                "你是霜铃",
+            )
+        ]
+
+    assert "".join(asyncio.run(collect())) == "最终回答"
+    assert captured["payload"]["thinking"] == {"type": "disabled"}

@@ -48,6 +48,16 @@ QUIZ_INTENT_KEYWORDS = ("出题", "题目", "测验", "quiz", "考考我")
 
 logger = logging.getLogger(__name__)
 
+_CONVERSATION_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+class EmptyAIResponseError(RuntimeError):
+    """The provider completed without returning an assistant message."""
+
+
+def _conversation_lock(conversation_id: UUID) -> asyncio.Lock:
+    return _CONVERSATION_LOCKS.setdefault(str(conversation_id), asyncio.Lock())
+
 
 def _is_quiz_intent(content: str) -> bool:
     normalized = content.casefold()
@@ -281,6 +291,33 @@ class ConversationService:
         return (current_sequence or 0) + 1
 
     async def send_message(
+        self,
+        session: AsyncSession,
+        user_id: UUID,
+        conversation_id: UUID,
+        request: SendMessageRequest,
+    ) -> AsyncIterator[str]:
+        """Serialize turns in one conversation until its SSE stream finishes."""
+        lock = _conversation_lock(conversation_id)
+        await lock.acquire()
+        try:
+            stream = await self._send_message_locked(
+                session, user_id, conversation_id, request
+            )
+        except BaseException:
+            lock.release()
+            raise
+
+        async def guarded_stream() -> AsyncIterator[str]:
+            try:
+                async for frame in stream:
+                    yield frame
+            finally:
+                lock.release()
+
+        return guarded_stream()
+
+    async def _send_message_locked(
         self,
         session: AsyncSession,
         user_id: UUID,
@@ -693,6 +730,10 @@ class ConversationService:
                     delta_index += 1
 
                 content = "".join(chunks)
+                if not content.strip():
+                    raise EmptyAIResponseError(
+                        "AI provider returned an empty response"
+                    )
                 model_info = provider.model_info
                 yield _sse_frame(
                     "text.done",
@@ -744,6 +785,14 @@ class ConversationService:
                         "metadata": {},
                     },
                     event_id=teacher_message_id,
+                )
+            except EmptyAIResponseError:
+                logger.warning("AI provider returned an empty response")
+                await session.rollback()
+                yield _sse_error(
+                    request_id,
+                    "AI_EMPTY_RESPONSE",
+                    "AI 没有返回有效内容，请重试",
                 )
             except Exception:
                 logger.exception("AI provider stream failed")

@@ -2,7 +2,7 @@
 
 from collections.abc import AsyncIterator, Sequence
 import os
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -35,6 +35,7 @@ class OpenAICompatibleProvider(AIProvider):
         api_key: str,
         model: str,
         max_tokens: int = 512,
+        thinking_mode: Literal["auto", "enabled", "disabled"] = "auto",
         timeout_seconds: float = 30.0,
     ) -> None:
         if not base_url or not api_key:
@@ -43,6 +44,7 @@ class OpenAICompatibleProvider(AIProvider):
         self.api_key = api_key
         self.model = model
         self.max_tokens = max_tokens
+        self.thinking_mode = thinking_mode
         self.timeout_seconds = timeout_seconds
 
     async def stream_chat(
@@ -64,6 +66,8 @@ class OpenAICompatibleProvider(AIProvider):
             "max_tokens": self.max_tokens,
             "stream": False,
         }
+        if self.thinking_mode != "auto":
+            payload["thinking"] = {"type": self.thinking_mode}
         # Prefer HTTP(S) proxies over ALL_PROXY: httpx does not parse socks://
         # schemes, and a stray all_proxy would otherwise break every request.
         proxy_url = _http_proxy_url()

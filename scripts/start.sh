@@ -52,6 +52,35 @@ log()  { echo -e "\033[1;32m[START]\033[0m $*"; }
 warn() { echo -e "\033[1;33m[WARN ]\033[0m $*"; }
 die()  { echo -e "\033[1;31m[ERROR]\033[0m $*" >&2; exit 1; }
 
+open_browser() {
+  local url="$1"
+  local opener=""
+
+  # 启动脚本可能来自终端、桌面启动器或 WSL，按当前系统选择默认浏览器启动器。
+  if command -v xdg-open >/dev/null 2>&1; then
+    opener="xdg-open"
+  elif command -v gio >/dev/null 2>&1; then
+    opener="gio"
+  elif command -v open >/dev/null 2>&1; then
+    opener="open"
+  fi
+
+  if [ -n "$opener" ]; then
+    if [ "$opener" = "gio" ]; then
+      nohup gio open "$url" >/dev/null 2>&1 &
+    else
+      nohup "$opener" "$url" >/dev/null 2>&1 &
+    fi
+    log "    已请求系统默认浏览器打开: $url"
+  elif command -v powershell.exe >/dev/null 2>&1; then
+    nohup powershell.exe -NoProfile -Command "Start-Process '$url'" \
+      >/dev/null 2>&1 &
+    log "    已请求系统默认浏览器打开: $url"
+  else
+    warn "    未找到可用的浏览器启动器，请手动打开: $url"
+  fi
+}
+
 # ---------- 1. 依赖检查 ----------
 command -v docker >/dev/null || die "docker 未安装"
 command -v uv     >/dev/null || die "uv 未安装（后端包管理器）"
@@ -148,3 +177,7 @@ echo "    学生账号: xiaoming / demo123"
 echo "    管理账号: admin / admin123"
 echo "    关闭:     bash scripts/stop.sh"
 echo "============================================================================"
+
+if [ -z "$BACKEND_ONLY" ]; then
+  open_browser "http://localhost:${FRONTEND_PORT}"
+fi
