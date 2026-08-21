@@ -1,0 +1,83 @@
+{
+  "slug": "ai-primary-fun",
+  "title": "和 AI 做朋友（小学版）",
+  "description": "用最简单的语言认识人工智能：它是什么、藏在哪里、怎么聊天、为什么会出错、怎样当它的小主人。",
+  "grade_min": 3,
+  "grade_max": 6,
+  "difficulty": "EASY",
+  "estimated_minutes": 80,
+  "author": null,
+  "tags": ["AI 基础", "启蒙"],
+  "topic": "AI 基础",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "ai-as-helper",
+      "name": "AI 是帮手",
+      "description": "AI 是人造出来的电脑程序，像一位能干的帮手，但它不会自己想做什么，一切由人指挥。",
+      "topic": "AI 基础"
+    },
+    {
+      "slug": "ai-around-us",
+      "name": "身边的 AI",
+      "description": "语音助手、扫一扫识花、地图导航、拍照美化，很多常用功能背后都有 AI 在工作。",
+      "topic": "AI 基础"
+    },
+    {
+      "slug": "voice-assistant",
+      "name": "语音助手",
+      "description": "语音助手是能用说话方式和人交流的程序，它会先听清你说的话，再想办法回答或行动。",
+      "topic": "AI 基础"
+    },
+    {
+      "slug": "ai-makes-mistakes",
+      "name": "AI 会犯错",
+      "description": "AI 有时会认错东西或答错问题，因为它靠大量例子学规律，例子没见过的就容易出错。",
+      "topic": "AI 基础"
+    },
+    {
+      "slug": "ask-trusted-grownup",
+      "name": "先问大人",
+      "description": "遇到拿不准的 AI 回答或需要付费、注册的操作时，先问爸爸妈妈或老师再做决定。",
+      "topic": "AI 基础"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "AI 是什么？会学习的电脑",
+      "minutes": 14,
+      "summary": "用生活比喻认识 AI：它是从很多例子里学会本领的电脑程序。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "找一找：身边的 AI",
+      "minutes": 15,
+      "summary": "发现藏在手机、家电和校园里的 AI 小帮手。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "和语音助手聊天",
+      "minutes": 16,
+      "summary": "了解语音助手听话和回话的小秘密，学会把话说清楚。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "AI 也会出错哦",
+      "minutes": 16,
+      "summary": "看看 AI 犯错的可爱与危险，理解它为什么不是万能的。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "做聪明的小主人",
+      "minutes": 15,
+      "summary": "总结使用 AI 的三条小规矩，做工具的主人而不是仆人。"
+    }
+  ]
+}

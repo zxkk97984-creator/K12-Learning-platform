@@ -1,0 +1,98 @@
+{
+  "slug": "ml-how-machines-learn",
+  "title": "机器怎么学习？初探机器学习",
+  "description": "走进机器学习的引擎室：损失函数如何当教练、梯度下降如何下山、过拟合为何是头号大敌。",
+  "grade_min": 10,
+  "grade_max": 12,
+  "difficulty": "HARD",
+  "estimated_minutes": 100,
+  "author": null,
+  "tags": [
+    "机器学习",
+    "进阶"
+  ],
+  "topic": "机器学习",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "supervised-learning",
+      "name": "监督学习",
+      "description": "监督学习用带标准答案的样本训练模型，让它学会从输入预测输出，如图像分类与房价预估。",
+      "topic": "机器学习"
+    },
+    {
+      "slug": "unsupervised-learning",
+      "name": "无监督学习",
+      "description": "无监督学习在没有标准答案的数据中自行发现结构，典型任务是把相似对象自动聚成簇。",
+      "topic": "机器学习"
+    },
+    {
+      "slug": "reinforcement-learning",
+      "name": "强化学习",
+      "description": "强化学习让智能体在环境中不断试错，靠奖励信号逐步学出能获得高回报的行动策略。",
+      "topic": "机器学习"
+    },
+    {
+      "slug": "loss-function",
+      "name": "损失函数",
+      "description": "损失函数把模型预测与正确答案的差距折算成一个数，数值越大代表错得越离谱，是训练优化的靶子。",
+      "topic": "机器学习"
+    },
+    {
+      "slug": "gradient-descent",
+      "name": "梯度下降",
+      "description": "梯度下降沿损失下降最快的方向小步更新参数，像蒙眼下山的人每一步都朝脚感最陡的下坡走。",
+      "topic": "机器学习"
+    },
+    {
+      "slug": "overfitting",
+      "name": "过拟合",
+      "description": "过拟合指模型把训练数据的细节和噪声也背了下来，训练成绩极好而面对新数据明显变差。",
+      "topic": "机器学习"
+    },
+    {
+      "slug": "train-test-split",
+      "name": "训练集与测试集",
+      "description": "把数据分成训练集与测试集，前者用于学习、后者用于考核，测试成绩才是模型的真实水平。",
+      "topic": "机器学习"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "三种学习方式：监督、无监督与强化",
+      "minutes": 20,
+      "summary": "按「有没有答案、有没有反馈」给机器学习分类，建立全书坐标系。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "用误差当教练：损失函数直觉",
+      "minutes": 20,
+      "summary": "理解训练的靶子——把差距折算成一个可以努力缩小的数字。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "蒙眼下山：梯度下降",
+      "minutes": 20,
+      "summary": "用下山类比掌握参数更新的方向与步长，读懂一段训练伪代码。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "太聪明也是病：过拟合与欠拟合",
+      "minutes": 22,
+      "summary": "认识机器学习的头号陷阱，学会从成绩曲线诊断病情并开药。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "诚实的考试：训练集与测试集",
+      "minutes": 18,
+      "summary": "理解为什么必须留一部分数据当「从没见过的考卷」，学会诚实评估模型。"
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "slug": "network-savvy-kids",
+  "title": "网络世界生存指南",
+  "description": "学会管好账号与密码、守住个人信息、识破常见骗局，做一个既开心又安全的网络小公民。",
+  "grade_min": 7,
+  "grade_max": 9,
+  "difficulty": "EASY",
+  "estimated_minutes": 85,
+  "author": null,
+  "tags": ["网络素养", "安全"],
+  "topic": "网络素养",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "strong-password",
+      "name": "强密码",
+      "description": "强密码足够长、难以猜测、不与其他账号重复，是保护账号的第一道大门。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "personal-information",
+      "name": "个人信息边界",
+      "description": "姓名、住址、学校、证件号等能定位到真实身份的信息叫个人信息，网上分享前要想清楚给谁看。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "phishing-scam",
+      "name": "钓鱼诈骗",
+      "description": "钓鱼诈骗指伪装成正规网站或熟人消息，骗你交出密码或钱财的把戏，识别的关键是核对来源。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "digital-footprint",
+      "name": "数字足迹",
+      "description": "数字足迹是你在网上留下的所有痕迹的总和，发帖、点赞、搜索都会累积成别人眼中的你。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "two-step-verification",
+      "name": "两步验证",
+      "description": "两步验证在密码之外再加一道动态验证码，即使密码泄露，坏人没有你的手机也登不进来。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "report-and-block",
+      "name": "举报与求助",
+      "description": "遇到骚扰或不良内容时，保存证据、拉黑屏蔽并向平台或信任的大人报告，是保护自己的正确姿势。",
+      "topic": "网络素养"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "你的数字身份：账号与密码",
+      "minutes": 16,
+      "summary": "理解账号就是网络世界的你，学会造一把结实的密码并配上两步验证。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "个人信息是宝贝：隐私保护",
+      "minutes": 17,
+      "summary": "分清哪些信息能分享、哪些要守口如瓶，掌握隐私设置的用法。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "骗局识别术：钓鱼与诈骗",
+      "minutes": 18,
+      "summary": "拆解钓鱼消息的惯用伎俩，练出一眼看穿骗局的本领。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "数字足迹：发出去就收不回",
+      "minutes": 16,
+      "summary": "认识网络记忆的长久性，学会发布前多想一步的习惯。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "做网络好公民：友善、举报与求助",
+      "minutes": 18,
+      "summary": "学会应对网络欺凌、正确举报，建立自己的求助支持网。"
+    }
+  ]
+}

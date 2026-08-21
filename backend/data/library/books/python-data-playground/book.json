@@ -1,0 +1,89 @@
+{
+  "slug": "python-data-playground",
+  "title": "Python 数据游乐园",
+  "description": "用 Python 把零散数据变成答案：容器、CSV、统计与文本图表，最后完成一次真实的账本分析。",
+  "grade_min": 10,
+  "grade_max": 12,
+  "difficulty": "MEDIUM",
+  "estimated_minutes": 100,
+  "author": null,
+  "tags": ["编程", "数据分析"],
+  "topic": "数据素养",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "list-container",
+      "name": "列表容器",
+      "description": "列表是按顺序存放一组数据的容器，支持追加、切片与遍历，是最常用的数据结构。",
+      "topic": "编程"
+    },
+    {
+      "slug": "dictionary-container",
+      "name": "字典容器",
+      "description": "字典用键值对存放数据，按名字取值而非位置，适合表示带标签的记录和做计数汇总。",
+      "topic": "编程"
+    },
+    {
+      "slug": "csv-format",
+      "name": "CSV 格式",
+      "description": "CSV 用纯文本的逗号分隔值存放表格数据，每行一条记录，是数据交换最通用的格式。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "data-cleaning",
+      "name": "数据清洗",
+      "description": "数据清洗指处理缺失、重复、格式错乱等脏数据的过程，分析结论的可信度取决于清洗的质量。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "descriptive-statistics",
+      "name": "描述性统计",
+      "description": "描述性统计用均值、中位数、极值等少量指标概括一组数据的整体特征。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "iteration-aggregation",
+      "name": "迭代聚合",
+      "description": "迭代聚合是用循环遍历每条记录并逐条累加或计数的计算模式，是数据分析的基本功。",
+      "topic": "编程"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "数据的容器：列表与字典",
+      "minutes": 18,
+      "summary": "认识两种核心数据结构，学会把一堆数字装进程序并随手取用。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "读入真实世界的数据：CSV",
+      "minutes": 20,
+      "summary": "理解 CSV 格式，学会用 csv 模块把表格文件变成可处理的记录列表。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "向数据提问：统计三件套",
+      "minutes": 20,
+      "summary": "掌握计数、求和、找极值三种基本操作，让数据回答具体问题。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "让数据开口说话：文本图表",
+      "minutes": 18,
+      "summary": "用字符画出条形图，理解可视化在沟通中的价值。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "小项目：一周零花钱账本分析",
+      "minutes": 22,
+      "summary": "综合四章技能，对一份真实感十足的消费账本做完整分析并输出报告。"
+    }
+  ]
+}

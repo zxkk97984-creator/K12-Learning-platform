@@ -1,0 +1,89 @@
+{
+  "slug": "ai-ethics-young",
+  "title": "AI 伦理入门：公平与责任",
+  "description": "当算法参与决定谁能贷款、谁被录用，公平、透明与责任就成了必须回答的问题。",
+  "grade_min": 7,
+  "grade_max": 9,
+  "difficulty": "MEDIUM",
+  "estimated_minutes": 85,
+  "author": null,
+  "tags": ["AI 伦理", "思辨"],
+  "topic": "AI 伦理",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "ai-fairness",
+      "name": "算法公平",
+      "description": "算法公平要求系统对不同人群给出同等质量的对待，不能让某些群体系统性吃亏。",
+      "topic": "AI 伦理"
+    },
+    {
+      "slug": "black-box-problem",
+      "name": "黑箱问题",
+      "description": "黑箱问题指模型内部判断过程难以被人读懂，人们只能看到输入和输出，看不到理由。",
+      "topic": "AI 伦理"
+    },
+    {
+      "slug": "accountability-chain",
+      "name": "责任链",
+      "description": "责任链指从数据收集、模型开发到部署使用的每个环节都有明确的责任主体，出错时可以追责到人。",
+      "topic": "AI 伦理"
+    },
+    {
+      "slug": "informed-consent",
+      "name": "知情同意",
+      "description": "知情同意指收集或使用他人数据前，让对方清楚知道要做什么并自愿答应，而不是藏在长篇条款里默认勾选。",
+      "topic": "AI 伦理"
+    },
+    {
+      "slug": "deepfake",
+      "name": "深度伪造",
+      "description": "深度伪造是用 AI 生成的以假乱真的图像、声音或视频，常被用于诈骗和造谣，也提醒我们对网络内容保持核实习惯。",
+      "topic": "AI 伦理"
+    },
+    {
+      "slug": "privacy-tradeoff",
+      "name": "隐私与便利的权衡",
+      "description": "许多服务用个人数据换取便利，接受之前值得想一想：换来的价值是否配得上交出的信息。",
+      "topic": "AI 伦理"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "为什么 AI 需要规矩",
+      "minutes": 15,
+      "summary": "认识技术中立神话的破灭，理解伦理是设计的一部分而不是事后补丁。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "公平这把尺子：算法会偏心吗",
+      "minutes": 19,
+      "summary": "通过真实案例理解系统性偏心从哪里来，以及如何被检验。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "黑箱里的决定：透明与解释",
+      "minutes": 17,
+      "summary": "理解模型为何难解释，思考「有权知道理由」意味着什么。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "出了错谁来负责",
+      "minutes": 17,
+      "summary": "拆解责任链的每个环节，讨论「AI 干的」能否成为免责借口。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "我的脸我做主：AI 与隐私",
+      "minutes": 17,
+      "summary": "认识人脸识别、深度伪造带来的新课题，学会守护自己的数字形象。"
+    }
+  ]
+}

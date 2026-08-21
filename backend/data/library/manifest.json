@@ -55,6 +55,60 @@
       "grade_max": 12,
       "difficulty": "HARD",
       "chapters": 5
+    },
+    {
+      "slug": "network-savvy-kids",
+      "title": "网络世界生存指南",
+      "topic": "网络素养",
+      "grade_min": 7,
+      "grade_max": 9,
+      "difficulty": "EASY",
+      "chapters": 5
+    },
+    {
+      "slug": "ai-ethics-young",
+      "title": "AI 伦理入门：公平与责任",
+      "topic": "AI 伦理",
+      "grade_min": 7,
+      "grade_max": 9,
+      "difficulty": "MEDIUM",
+      "chapters": 5
+    },
+    {
+      "slug": "ml-how-machines-learn",
+      "title": "机器怎么学习？初探机器学习",
+      "topic": "机器学习",
+      "grade_min": 10,
+      "grade_max": 12,
+      "difficulty": "HARD",
+      "chapters": 5
+    },
+    {
+      "slug": "python-data-playground",
+      "title": "Python 数据游乐园",
+      "topic": "数据素养",
+      "grade_min": 10,
+      "grade_max": 12,
+      "difficulty": "MEDIUM",
+      "chapters": 5
+    },
+    {
+      "slug": "internet-under-the-hood",
+      "title": "互联网是怎么工作的",
+      "topic": "网络素养",
+      "grade_min": 10,
+      "grade_max": 12,
+      "difficulty": "MEDIUM",
+      "chapters": 5
+    },
+    {
+      "slug": "ai-primary-fun",
+      "title": "和 AI 做朋友（小学版）",
+      "topic": "AI 基础",
+      "grade_min": 3,
+      "grade_max": 6,
+      "difficulty": "EASY",
+      "chapters": 5
     }
   ]
 }

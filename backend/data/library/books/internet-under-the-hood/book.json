@@ -1,0 +1,89 @@
+{
+  "slug": "internet-under-the-hood",
+  "title": "互联网是怎么工作的",
+  "description": "跟着一次网页访问潜入网络底层：数据包如何跋涉、DNS 如何翻译、HTTP 如何对话、缓存如何提速。",
+  "grade_min": 10,
+  "grade_max": 12,
+  "difficulty": "MEDIUM",
+  "estimated_minutes": 100,
+  "author": null,
+  "tags": ["网络素养", "原理"],
+  "topic": "网络素养",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "packet-switching",
+      "name": "分组交换",
+      "description": "分组交换把大数据切成带地址标签的小包分别传输，到达后按序重组，是互联网的运输制度。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "ip-address",
+      "name": "IP 地址",
+      "description": "IP 地址是网络上每台设备的编号，IPv4 形如四段数字，负责告诉路由器包裹该送往哪里。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "dns-resolution",
+      "name": "域名解析",
+      "description": "域名解析是把人类好记的域名翻译成机器使用的 IP 地址的过程，由遍布全球的 DNS 系统分层完成。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "http-protocol",
+      "name": "HTTP 协议",
+      "description": "HTTP 是浏览器与网站服务器之间的对话规则：一问一答，请求带方法与路径，响应带状态码。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "https-encryption",
+      "name": "HTTPS 加密",
+      "description": "HTTPS 在 HTTP 外套上加密层，配合证书体系验证网站身份，防止通信被窃听或篡改。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "cache-and-cdn",
+      "name": "缓存与内容分发网络",
+      "description": "缓存把常用数据存在离用户更近的地方以减少重复获取；内容分发网络把站点副本铺到全球各地实现就近服务。",
+      "topic": "网络素养"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "拆开网络的世界观：一次点击之旅",
+      "minutes": 18,
+      "summary": "以打开一个网页为例，画出数据从浏览器到服务器再返回的全景路线图。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "包裹与地址：分组交换与 IP",
+      "minutes": 20,
+      "summary": "理解数据如何被切块运输、路由器如何接力，以及 IP 地址的门牌制度。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "域名翻译官：DNS 是怎么工作的",
+      "minutes": 18,
+      "summary": "追踪一次域名解析的完整流程，理解缓存与分层的智慧。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "HTTP 与浏览器的一场对话",
+      "minutes": 20,
+      "summary": "读懂请求与响应的结构，学会看状态码判断一次通信的成败。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "快与稳的艺术：缓存、CDN 与加密",
+      "minutes": 24,
+      "summary": "认识让网络又快又安全的三件基础设施，理解地址栏小锁的含义。"
+    }
+  ]
+}
