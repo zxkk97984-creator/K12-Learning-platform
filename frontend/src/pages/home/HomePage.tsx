@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import type { Book, BookProgress, Chapter } from '@/entities/book/types'
 import type { StudentEpisode, StudentMemory } from '@/entities/memory/types'
 import type { QuizSession } from '@/entities/quiz/types'
-import { useCompanionStore } from '@/features/companion'
+import { CompanionSprite, useCompanionStore } from '@/features/companion'
 import type { ConversationIntent } from '@/features/conversation'
 import { useConversationStore } from '@/features/conversation'
 import { homeRecommendation } from '@/mocks/data/recommendations'
@@ -148,8 +148,13 @@ export default function HomePage() {
 
         <aside className="w-[318px] max-w-full rounded-[14px] border border-border bg-surface p-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-fg-soft text-lg">
-              🌙
+            <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full bg-fg-soft">
+              <CompanionSprite
+                state="idle"
+                cellWidth={53}
+                label="霜铃在线"
+                className="pointer-events-none -translate-x-2 -translate-y-1"
+              />
             </div>
             <div>
               <p className="font-mono text-[10px] text-muted">AI 教师 · 在线</p>

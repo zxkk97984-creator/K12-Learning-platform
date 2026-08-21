@@ -46,9 +46,10 @@ describe('createVoiceClient', () => {
     FakeWebSocket.instances = []
     callbacks = {
       onState: vi.fn(),
-      onPartial: vi.fn(),
-      onFinal: vi.fn(),
-      onAudio: vi.fn(),
+    onPartial: vi.fn(),
+    onFinal: vi.fn(),
+    onReply: vi.fn(),
+    onAudio: vi.fn(),
       onError: vi.fn(),
     }
   })
@@ -73,11 +74,13 @@ describe('createVoiceClient', () => {
     socket.receive({ type: 'state', state: 'LISTENING' })
     socket.receive({ type: 'partial', text: '这里是什么意思', transcript_id: 't-1' })
     socket.receive({ type: 'final', text: '这里是什么意思', conversation_id: 'conversation-1' })
+    socket.receive({ type: 'reply', text: '这是文字回复', conversation_id: 'conversation-1' })
     socket.receive({ type: 'audio', data: 'QUJD' })
 
     expect(callbacks.onState).toHaveBeenCalledWith('LISTENING')
     expect(callbacks.onPartial).toHaveBeenCalledWith('这里是什么意思', 't-1')
     expect(callbacks.onFinal).toHaveBeenCalledWith('这里是什么意思', 'conversation-1')
+    expect(callbacks.onReply).toHaveBeenCalledWith('这是文字回复', 'conversation-1')
     expect(callbacks.onAudio).toHaveBeenCalledWith('QUJD')
   })
 

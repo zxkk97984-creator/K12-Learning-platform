@@ -224,7 +224,6 @@ describe('conversation store real service lifecycle', () => {
 
     expect(useConversationStore.getState().messages).toEqual([
       expect.objectContaining({ role: 'user', content: '给我出题' }),
-      expect.objectContaining({ id: 'teacher-1', role: 'ai', kind: 'text' }),
       expect.objectContaining({
         id: 'tool-tool-run-1',
         role: 'ai',
@@ -262,6 +261,17 @@ describe('conversation store real service lifecycle', () => {
         sequence: 2,
         model_info: { provider: 'quiz-bank', model: 'quiz-bank-v1' },
         created_at: '2026-08-19T08:00:00Z',
+      },
+      {
+        message_id: 'message-empty-teacher',
+        conversation_id: 'conversation-1',
+        role: 'TEACHER',
+        type: 'TEXT',
+        content: '',
+        metadata: {},
+        sequence: 3,
+        model_info: null,
+        created_at: '2026-08-19T08:00:01Z',
       },
     ])
 
@@ -310,8 +320,38 @@ describe('conversation store real service lifecycle', () => {
         content: 'Quiz Skill 生成失败，请稍后再试',
         quiz: null,
       }),
-      expect.objectContaining({ id: 'teacher-error', role: 'ai', kind: 'text' }),
     ])
+  })
+
+  it('SSE 在 start 后报错时移除空的 AI 气泡', async () => {
+    mocks.conversationService.sendMessage.mockImplementation(
+      async (_id: string, _input: unknown, callbacks?: SendMessageCallbacks) => {
+        callbacks?.onStart?.({
+          message_id: 'teacher-empty-error',
+          conversation_id: 'conversation-1',
+          role: 'TEACHER',
+          type: 'TEXT',
+          sequence: 2,
+        })
+        callbacks?.onError?.({
+          code: 'AI_EMPTY_RESPONSE',
+          message: 'AI 没有返回有效内容，请重试',
+          fatal: true,
+        })
+      },
+    )
+
+    await useConversationStore.getState().send('触发空回复')
+
+    expect(useConversationStore.getState().messages).toEqual([
+      expect.objectContaining({ role: 'user', content: '触发空回复' }),
+      expect.objectContaining({ role: 'ai', kind: 'error' }),
+    ])
+    expect(useConversationStore.getState().messages).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'teacher-empty-error', role: 'ai', content: '' }),
+      ]),
+    )
   })
 
   it('非 quiz 工具沿用通用 TOOL_STATUS 文案', async () => {
@@ -347,7 +387,6 @@ describe('conversation store real service lifecycle', () => {
         kind: 'tool',
         content: 'hint · 已完成',
       }),
-      expect.objectContaining({ id: 'teacher-hint', role: 'ai', kind: 'text' }),
     ])
   })
 
@@ -385,7 +424,6 @@ describe('conversation store real service lifecycle', () => {
         content: 'Quiz Skill 已创建 · 正式测验已记录',
         quiz: null,
       }),
-      expect.objectContaining({ id: 'teacher-empty', role: 'ai', kind: 'text' }),
     ])
   })
 })

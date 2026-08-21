@@ -13,6 +13,7 @@ import {
   type Point,
 } from '../lib/geometry'
 import { persistPosition, useCompanionStore } from '../store/companion-store'
+import type { CompanionAiState } from '../types'
 
 interface DragState {
   startX: number
@@ -20,6 +21,7 @@ interface DragState {
   originX: number
   originY: number
   moved: boolean
+  previousAiState: CompanionAiState
 }
 
 /** 桌虫拖拽 / 键盘 / resize / Escape / 主动建议 */
@@ -30,6 +32,7 @@ export function useCompanionDock() {
   const setDragging = useCompanionStore((state) => state.setDragging)
   const setOpen = useCompanionStore((state) => state.setOpen)
   const setSuggest = useCompanionStore((state) => state.setSuggest)
+  const setAiState = useCompanionStore((state) => state.setAiState)
 
   const dragRef = useRef<DragState | null>(null)
   const positionRef = useRef<Point>(position)
@@ -81,6 +84,7 @@ export function useCompanionDock() {
       originX: positionRef.current.x,
       originY: positionRef.current.y,
       moved: false,
+      previousAiState: useCompanionStore.getState().aiState,
     }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -93,6 +97,8 @@ export function useCompanionDock() {
     if (Math.abs(dx) + Math.abs(dy) > DOCK_DRAG_THRESHOLD) drag.moved = true
     if (!drag.moved) return
     setDragging(true)
+    if (dx > 0) setAiState('running-right')
+    if (dx < 0) setAiState('running-left')
     const next = clampDock(drag.originX + dx, drag.originY + dy)
     positionRef.current = next
     setPosition(next)
@@ -101,8 +107,19 @@ export function useCompanionDock() {
   const handlePointerUp = () => {
     const drag = dragRef.current
     if (!drag) return
-    if (drag.moved) persistPosition(positionRef.current)
+    if (drag.moved) {
+      persistPosition(positionRef.current)
+      setAiState(drag.previousAiState)
+    }
     setDragging(false)
+  }
+
+  const handlePointerCancel = () => {
+    const drag = dragRef.current
+    if (!drag) return
+    if (drag.moved) setAiState(drag.previousAiState)
+    setDragging(false)
+    dragRef.current = null
   }
 
   const handleClick = () => {
@@ -130,7 +147,15 @@ export function useCompanionDock() {
     persistPosition(next)
   }
 
-  return { position, handlePointerDown, handlePointerMove, handlePointerUp, handleClick, handleKeyDown }
+  return {
+    position,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+    handlePointerCancel,
+    handleClick,
+    handleKeyDown,
+  }
 }
 
 export { COMPANION_POSITION_KEY }

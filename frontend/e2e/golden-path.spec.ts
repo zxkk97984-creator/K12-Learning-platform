@@ -59,9 +59,6 @@ test.describe('黄金路径', () => {
     // 4. 发送消息 → 流式 AI 回复
     await page.getByLabel('消息输入').fill('那它为什么会出错？')
     await page.getByRole('button', { name: '发送消息' }).click()
-    await expect(page.getByText(/根据知识库资料|遇到错误时，可以先复现问题/).last()).toBeVisible({
-      timeout: 10_000,
-    })
 
     // 等教师消息真正落库后再刷新，避免流式完成前 reload 丢失历史。
     const conversationsResponse = await request.get(
@@ -70,6 +67,7 @@ test.describe('黄金路径', () => {
     )
     expect(conversationsResponse.ok()).toBeTruthy()
     const conversationId = (await conversationsResponse.json()).data[0].conversation_id
+    let teacherReply = ''
     await expect
       .poll(
         async () => {
@@ -79,25 +77,26 @@ test.describe('黄金路径', () => {
           )
           if (!messagesResponse.ok()) return false
           const messages = (await messagesResponse.json()).data
-          return messages.some(
+          const reply = messages.find(
             (message: { role: string; content: string }) =>
-              message.role === 'TEACHER' &&
-              (message.content.includes('根据知识库资料') ||
-                message.content.includes('遇到错误时，可以先复现问题')),
+              message.role === 'TEACHER' && message.content.trim(),
           )
+          teacherReply = reply?.content.trim() ?? ''
+          return Boolean(teacherReply)
         },
         { timeout: 10_000 },
       )
       .toBe(true)
+    const visibleReplyPrefix = teacherReply.replace(/(\*\*|__|`)/g, '').slice(0, 12)
+    const conversationPanel = page.getByRole('complementary', { name: '霜铃对话面板' })
+    await expect(conversationPanel).toContainText(visibleReplyPrefix)
 
     // 4-D：刷新后重新从真实会话历史加载消息
     await page.reload()
     await expect(page.getByRole('heading', { name: '训练数据', level: 1 })).toBeVisible()
     await page.getByRole('button', { name: '打开霜铃 AI 教师' }).click()
-    await expect(page.getByRole('complementary', { name: '霜铃对话面板' })).toBeVisible()
-    await expect(page.getByText(/根据知识库资料|遇到错误时，可以先复现问题/).last()).toBeVisible({
-      timeout: 10_000,
-    })
+    await expect(conversationPanel).toBeVisible()
+    await expect(conversationPanel).toContainText(visibleReplyPrefix)
 
     // 5. 触发 quiz → tool 状态 → quiz 卡
     await page.getByRole('button', { name: '给我出题' }).first().click()

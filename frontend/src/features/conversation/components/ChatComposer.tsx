@@ -8,17 +8,13 @@ import { studentService } from '@/mocks/services'
 import { createVoiceClient, type VoiceClient, type VoiceState } from '@/shared/api/voice-client'
 
 import { useConversationStore } from '../store/conversation-store'
+import { startAudioCapture, type AudioCapture } from '@/features/voice/audio-capture'
 
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = String(reader.result ?? '')
-      resolve(result.split(',')[1] ?? '')
-    }
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(blob)
-  })
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
 }
 
 const VOICE_LABEL: Record<VoiceState, string | null> = {
@@ -46,8 +42,7 @@ export function ChatComposer() {
   const showToast = useToastStore((state) => state.showToast)
   const { screenContext } = useScreenContext()
 
-  const recorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<string[]>([])
+  const captureRef = useRef<AudioCapture | null>(null)
   const voiceClientRef = useRef<VoiceClient | null>(null)
 
   useEffect(() => {
@@ -60,9 +55,8 @@ export function ChatComposer() {
   useEffect(() => {
     return () => {
       voiceClientRef.current?.close()
-      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-        recorderRef.current.stop()
-      }
+      captureRef.current?.stop()
+      captureRef.current = null
     }
   }, [])
 
@@ -81,7 +75,7 @@ export function ChatComposer() {
         conversationId,
         callbacks: {
           onState: applyVoiceState,
-          onFinal: () => void refresh(),
+          onReply: () => void refresh(),
           onAudio: (data) => {
             if (!voicePrefs.tts_enabled) return
             const audio = new Audio(`data:audio/wav;base64,${data}`)
@@ -100,36 +94,36 @@ export function ChatComposer() {
       voiceClientRef.current = client
       await client.connect()
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const recorder = new MediaRecorder(stream)
-      recorderRef.current = recorder
-      chunksRef.current = []
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          void blobToBase64(event.data).then((base64) => chunksRef.current.push(base64))
-        }
-      }
-      recorder.onstop = () => {
-        stream.getTracks().forEach((track) => track.stop())
-        for (const chunk of chunksRef.current) client.sendAudioChunk(chunk)
-        client.sendAudioEnd()
-      }
-      recorder.start()
+      const capture = await startAudioCapture((frame) => {
+        client.sendAudioChunk(arrayBufferToBase64(frame))
+      })
+      captureRef.current = capture
       setRecording(true)
       applyVoiceState('LISTENING')
-    } catch {
+    } catch (error) {
+      captureRef.current?.stop()
+      captureRef.current = null
       voiceClientRef.current?.close()
       voiceClientRef.current = null
-      showToast('语音不可用，请使用文字输入')
+      const reason = error instanceof Error ? error.message : ''
+      const message =
+        reason === 'NO_MIC_PERMISSION'
+          ? '浏览器没有麦克风权限，请在地址栏中允许麦克风后重试'
+          : reason === 'WORKLET_UNSUPPORTED'
+            ? '当前浏览器不支持实时音频采集，请使用最新版 Chrome'
+            : reason === 'CAPTURE_FAILED'
+              ? '麦克风初始化失败，请检查系统录音设备'
+              : '语音连接失败，请检查后端是否已重启'
+      showToast(message)
       applyVoiceState('ERROR')
       window.setTimeout(() => setVoiceState('IDLE'), 1800)
     }
   }
 
   const stopVoice = () => {
-    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-      recorderRef.current.stop()
-    }
+    captureRef.current?.stop()
+    captureRef.current = null
+    voiceClientRef.current?.sendAudioEnd()
     setRecording(false)
   }
 

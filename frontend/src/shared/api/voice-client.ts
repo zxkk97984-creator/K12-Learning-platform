@@ -6,6 +6,7 @@ export interface VoiceClientCallbacks {
   onState?: (state: VoiceState) => void
   onPartial?: (text: string, transcriptId: string) => void
   onFinal?: (text: string, conversationId: string) => void
+  onReply?: (text: string, conversationId: string) => void
   onAudio?: (base64Audio: string) => void
   onError?: (code: string, message: string) => void
   onClose?: () => void
@@ -61,6 +62,9 @@ export function createVoiceClient(options: VoiceClientOptions): VoiceClient {
           break
         case 'final':
           callbacks.onFinal?.(String(frame.text ?? ''), String(frame.conversation_id ?? ''))
+          break
+        case 'reply':
+          callbacks.onReply?.(String(frame.text ?? ''), String(frame.conversation_id ?? ''))
           break
         case 'audio':
           callbacks.onAudio?.(String(frame.data ?? ''))

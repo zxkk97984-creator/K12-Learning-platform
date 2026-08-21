@@ -8,6 +8,7 @@ import type {
 } from '@/entities/student/types'
 import { deriveStage, type TeacherRole } from '@/entities/student/types'
 import { useAuth } from '@/features/auth'
+import { CompanionPetPicker, getCompanionPet, useCompanionStore } from '@/features/companion'
 import { useToastStore } from '@/features/feedback'
 import { studentService, teacherRoleService } from '@/mocks/services'
 
@@ -37,6 +38,8 @@ function applyAge(age: 'primary' | 'junior' | 'senior'): void {
 export default function SettingsPage() {
   const showToast = useToastStore((state) => state.showToast)
   const { currentUser, refreshMe } = useAuth()
+  const selectedPetId = useCompanionStore((state) => state.selectedPetId)
+  const setSelectedPet = useCompanionStore((state) => state.setSelectedPet)
   const [nickname, setNickname] = useState('')
   const [grade, setGrade] = useState(8)
   const [language, setLanguage] = useState('zh-CN')
@@ -270,6 +273,20 @@ export default function SettingsPage() {
               ))}
             </select>
           </label>
+        </section>
+
+        <section className="rounded-[14px] border border-border bg-surface p-5">
+          <h2 className="font-display text-lg text-fg">桌宠</h2>
+          <p className="mt-1 text-xs text-muted">
+            选择陪伴你学习的桌面伙伴。当前：{getCompanionPet(selectedPetId).displayName}
+          </p>
+          <CompanionPetPicker
+            selectedPetId={selectedPetId}
+            onSelect={(petId) => {
+              setSelectedPet(petId)
+              showToast(`已切换为${getCompanionPet(petId).displayName}`)
+            }}
+          />
         </section>
 
         <section className="rounded-[14px] border border-border bg-surface p-5">

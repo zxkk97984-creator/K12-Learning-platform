@@ -7,6 +7,18 @@ import {
   type Point,
 } from '../lib/geometry'
 import type { CompanionAiState } from '../types'
+import { getCompanionPet, type CompanionPetId } from '../lib/sprite'
+
+export const COMPANION_PET_KEY = 'shuangling-companion-pet'
+
+function loadPetId(): CompanionPetId {
+  if (typeof window === 'undefined') return 'shuangling'
+  try {
+    return getCompanionPet(window.localStorage.getItem(COMPANION_PET_KEY) ?? '').id
+  } catch {
+    return 'shuangling'
+  }
+}
 
 function loadPosition(): Point {
   if (typeof window === 'undefined') return { x: 0, y: 0 }
@@ -35,12 +47,14 @@ interface CompanionStore {
   aiState: CompanionAiState
   dragging: boolean
   suggest: boolean
+  selectedPetId: CompanionPetId
   setOpen: (open: boolean) => void
   toggleOpen: () => void
   setPosition: (position: Point) => void
   setAiState: (state: CompanionAiState) => void
   setDragging: (dragging: boolean) => void
   setSuggest: (suggest: boolean) => void
+  setSelectedPet: (petId: string) => void
 }
 
 export const useCompanionStore = create<CompanionStore>()((set) => ({
@@ -49,10 +63,20 @@ export const useCompanionStore = create<CompanionStore>()((set) => ({
   aiState: 'idle',
   dragging: false,
   suggest: false,
+  selectedPetId: loadPetId(),
   setOpen: (open) => set({ open }),
   toggleOpen: () => set((state) => ({ open: !state.open })),
   setPosition: (position) => set({ position }),
   setAiState: (aiState) => set({ aiState }),
   setDragging: (dragging) => set({ dragging }),
   setSuggest: (suggest) => set({ suggest }),
+  setSelectedPet: (petId) => {
+    const selectedPetId = getCompanionPet(petId).id
+    try {
+      window.localStorage.setItem(COMPANION_PET_KEY, selectedPetId)
+    } catch {
+      // 存储不可用时仍允许本次会话切换桌宠。
+    }
+    set({ selectedPetId })
+  },
 }))

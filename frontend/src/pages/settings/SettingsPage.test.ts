@@ -52,6 +52,7 @@ vi.mock('@/features/feedback', () => ({
 }))
 
 import SettingsPage from './SettingsPage'
+import { useCompanionStore } from '@/features/companion'
 
 const roles = [
   {
@@ -79,6 +80,8 @@ const roles = [
 describe('SettingsPage teacher roles', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.localStorage.clear()
+    useCompanionStore.setState({ selectedPetId: 'shuangling' })
     mocks.getPreferences.mockResolvedValue({
       preference_id: 'pref-1',
       student_id: 'student-1',
@@ -110,5 +113,18 @@ describe('SettingsPage teacher roles', () => {
       }),
     )
     expect(mocks.refreshMe).toHaveBeenCalled()
+  })
+
+  it('展示六种桌宠并立即保存用户选择', async () => {
+    render(React.createElement(SettingsPage))
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: '桌宠' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: /选择阿尼亚/ }))
+
+    expect(useCompanionStore.getState().selectedPetId).toBe('anya')
+    expect(window.localStorage.getItem('shuangling-companion-pet')).toBe('anya')
+    expect(screen.getByRole('button', { name: /选择阿尼亚/ }).getAttribute('aria-pressed')).toBe(
+      'true',
+    )
   })
 })

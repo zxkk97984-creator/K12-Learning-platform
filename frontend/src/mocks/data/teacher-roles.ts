@@ -2,7 +2,9 @@ import type { TeacherRole } from '@/entities/student/types'
 
 /** 原型 spriteFrames（row/frames/label 一一对应） */
 export const spriteFrames = {
-  idle: { row: 0, frames: 7, label: '待机中' },
+  idle: { row: 0, frames: 6, label: '待机中' },
+  'running-right': { row: 1, frames: 8, label: '向右移动中' },
+  'running-left': { row: 2, frames: 8, label: '向左移动中' },
   listening: { row: 6, frames: 6, label: '正在听' },
   thinking: { row: 8, frames: 6, label: '思考中' },
   speaking: { row: 3, frames: 4, label: '讲解中' },
@@ -24,7 +26,7 @@ export const mockTeacherRoles: TeacherRole[] = [
     teaching_style: null,
     avatar: null,
     sprite_manifest: {
-      sheet_url: 'spritesheet-extended.webp',
+      sheet_url: '/spritesheet-extended.webp',
       grid_cols: 8,
       grid_rows: 11,
       states: spriteFrames,

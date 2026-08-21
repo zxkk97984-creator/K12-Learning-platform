@@ -54,6 +54,15 @@ function toChatMessage(message: Message): ChatMessage {
   }
 }
 
+function toChatMessages(messages: Message[]): ChatMessage[] {
+  return messages
+    .filter(
+      (message) =>
+        !(message.role === 'TEACHER' && message.type === 'TEXT' && !message.content.trim()),
+    )
+    .map(toChatMessage)
+}
+
 let streamTimer: number | undefined
 let loadPromise: Promise<void> | null = null
 let activeAbortController: AbortController | undefined
@@ -144,7 +153,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
         )
         set({
           conversationId: conversation.conversation_id,
-          messages: serviceMessages.map(toChatMessage),
+          messages: toChatMessages(serviceMessages),
           loaded: true,
         })
       } catch {
@@ -185,7 +194,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       const serviceMessages = await conversationService.getMessages(conversationId, {
         sort: 'asc',
       })
-      set({ messages: serviceMessages.map(toChatMessage), loaded: true })
+      set({ messages: toChatMessages(serviceMessages), loaded: true })
     } catch {
       // 语音 final 后的历史刷新失败不阻塞状态机。
     }
@@ -221,15 +230,25 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     let assistantContent = ''
     let errorShown = false
 
-    const removeTyping = () => {
-      set((state) => ({ messages: state.messages.filter((message) => message.id !== typingId) }))
+    const removePendingMessages = () => {
+      set((state) => ({
+        messages: state.messages.filter(
+          (message) =>
+            message.id !== typingId &&
+            !(assistantId && message.id === assistantId && !message.content.trim()),
+        ),
+      }))
     }
     const showError = (error: StreamErrorEvent | Error) => {
       if (errorShown) return
       errorShown = true
       set((state) => ({
         messages: [
-          ...state.messages.filter((message) => message.id !== typingId),
+          ...state.messages.filter(
+            (message) =>
+              message.id !== typingId &&
+              !(assistantId && message.id === assistantId && !message.content.trim()),
+          ),
           {
             id: nextId(),
             role: 'ai',
@@ -359,8 +378,10 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
         },
         onDone: (event) => {
           assistantId ??= event.message_id
-          upsertAssistant(assistantId, { content: assistantContent, streaming: false })
-          removeTyping()
+          if (assistantContent.trim()) {
+            upsertAssistant(assistantId, { content: assistantContent, streaming: false })
+          }
+          removePendingMessages()
           useCompanionStore.getState().setAiState('speaking')
         },
         onError: (error) => {
@@ -371,7 +392,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       await conversationService.sendMessage(conversationId, input, callbacks)
     } catch (error) {
       if (!isAbortError(error)) showError(error instanceof Error ? error : new Error(String(error)))
-      else removeTyping()
+      else removePendingMessages()
     } finally {
       if (activeAbortController === abortController) activeAbortController = undefined
     }

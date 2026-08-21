@@ -5,6 +5,7 @@ import { QuizCard } from '@/features/quiz'
 
 import { useConversationStore } from '../store/conversation-store'
 import type { ChatMessage } from '../types'
+import { MarkdownMessage } from './MarkdownMessage'
 
 function MessageRow({
   message,
@@ -42,7 +43,9 @@ function MessageRow({
     return (
       <div className="flex justify-start">
         <div className="max-w-[89%] rounded-[13px_13px_13px_4px] border border-muted bg-fg-soft p-3">
-          <p className="text-[13px] leading-relaxed text-fg">{message.content}</p>
+          <p className="text-[13px] leading-relaxed text-fg">
+            {message.content}
+          </p>
           <div className="mt-2 flex gap-2">
             <button
               type="button"
@@ -68,7 +71,9 @@ function MessageRow({
     return (
       <div className="flex justify-start">
         <div className="max-w-[89%] rounded-[13px_13px_13px_4px] border border-border bg-surface p-3">
-          <p className="text-[13px] leading-relaxed text-fg">{message.content}</p>
+          <p className="text-[13px] leading-relaxed text-fg">
+            <MarkdownMessage content={message.content} />
+          </p>
           <p className="mt-1.5 text-[12px] text-muted">
             你可以试试：「解释训练数据」「给我出题」
           </p>
@@ -82,7 +87,9 @@ function MessageRow({
       <div className="flex justify-start">
         <div className="max-w-[89%]">
           <div className="rounded-[13px_13px_13px_4px] border border-border bg-surface p-3">
-            <p className="text-[13px] leading-relaxed text-fg">{message.content}</p>
+            <p className="text-[13px] leading-relaxed text-fg">
+              <MarkdownMessage content={message.content} />
+            </p>
             <QuizCard sessionId={message.quiz?.sessionId ?? ''} />
           </div>
           {message.meta ? (
@@ -106,7 +113,7 @@ function MessageRow({
               : 'rounded-[13px_13px_13px_4px] border border-border bg-surface p-2.5 text-[13px] leading-relaxed text-fg'
           }
         >
-          {message.content}
+          {isUser ? message.content : <MarkdownMessage content={message.content} />}
           {message.streaming ? (
             <span className="ml-0.5 inline-block h-[1em] w-px animate-pulse bg-fg align-[-0.15em]" />
           ) : null}
