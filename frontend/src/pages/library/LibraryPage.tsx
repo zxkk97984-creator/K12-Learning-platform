@@ -76,6 +76,8 @@ export default function LibraryPage() {
     useCompanionStore.getState().setOpen(true)
   }
 
+  const openBook = (bookId: string) => navigate(`/books/${bookId}`)
+
   const clearFilters = () => {
     setGrade('推荐')
     setTopics([])
@@ -184,7 +186,15 @@ export default function LibraryPage() {
                     <span className="font-mono text-[10px] text-muted">
                       {book.grade_min <= 6 ? '小学' : book.grade_min <= 9 ? '初中' : '高中'} · {book.tags[0]}
                     </span>
-                    <h3 className="mt-1.5 font-display text-lg leading-tight text-fg">{book.title}</h3>
+                    <h3 className="mt-1.5 font-display text-lg leading-tight text-fg">
+                      <button
+                        type="button"
+                        className="w-full cursor-pointer text-left font-display text-lg leading-tight text-fg hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        onClick={() => openBook(book.book_id)}
+                      >
+                        {book.title}
+                      </button>
+                    </h3>
                     <p className="mt-1 text-[11px] text-muted">{book.keywords}</p>
                     <div className="mt-3 flex items-center justify-between border-t border-border pt-2.5">
                       <span className="font-mono text-[9px] text-muted">
@@ -193,15 +203,24 @@ export default function LibraryPage() {
                     </div>
                     <div className="mt-2 flex min-h-[30px] items-center justify-between border-t border-border pt-2">
                       <span className="text-[11px] text-muted">{progressLabel(progress)}</span>
-                      {progress?.chapter_id ? (
+                      <div className="flex items-center gap-3">
                         <button
                           type="button"
-                          className="text-[11px] text-fg hover:text-accent"
-                          onClick={() => navigate(`/learn/${book.book_id}/${progress.chapter_id}`)}
+                          className="text-[11px] text-muted hover:text-fg hover:underline"
+                          onClick={() => openBook(book.book_id)}
                         >
-                          继续 →
+                          详情
                         </button>
-                      ) : null}
+                        {progress?.chapter_id ? (
+                          <button
+                            type="button"
+                            className="text-[11px] text-fg hover:text-accent"
+                            onClick={() => navigate(`/learn/${book.book_id}/${progress.chapter_id}`)}
+                          >
+                            继续 →
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                     {recommendation ? (
                       <button
@@ -256,22 +275,39 @@ export default function LibraryPage() {
                   <span className="font-mono text-[9px] text-muted">
                     {book.grade_min <= 6 ? '小学' : book.grade_min <= 9 ? '初中' : '高中'} · {book.tags[0]}
                   </span>
-                  <h3 className="mt-1.5 font-display text-lg leading-tight text-fg">{book.title}</h3>
+                  <h3 className="mt-1.5 font-display text-lg leading-tight text-fg">
+                    <button
+                      type="button"
+                      className="w-full cursor-pointer text-left font-display text-lg leading-tight text-fg hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      onClick={() => openBook(book.book_id)}
+                    >
+                      {book.title}
+                    </button>
+                  </h3>
                   <p className="mt-1 text-[11px] text-muted">{book.keywords}</p>
                   <div className="mt-2.5 font-mono text-[9px] text-muted">
                     {book.chapter_count} 章 · 预计 {book.estimated_minutes} 分钟
                   </div>
                   <div className="mt-2 flex min-h-[30px] items-center justify-between border-t border-border pt-2">
                     <span className="text-[11px] text-muted">{progressLabel(progress)}</span>
-                    {progress?.chapter_id ? (
+                    <div className="flex items-center gap-3">
                       <button
                         type="button"
-                        className="text-[11px] text-fg hover:text-accent"
-                        onClick={() => navigate(`/learn/${book.book_id}/${progress.chapter_id}`)}
+                        className="text-[11px] text-muted hover:text-fg hover:underline"
+                        onClick={() => openBook(book.book_id)}
                       >
-                        继续 →
+                        详情
                       </button>
-                    ) : null}
+                      {progress?.chapter_id ? (
+                        <button
+                          type="button"
+                          className="text-[11px] text-fg hover:text-accent"
+                          onClick={() => navigate(`/learn/${book.book_id}/${progress.chapter_id}`)}
+                        >
+                          继续 →
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                   {recommendation ? (
                     <button
