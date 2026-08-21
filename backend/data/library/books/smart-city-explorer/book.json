@@ -1,0 +1,83 @@
+{
+  "slug": "smart-city-explorer",
+  "title": "智慧城市探秘",
+  "description": "红绿灯会思考、路灯能报警、大屏看得见全城呼吸——走进藏在城市里的传感器与数据世界。",
+  "grade_min": 7,
+  "grade_max": 9,
+  "difficulty": "EASY",
+  "estimated_minutes": 81,
+  "author": null,
+  "tags": ["数据素养", "生活"],
+  "topic": "数据素养",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "smart-city-concept",
+      "name": "智慧城市",
+      "description": "智慧城市用传感器收集城市运行数据，再用数据帮助管理者做出更聪明的决策，让生活更便利。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "urban-sensors-network",
+      "name": "城市传感器网络",
+      "description": "城市传感器网络由分布在各处的监测设备组成，持续采集交通、空气、噪音等运行数据。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "traffic-optimization",
+      "name": "交通优化",
+      "description": "交通优化通过分析路口车流量数据动态调整信号灯配时，减少等待与拥堵。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "city-data-dashboard",
+      "name": "城市数据大屏",
+      "description": "城市数据大屏把各类实时数据汇成一整面可视化屏幕，是管理者的「城市仪表盘」。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "civic-participation",
+      "name": "市民参与",
+      "description": "市民参与指居民通过随手拍、热线、议事平台等渠道报告问题、提出建议，共同改进城市。",
+      "topic": "数据素养"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "城市也会思考：什么是智慧城市",
+      "minutes": 15,
+      "summary": "认识智慧城市的基本原理：感知、分析、行动的循环。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "看不见的神经：城市里的传感器",
+      "minutes": 16,
+      "summary": "寻找藏在你身边的各类传感器，理解它们如何感知城市。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "红绿灯的大脑：交通如何被优化",
+      "minutes": 17,
+      "summary": "拆解智能交通系统的工作流程，看数据如何治堵。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "水、电、空气：城市的体检报告",
+      "minutes": 17,
+      "summary": "认识城市级的环境与能源数据如何采集、展示和使用。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "我是市民：参与智慧城市建设",
+      "minutes": 16,
+      "summary": "了解市民参与渠道，完成一次真实的城市观察报告。"
+    }
+  ]
+}

@@ -163,6 +163,69 @@
       "grade_max": 9,
       "difficulty": "MEDIUM",
       "chapters": 5
+    },
+    {
+      "slug": "search-engine-secrets",
+      "title": "搜索引擎的秘密",
+      "topic": "网络素养",
+      "grade_min": 7,
+      "grade_max": 9,
+      "difficulty": "EASY",
+      "chapters": 5
+    },
+    {
+      "slug": "game-design-scratch",
+      "title": "用 Scratch 做游戏",
+      "topic": "编程",
+      "grade_min": 3,
+      "grade_max": 6,
+      "difficulty": "EASY",
+      "chapters": 5
+    },
+    {
+      "slug": "data-privacy-shield",
+      "title": "我的隐私我做主",
+      "topic": "AI 伦理",
+      "grade_min": 7,
+      "grade_max": 9,
+      "difficulty": "MEDIUM",
+      "chapters": 5
+    },
+    {
+      "slug": "ai-creative-studio",
+      "title": "AI 创意工作室：生成式人工智能",
+      "topic": "AI 应用",
+      "grade_min": 10,
+      "grade_max": 12,
+      "difficulty": "MEDIUM",
+      "chapters": 5
+    },
+    {
+      "slug": "robot-mind-ethics",
+      "title": "机器人的心与责任",
+      "topic": "机器人",
+      "grade_min": 10,
+      "grade_max": 12,
+      "difficulty": "HARD",
+      "chapters": 5
+    },
+    {
+      "slug": "smart-city-explorer",
+      "title": "智慧城市探秘",
+      "topic": "数据素养",
+      "grade_min": 7,
+      "grade_max": 9,
+      "difficulty": "EASY",
+      "chapters": 5
+    },
+    {
+      "slug": "algorithms-great-ideas",
+      "title": "改变世界的伟大算法",
+      "topic": "算法思维",
+      "grade_min": 10,
+      "grade_max": 12,
+      "difficulty": "HARD",
+      "chapters": 5
     }
   ]
 }

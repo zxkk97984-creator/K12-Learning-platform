@@ -1,0 +1,86 @@
+{
+  "slug": "algorithms-great-ideas",
+  "title": "改变世界的伟大算法",
+  "description": "四个改变了世界的算法思想：PageRank 的投票、Dijkstra 的扩张、RSA 的双钥、MapReduce 的分治。",
+  "grade_min": 10,
+  "grade_max": 12,
+  "difficulty": "HARD",
+  "estimated_minutes": 118,
+  "author": null,
+  "tags": [
+    "算法思维",
+    "经典"
+  ],
+  "topic": "算法思维",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "pagerank-intuition",
+      "name": "PageRank 直觉",
+      "description": "PageRank 把链接当作投票：被越多重要网页指向的页面越重要，重要性分数通过反复迭代收敛稳定。",
+      "topic": "算法思维"
+    },
+    {
+      "slug": "dijkstra-algorithm",
+      "name": "Dijkstra 算法",
+      "description": "Dijkstra 算法从起点出发每次确定一个最近的未访问点并向外扩张，逐步求出到所有点的最短路径。",
+      "topic": "算法思维"
+    },
+    {
+      "slug": "public-key-crypto",
+      "name": "公钥密码",
+      "description": "公钥密码用一对数学上关联的密钥：公钥人人可得用于加密，私钥只有本人持有用于解密。",
+      "topic": "算法思维"
+    },
+    {
+      "slug": "rsa-cryptography",
+      "name": "RSA 加密思想",
+      "description": "RSA 是最著名的公钥密码体制，其安全性建立在分解超大整数的乘积极其困难这一数学事实之上。",
+      "topic": "算法思维"
+    },
+    {
+      "slug": "mapreduce-paradigm",
+      "name": "MapReduce 范式",
+      "description": "MapReduce 把大任务拆成映射与归并两个阶段，让成百上千台机器并行处理海量数据并容忍单机故障。",
+      "topic": "算法思维"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "给整个互联网投票：PageRank",
+      "minutes": 24,
+      "summary": "理解链接即投票的重要性传播思想，看懂搜索巨头的立身之本。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "永远走最近的门：Dijkstra 最短路径",
+      "minutes": 25,
+      "summary": "掌握贪心扩张求最短路的流程、适用条件与生活应用。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "两把钥匙的秘密：RSA 与公钥密码",
+      "minutes": 25,
+      "summary": "理解公钥加密如何解决密钥配送难题，以及 RSA 安全性的来源。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "分而治之：MapReduce 与海量计算",
+      "minutes": 25,
+      "summary": "学会映射与归并两阶段拆分任务，理解大规模并行与容错。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "伟大算法的共同气质",
+      "minutes": 19,
+      "summary": "横向对比四大算法，提炼伟大设计共享的思想特质。"
+    }
+  ]
+}

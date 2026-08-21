@@ -1,0 +1,86 @@
+{
+  "slug": "robot-mind-ethics",
+  "title": "机器人的心与责任",
+  "description": "当机器开始替人做生死攸关的决定：自动驾驶、手术机器人、情感陪伴背后的伦理深水区。",
+  "grade_min": 10,
+  "grade_max": 12,
+  "difficulty": "HARD",
+  "estimated_minutes": 100,
+  "author": null,
+  "tags": [
+    "机器人",
+    "AI 伦理"
+  ],
+  "topic": "机器人",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "autonomous-decision-making",
+      "name": "自主决策",
+      "description": "自主决策指机器在无人工实时干预下自行选择行动方案；决策权与责任如何匹配是机器人伦理的核心问题。",
+      "topic": "机器人"
+    },
+    {
+      "slug": "trolley-dilemma",
+      "name": "电车难题",
+      "description": "电车难题是伦理学经典思想实验：牺牲一人救五人是否正当？自动驾驶把它从课堂讨论变成了编程必答题。",
+      "topic": "机器人"
+    },
+    {
+      "slug": "medical-robot-accountability",
+      "name": "医疗机器人问责",
+      "description": "医疗机器人参与诊疗时，医生、医院与设备厂商之间的责任划分必须事先明确，出错时才能有效追责。",
+      "topic": "机器人"
+    },
+    {
+      "slug": "emotional-ai-companions",
+      "name": "情感陪伴机器人",
+      "description": "情感陪伴机器人能提供安慰与对话，但也带来依赖风险与情感操纵的争议，尤其影响儿童与老人。",
+      "topic": "机器人"
+    },
+    {
+      "slug": "robot-rights-debate",
+      "name": "机器人权利之争",
+      "description": "机器人权利之争探讨是否应赋予高级机器某种道德或法律地位；目前主流观点认为它们仍是人类的工具。",
+      "topic": "机器人"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "从工具到伙伴：机器人伦理为何特殊",
+      "minutes": 18,
+      "summary": "理解机器自主性带来的责任真空，认识机器人伦理的特殊性。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "方向盘后的抉择：自动驾驶难题",
+      "minutes": 22,
+      "summary": "直面被写进代码的电车难题，学习道德机器实验的发现。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "手术台上的机器手：谁为医疗机器人负责",
+      "minutes": 21,
+      "summary": "分析医疗场景的责任链条，理解辅助与替代的边界。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "会安慰人的机器人：情感与依赖",
+      "minutes": 21,
+      "summary": "探讨陪伴机器人的价值与风险，思考真实情感的不可替代性。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "机器人该有权利吗：边界之问",
+      "minutes": 20,
+      "summary": "审视赋予机器道德地位的论证，形成自己的边界判断。"
+    }
+  ]
+}

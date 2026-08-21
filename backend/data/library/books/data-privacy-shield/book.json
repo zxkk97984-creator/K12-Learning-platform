@@ -1,0 +1,89 @@
+{
+  "slug": "data-privacy-shield",
+  "title": "我的隐私我做主",
+  "description": "看懂数据背后的生意：个性化广告如何运作、隐私政策怎么读、泄露事件如何应对，做数据时代的明白人。",
+  "grade_min": 7,
+  "grade_max": 9,
+  "difficulty": "MEDIUM",
+  "estimated_minutes": 90,
+  "author": null,
+  "tags": ["AI 伦理", "隐私"],
+  "topic": "AI 伦理",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "data-economy",
+      "name": "数据经济",
+      "description": "数据经济指用户行为数据被收集、加工并用于商业决策的产业模式，个人数据已成为重要的生产原料。",
+      "topic": "AI 伦理"
+    },
+    {
+      "slug": "personalized-ads",
+      "name": "个性化广告",
+      "description": "个性化广告依据用户画像推测兴趣并定向推送，其精准度来自对浏览、位置等行为数据的分析。",
+      "topic": "AI 伦理"
+    },
+    {
+      "slug": "privacy-policy-reading",
+      "name": "隐私政策解读",
+      "description": "读隐私政策重点抓四件事：收集什么、用来做什么、与谁共享、如何删除。",
+      "topic": "AI 伦理"
+    },
+    {
+      "slug": "data-breach",
+      "name": "数据泄露",
+      "description": "数据泄露指数据库被窃取或误公开的事件，泄露的信息可能被用于诈骗和冒名操作。",
+      "topic": "AI 伦理"
+    },
+    {
+      "slug": "data-minimization",
+      "name": "最小必要原则",
+      "description": "最小必要原则要求只收集实现功能所必需的最少数据；索取超出功能的权限即是越界信号。",
+      "topic": "AI 伦理"
+    },
+    {
+      "slug": "anonymization",
+      "name": "匿名化处理",
+      "description": "匿名化是抹去数据中能识别个人的信息再进行分析利用的技术，是兼顾利用与保护的重要手段。",
+      "topic": "AI 伦理"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "你的数据值多少钱：看不见的生意",
+      "minutes": 18,
+      "summary": "认识免费服务背后的数据生意，理解「免费」的真实代价。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "千人千面：个性化广告的原理",
+      "minutes": 18,
+      "summary": "拆解用户画像与定向投放机制，明白为什么广告总能猜中你。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "隐私政策里藏着什么",
+      "minutes": 17,
+      "summary": "学会用四个问题快速读懂隐私政策的要点。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "当数据库泄露时",
+      "minutes": 18,
+      "summary": "了解泄露事件的连锁反应，掌握事前预防与事后应对。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "盾牌升级：技术、习惯与法律",
+      "minutes": 19,
+      "summary": "综合运用权限管理、匿名化认知与法律武器，构建完整防线。"
+    }
+  ]
+}

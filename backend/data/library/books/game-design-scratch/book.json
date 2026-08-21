@@ -1,0 +1,83 @@
+{
+  "slug": "game-design-scratch",
+  "title": "用 Scratch 做游戏",
+  "description": "从玩家的角度切换到设计师的角度：学会目标、规则、生命、音效和测试，做出一个真正好玩的游戏。",
+  "grade_min": 3,
+  "grade_max": 6,
+  "difficulty": "EASY",
+  "estimated_minutes": 80,
+  "author": null,
+  "tags": ["编程", "游戏设计"],
+  "topic": "编程",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "game-goal",
+      "name": "游戏目标",
+      "description": "游戏目标是玩家努力想要达成的事情，比如得到高分或救出角色，没有目标就谈不上玩。",
+      "topic": "编程"
+    },
+    {
+      "slug": "game-rule",
+      "name": "游戏规则",
+      "description": "游戏规则规定什么可以做、什么不可以做，规则清楚玩家才知道怎么玩。",
+      "topic": "编程"
+    },
+    {
+      "slug": "life-counter",
+      "name": "生命计数",
+      "description": "生命计数是给玩家犯错的次数设一个上限，用变量记录剩余机会，归零时游戏结束。",
+      "topic": "编程"
+    },
+    {
+      "slug": "win-lose-condition",
+      "name": "输赢条件",
+      "description": "输赢条件是判断游戏胜利或失败的明确规定，比如分数达到一百算赢、生命归零算输。",
+      "topic": "编程"
+    },
+    {
+      "slug": "playtesting",
+      "name": "游戏测试",
+      "description": "游戏测试指请别人来试玩自己的作品并收集意见，反复修改让游戏变得更好玩。",
+      "topic": "编程"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "好游戏的三样宝贝",
+      "minutes": 15,
+      "summary": "从玩家变成设计师：认识目标、规则、奖励这三样好游戏的宝贝。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "设计你的第一个关卡",
+      "minutes": 16,
+      "summary": "在纸上设计关卡，再用角色和背景把它搭出来。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "加上生命和输赢",
+      "minutes": 17,
+      "summary": "用变量做生命条，写清楚赢和输的条件，游戏才有紧张感。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "音效与动画的魔法",
+      "minutes": 16,
+      "summary": "用好声音和造型切换，让游戏的手感和气氛上一个台阶。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "小小游戏测试员",
+      "minutes": 16,
+      "summary": "请朋友试玩你的作品，学会收集意见和打磨更新。"
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "slug": "ai-creative-studio",
+  "title": "AI 创意工作室：生成式人工智能",
+  "description": "走进文生文与文生图的引擎室，掌握进阶提示技巧，弄清版权归属，练出辨别 AI 内容的火眼金睛。",
+  "grade_min": 10,
+  "grade_max": 12,
+  "difficulty": "MEDIUM",
+  "estimated_minutes": 90,
+  "author": null,
+  "tags": ["AI 应用", "创作"],
+  "topic": "AI 应用",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "generative-ai-overview",
+      "name": "生成式人工智能概览",
+      "description": "生成式人工智能指能依据学习到的规律创作新内容（文字、图像、音频等）的模型家族的总称。",
+      "topic": "AI 应用"
+    },
+    {
+      "slug": "diffusion-intuition",
+      "name": "扩散模型直觉",
+      "description": "扩散模型先学会给图像逐步加噪声，再反过来学会一步步去噪；文生图就是在文字引导下把一团噪声「雕刻」成图像。",
+      "topic": "AI 应用"
+    },
+    {
+      "slug": "multimodal-generation",
+      "name": "多模态生成",
+      "description": "多模态生成指同时处理或产出多种形式内容的 AI 能力，如看图说话、按文字作画、由文字生成语音。",
+      "topic": "AI 应用"
+    },
+    {
+      "slug": "ai-copyright-question",
+      "name": "AI 作品版权之问",
+      "description": "纯 AI 生成的内容能否受版权保护、训练数据是否侵权，目前各国态度不一，人类实质性创作投入是关键争议点。",
+      "topic": "AI 应用"
+    },
+    {
+      "slug": "ai-content-labeling",
+      "name": "AI 内容标识",
+      "description": "AI 内容标识要求对人工智能生成的文本、图像、音视频做出显著标记，帮助公众区分真实与合成内容。",
+      "topic": "AI 应用"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "创意工作流的变化：生成式 AI 能做什么",
+      "minutes": 17,
+      "summary": "盘点生成式 AI 在创意各环节的能力边界，建立全局认知。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "文生文的进阶直觉：从接龙到对齐",
+      "minutes": 17,
+      "summary": "深入理解语言模型的接龙本质与人类偏好的对齐过程。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "文生图的魔法：从噪声到图像",
+      "minutes": 19,
+      "summary": "用雕塑类比理解扩散模型的去噪原理与提示词的引导作用。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "版权与署名：AI 作品属于谁",
+      "minutes": 20,
+      "summary": "梳理 AI 生成内容的版权争议、各国态度与负责任的署名方式。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "火眼金睛：辨别 AI 生成内容",
+      "minutes": 19,
+      "summary": "认识检测技术与标识制度，掌握核实合成内容的实用流程。"
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "slug": "search-engine-secrets",
+  "title": "搜索引擎的秘密",
+  "description": "揭开搜索结果的诞生过程：学会选词、识广告、辨真假，练出信息时代最重要的检索功夫。",
+  "grade_min": 7,
+  "grade_max": 9,
+  "difficulty": "EASY",
+  "estimated_minutes": 85,
+  "author": null,
+  "tags": ["网络素养", "检索"],
+  "topic": "网络素养",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "search-keyword",
+      "name": "搜索关键词",
+      "description": "搜索关键词是提交给搜索引擎的核心词语，选得越精准，返回的结果越贴近需求。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "web-crawler",
+      "name": "网页爬虫",
+      "description": "网页爬虫是搜索引擎派出的自动程序，日夜不停访问网页并把内容收录进索引库。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "sponsored-results",
+      "name": "赞助结果",
+      "description": "赞助结果是商家付费购买排名的广告位，通常带有标识，它与按相关性排出的自然结果不同。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "source-evaluation",
+      "name": "信息可信度评估",
+      "description": "信息可信度评估通过查来源、看时间、交叉验证三个动作，判断一条搜索结果能不能相信。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "advanced-search",
+      "name": "高级搜索技巧",
+      "description": "高级搜索技巧包括精确匹配引号、限定网站、排除词语等用法，能让结果范围快速收窄。",
+      "topic": "网络素养"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "搜索是怎么发生的：从关键词到结果",
+      "minutes": 16,
+      "summary": "了解爬虫、索引与排序的三步机制，明白结果页从何而来。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "选对关键词：搜索的艺术",
+      "minutes": 17,
+      "summary": "学会用核心词、限定词组合出高精度查询，告别翻三页找不到。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "看懂结果页：广告与自然结果",
+      "minutes": 16,
+      "summary": "分清赞助结果与自然结果，理解排序背后的商业逻辑。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "评估信息：这条结果可信吗",
+      "minutes": 18,
+      "summary": "掌握查来源、看时间、交叉验证的可信度评估三板斧。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "进阶技巧：像侦探一样搜索",
+      "minutes": 18,
+      "summary": "掌握引号、站内限定等高级语法，综合运用完成一次深度检索。"
+    }
+  ]
+}
