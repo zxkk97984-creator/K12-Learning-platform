@@ -14,6 +14,7 @@ from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminPrincipal
+from app.config import settings
 from app.infrastructure.database.models import (
     Admin,
     Book,
@@ -26,6 +27,7 @@ from app.infrastructure.database.models import (
     TeacherRole,
     User,
 )
+from app.jobs.queue import enqueue
 from app.modules.admin.schemas import (
     AdminBookDTO,
     AdminStatsDTO,
@@ -41,7 +43,6 @@ from app.modules.admin.schemas import (
     CreateTeacherRoleRequest,
     PatchTeacherRoleRequest,
 )
-from app.modules.knowledge.ingestion import ingest_text
 from app.modules.knowledge.schemas import KnowledgeResourceDTO
 
 
@@ -139,7 +140,8 @@ class IdempotencyService:
 class AdminService:
     def _storage_path(self, storage_key: str) -> Path:
         path = STORAGE_ROOT / storage_key
-        if not str(path.resolve()).startswith(str(STORAGE_ROOT.resolve())):
+        root = STORAGE_ROOT.resolve()
+        if root not in path.resolve().parents:
             raise _error(422, "VALIDATION_ERROR", "invalid storage key")
         return path
 
@@ -436,16 +438,25 @@ class AdminService:
     ) -> KnowledgeResourceDTO:
         if admin.admin_id is None:
             raise _error(422, "ADMIN_NOT_REGISTERED", "admin profile not registered")
+        if len(file_bytes) > settings.knowledge_upload_max_bytes:
+            raise _error(413, "FILE_TOO_LARGE", "knowledge file exceeds upload limit")
         ext = Path(filename).suffix.lower().lstrip(".")
-        file_type = {"md": "MARKDOWN", "markdown": "MARKDOWN", "txt": "TXT", "html": "HTML"}.get(
-            ext
-        )
+        file_type = {
+            "md": "MARKDOWN",
+            "markdown": "MARKDOWN",
+            "txt": "TXT",
+            "html": "HTML",
+            "htm": "HTML",
+            "pdf": "PDF",
+        }.get(ext)
         if file_type is None:
             raise _error(
                 422,
                 "UNSUPPORTED_FILE_TYPE",
-                "only MARKDOWN/TXT/HTML are supported; PDF parsing lands in Phase 12",
+                "only PDF/MARKDOWN/TXT/HTML files are supported",
             )
+        if file_type == "PDF" and not file_bytes.startswith(b"%PDF-"):
+            raise _error(422, "INVALID_FILE_CONTENT", "PDF header is invalid")
         if not source_name.strip() or not source_url.strip():
             raise _error(422, "VALIDATION_ERROR", "source_name and source_url are required")
         if not license.strip() or not copyright_status.strip():
@@ -455,20 +466,26 @@ class AdminService:
         path = self._storage_path(storage_key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(file_bytes)
-        text = file_bytes.decode("utf-8", errors="replace")
-        resource_id, _ = await ingest_text(
-            session,
-            text=text,
+        resource = KnowledgeResource(
+            resource_id=uuid4(),
             source_name=source_name,
             source_url=source_url,
             license=license,
             copyright_status=copyright_status,
             author=author,
             storage_key=storage_key,
+            file_type=file_type,
+            status="UPLOADED",
+            uploaded_by=admin.admin_id,
+            uploaded_at=datetime.now(timezone.utc),
         )
-        resource = await session.get(KnowledgeResource, resource_id)
-        if resource is None:
-            raise _error(404, "RESOURCE_NOT_FOUND", "resource not found")
+        session.add(resource)
+        await session.flush()
+        await enqueue(
+            session,
+            "knowledge_ingest",
+            {"resource_id": str(resource.resource_id)},
+        )
         return KnowledgeResourceDTO.model_validate(resource)
 
     async def patch_knowledge_resource(
@@ -495,22 +512,19 @@ class AdminService:
         if resource is None:
             raise _error(404, "RESOURCE_NOT_FOUND", "resource not found")
         path = self._storage_path(str(resource.storage_key))
-        if not path.exists():
+        if not path.is_file():
             raise _error(422, "SOURCE_FILE_MISSING", "stored source file is missing")
-        text = path.read_text(encoding="utf-8", errors="replace")
-        await ingest_text(
+        resource.status = "UPLOADED"
+        resource.error = None
+        resource.updated_at = datetime.now(timezone.utc)
+        await enqueue(
             session,
-            text=text,
-            source_name=resource.source_name,
-            source_url=resource.source_url,
-            license=resource.license,
-            copyright_status=resource.copyright_status,
-            author=resource.author,
-            storage_key=str(resource.storage_key),
-            force_reprocess=True,
+            "knowledge_ingest",
+            {
+                "resource_id": str(resource.resource_id),
+                "force_reprocess": True,
+            },
         )
-        resource = await session.get(KnowledgeResource, resource_id)
-        await session.refresh(resource)
         return KnowledgeResourceDTO.model_validate(resource)
 
     async def list_teacher_roles(

@@ -23,6 +23,7 @@ from app.infrastructure.database.models import (
     StudentProfile,
     TeacherRole,
 )
+from app.jobs.queue import enqueue, has_pending_job
 from app.modules.conversation.schemas import (
     ConversationDTO,
     ConversationListItemDTO,
@@ -289,6 +290,31 @@ class ConversationService:
         )
         current_sequence = result.scalar_one()
         return (current_sequence or 0) + 1
+
+    async def _enqueue_summary_if_needed(
+        self, session: AsyncSession, conversation_id: UUID
+    ) -> None:
+        """Queue summary work after persistence without affecting SSE output."""
+        try:
+            count = int(
+                (
+                    await session.execute(
+                        select(func.count(Message.message_id)).where(
+                            Message.conversation_id == conversation_id
+                        )
+                    )
+                ).scalar_one()
+            )
+            if count < settings.summary_message_threshold:
+                return
+            payload = {"conversation_id": str(conversation_id)}
+            if await has_pending_job(session, "conversation_summary", payload):
+                return
+            await enqueue(session, "conversation_summary", payload)
+            await session.commit()
+        except Exception:  # pragma: no cover - summary must not break chat
+            await session.rollback()
+            logger.warning("conversation summary enqueue failed", exc_info=True)
 
     async def send_message(
         self,
@@ -623,6 +649,7 @@ class ConversationService:
                         "assistant message could not be persisted",
                     )
                     return
+                await self._enqueue_summary_if_needed(session, conversation_id)
                 yield _sse_frame(
                     "message.done",
                     {
@@ -691,6 +718,7 @@ class ConversationService:
                         "assistant message could not be persisted",
                     )
                     return
+                await self._enqueue_summary_if_needed(session, conversation_id)
                 yield _sse_frame(
                     "message.done",
                     {
@@ -775,6 +803,7 @@ class ConversationService:
                     )
                     return
 
+                await self._enqueue_summary_if_needed(session, conversation_id)
                 yield _sse_frame(
                     "message.done",
                     {

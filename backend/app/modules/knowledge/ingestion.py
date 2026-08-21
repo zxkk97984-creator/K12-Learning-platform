@@ -1,9 +1,11 @@
 """Rule-based ingestion: Parser -> Chunker -> Embedding Provider -> DB."""
 
+from io import BytesIO
 import hashlib
+import re
+import zlib
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -16,6 +18,7 @@ from app.infrastructure.database.models import (
 )
 
 MAX_CHUNK_CHARS = 500
+STORAGE_ROOT = Path(__file__).resolve().parents[3] / "storage" / "knowledge"
 
 
 def parse_markdown(text: str) -> list[dict[str, str]]:
@@ -67,6 +70,106 @@ def chunk_blocks(
     return chunks
 
 
+def storage_path_for(storage_key: str) -> Path:
+    """Resolve a stored resource key without allowing path traversal."""
+    path = STORAGE_ROOT / storage_key
+    root = STORAGE_ROOT.resolve()
+    if root not in path.resolve().parents:
+        raise ValueError("invalid storage key")
+    return path
+
+
+def _pdf_literal_strings(data: bytes) -> list[str]:
+    """Extract PDF literal strings from a content stream.
+
+    This is deliberately small and dependency-free.  It covers the plain and
+    Flate-compressed text streams used by the local seed/tests; if pypdf is
+    installed, ``parse_pdf`` tries it first for broader PDF compatibility.
+    """
+    strings: list[str] = []
+    index = 0
+    while index < len(data):
+        if data[index] != ord("("):
+            index += 1
+            continue
+        index += 1
+        depth = 1
+        value = bytearray()
+        while index < len(data) and depth:
+            byte = data[index]
+            index += 1
+            if byte == ord("\\") and index < len(data):
+                escaped = data[index]
+                index += 1
+                value.extend(
+                    {
+                        ord("n"): b"\n",
+                        ord("r"): b"\r",
+                        ord("t"): b"\t",
+                        ord("b"): b"\b",
+                        ord("f"): b"\f",
+                    }.get(escaped, bytes([escaped]))
+                )
+            elif byte == ord("("):
+                depth += 1
+                value.append(byte)
+            elif byte == ord(")"):
+                depth -= 1
+                if depth:
+                    value.append(byte)
+            else:
+                value.append(byte)
+        if depth == 0 and value.strip():
+            strings.append(value.decode("utf-8", errors="replace").strip())
+    return strings
+
+
+def _pdf_content_streams(data: bytes) -> list[bytes]:
+    streams: list[bytes] = []
+    for marker in re.finditer(rb"stream\r?\n", data):
+        end = data.find(b"endstream", marker.end())
+        if end < 0:
+            continue
+        stream = data[marker.end() : end].rstrip(b"\r\n")
+        header = data[max(0, marker.start() - 512) : marker.start()]
+        if b"/FlateDecode" in header:
+            try:
+                stream = zlib.decompress(stream)
+            except zlib.error:
+                continue
+        streams.append(stream)
+    return streams
+
+
+def parse_pdf(data: bytes) -> str:
+    """Extract text from a PDF without adding a mandatory runtime dependency."""
+    try:
+        from pypdf import PdfReader  # type: ignore[import-not-found]
+    except ImportError:
+        PdfReader = None
+
+    if PdfReader is not None:
+        try:
+            reader = PdfReader(BytesIO(data))
+            extracted = "\n".join(page.extract_text() or "" for page in reader.pages)
+            if extracted.strip():
+                return extracted.strip()
+        except Exception:
+            # Fall through to the small stdlib parser for simple documents.
+            pass
+
+    streams = _pdf_content_streams(data)
+    if not streams:
+        streams = [data]
+    parts = [part for stream in streams for part in _pdf_literal_strings(stream)]
+    extracted = "\n".join(part for part in parts if part.strip()).strip()
+    if not extracted:
+        raise ValueError(
+            "PDF contains no extractable text; install pypdf for scanned/complex PDFs"
+        )
+    return extracted
+
+
 def _embedding_value(text: str) -> str:
     vector = get_embedding(text)
     return "[" + ",".join(f"{value:.8f}" for value in vector) + "]"
@@ -90,6 +193,9 @@ async def ingest_text(
     storage_key: str | None = None,
     knowledge_point_ids: list[str] | None = None,
     force_reprocess: bool = False,
+    file_type: str = "MARKDOWN",
+    parsed_blocks: list[dict[str, str]] | None = None,
+    preserve_status: bool = False,
 ) -> tuple[UUID, int]:
     storage_key = storage_key or storage_key_for(source_url, source_name)
     existing = (
@@ -117,16 +223,17 @@ async def ingest_text(
             license=license,
             copyright_status=copyright_status,
             storage_key=storage_key,
-            file_type="MARKDOWN",
+            file_type=file_type,
             status="UPLOADED",
             uploaded_at=now,
         )
         session.add(resource)
     else:
         resource = existing
-        resource.status = "UPLOADED"
-        resource.error = None
-        resource.updated_at = now
+        if not preserve_status:
+            resource.status = "UPLOADED"
+            resource.error = None
+            resource.updated_at = now
         await session.execute(
             KnowledgeChunk.__table__.delete().where(
                 KnowledgeChunk.resource_id == existing.resource_id
@@ -135,8 +242,9 @@ async def ingest_text(
     await session.flush()
 
     try:
-        resource.status = "PARSING"
-        blocks = parse_markdown(text)
+        if not preserve_status:
+            resource.status = "PARSING"
+        blocks = parsed_blocks if parsed_blocks is not None else parse_markdown(text)
         resource.status = "CHUNKING"
         chunks = chunk_blocks(blocks)
         resource.status = "INDEXING"
@@ -173,4 +281,66 @@ async def ingest_text(
         resource.error = str(exc)
         resource.updated_at = datetime.now(timezone.utc)
         await session.commit()
+        raise
+
+
+async def ingest_stored_resource(
+    session: AsyncSession,
+    resource_id: UUID,
+    *,
+    force_reprocess: bool = False,
+) -> tuple[UUID, int]:
+    """Parse and index an uploaded resource from storage in Worker context."""
+    resource = await session.get(KnowledgeResource, resource_id)
+    if resource is None:
+        raise ValueError(f"knowledge resource not found: {resource_id}")
+    try:
+        resource.status = "PARSING"
+        resource.error = None
+        resource.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+
+        path = storage_path_for(str(resource.storage_key))
+        if not path.is_file():
+            raise FileNotFoundError("stored source file is missing")
+        raw = path.read_bytes()
+        if resource.file_type == "PDF":
+            text = parse_pdf(raw)
+        else:
+            text = raw.decode("utf-8", errors="replace")
+        if not text.strip():
+            raise ValueError("source file contains no extractable text")
+        parsed_blocks = parse_markdown(text)
+        if not parsed_blocks:
+            raise ValueError("source file contains no indexable text")
+
+        resource = await session.get(KnowledgeResource, resource_id)
+        if resource is None:  # pragma: no cover - protected by the first lookup
+            raise ValueError(f"knowledge resource not found: {resource_id}")
+        resource.status = "CHUNKING"
+        resource.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+        return await ingest_text(
+            session,
+            text=text,
+            source_name=resource.source_name,
+            source_url=resource.source_url,
+            license=resource.license,
+            copyright_status=resource.copyright_status,
+            author=resource.author,
+            storage_key=str(resource.storage_key),
+            knowledge_point_ids=None,
+            force_reprocess=force_reprocess or resource.status != "READY",
+            file_type=resource.file_type,
+            parsed_blocks=parsed_blocks,
+            preserve_status=True,
+        )
+    except Exception as exc:
+        await session.rollback()
+        resource = await session.get(KnowledgeResource, resource_id)
+        if resource is not None:
+            resource.status = "FAILED"
+            resource.error = str(exc)[:4000]
+            resource.updated_at = datetime.now(timezone.utc)
+            await session.commit()
         raise

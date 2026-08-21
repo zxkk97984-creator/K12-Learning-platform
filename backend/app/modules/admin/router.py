@@ -289,7 +289,7 @@ async def _patch_knowledge_point(session, knowledge_point_id, body):
     return ok(await service.patch_knowledge_point(session, knowledge_point_id, body))
 
 
-@router.post("/admin/knowledge/resources", status_code=201)
+@router.post("/admin/knowledge/resources", status_code=202)
 async def upload_knowledge_resource(
     _admin: Annotated[AdminPrincipal, Depends(require_admin)],
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -372,7 +372,7 @@ async def _patch_knowledge_resource(session, resource_id, body):
     )
 
 
-@router.post("/admin/knowledge/resources/{resource_id}/reprocess")
+@router.post("/admin/knowledge/resources/{resource_id}/reprocess", status_code=202)
 async def reprocess_knowledge_resource(
     _admin: Annotated[AdminPrincipal, Depends(require_admin)],
     session: Annotated[AsyncSession, Depends(get_session)],

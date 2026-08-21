@@ -13,7 +13,9 @@ from app.infrastructure.database.models import (
     StudentProfile,
     User,
 )
+from app.config import settings
 from app.infrastructure.database.session import async_session
+from app.jobs.handlers.conversation import handle_conversation_summary
 from app.main import app
 from app.modules.identity.security import hash_password
 
@@ -312,6 +314,75 @@ class TestConversationAPI:
         )
         assert summary.status_code == 200
         assert summary.json()["data"] is None
+
+    def test_message_threshold_enqueues_summary_without_changing_sse_response(
+        self,
+        client: TestClient,
+        token: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        calls: list[tuple[str, dict]] = []
+
+        async def fake_enqueue(session, job_type: str, payload: dict):
+            calls.append((job_type, payload))
+            return None
+
+        monkeypatch.setattr(settings, "summary_message_threshold", 2)
+        monkeypatch.setattr(
+            "app.modules.conversation.service.enqueue",
+            fake_enqueue,
+        )
+        conversation = create_conversation(client, token)
+        response = client.post(
+            f"/api/v1/conversations/{conversation['conversation_id']}/messages",
+            headers=headers(token),
+            json={"content": "触发摘要任务"},
+        )
+
+        assert response.status_code == 200
+        assert calls == [
+            (
+                "conversation_summary",
+                {"conversation_id": conversation["conversation_id"]},
+            )
+        ]
+
+    def test_conversation_summary_handler_writes_rule_based_summary(
+        self, client: TestClient, token: str
+    ) -> None:
+        conversation = create_conversation(client, token)
+        conversation_id = UUID(conversation["conversation_id"])
+
+        async def seed_and_summarize() -> None:
+            async with async_session() as session:
+                session.add_all(
+                    [
+                        Message(
+                            conversation_id=conversation_id,
+                            role="STUDENT" if index % 2 == 0 else "TEACHER",
+                            type="TEXT",
+                            content=f"摘要测试消息 {index}",
+                            sequence=index,
+                        )
+                        for index in range(1, 21)
+                    ]
+                )
+                await session.commit()
+                await handle_conversation_summary(
+                    session,
+                    {"conversation_id": str(conversation_id)},
+                )
+
+        asyncio.run(seed_and_summarize())
+
+        summary = client.get(
+            f"/api/v1/conversations/{conversation_id}/summary",
+            headers=headers(token),
+        )
+        assert summary.status_code == 200
+        assert summary.json()["data"]["summary_version"] == 1
+        assert "摘要测试消息 1" in summary.json()["data"]["summary"]
+        assert "摘要测试消息 20" in summary.json()["data"]["summary"]
 
     def test_messages_pagination_and_summary_dto(
         self, client: TestClient, token: str

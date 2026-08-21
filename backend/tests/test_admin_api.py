@@ -14,6 +14,7 @@ from app.infrastructure.database.models import (
 )
 from app.infrastructure.database.session import async_session
 from app.main import app
+from app.jobs.handlers.knowledge import handle_knowledge_ingest
 from app.modules.identity.security import hash_password
 
 
@@ -21,6 +22,19 @@ ADMIN_NAME = "test_admin_user"
 ADMIN_PASSWORD = "adminpass"
 STUDENT_NAME = "test_admin_student"
 STUDENT_PASSWORD = "studentpass"
+
+
+def _minimal_pdf(text: str) -> bytes:
+    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    stream = f"BT\n({escaped}) Tj\nET\n".encode("utf-8")
+    return (
+        b"%PDF-1.4\n"
+        + b"1 0 obj\n<< /Length "
+        + str(len(stream)).encode("ascii")
+        + b" >>\nstream\n"
+        + stream
+        + b"endstream\nendobj\n%%EOF\n"
+    )
 
 
 def _ensure_admin() -> UUID:
@@ -298,21 +312,42 @@ class TestAdminAPI:
             files={"file": ("upload-test.md", content, "text/markdown")},
             data={
                 "source_name": "上传测试资源",
-                "source_url": "https://test.shuangling.local/upload-test",
+                "source_url": f"https://test.shuangling.local/upload-test-{uuid4()}",
                 "license": "CC-BY-4.0",
                 "copyright_status": "测试",
             },
         )
-        assert uploaded.status_code == 201
+        assert uploaded.status_code == 202
         data = uploaded.json()["data"]
-        assert data["status"] == "READY"
+        assert data["status"] == "UPLOADED"
         resource_id = data["resource_id"]
 
         listed = client.get(
             "/api/v1/knowledge/resources?status=READY",
             headers=headers(admin_token),
         )
-        assert any(row["resource_id"] == resource_id for row in listed.json()["data"])
+        assert all(row["resource_id"] != resource_id for row in listed.json()["data"])
+
+        async def run_knowledge_job(
+            target_resource_id: str,
+            force_reprocess: bool = False,
+        ) -> None:
+            async with async_session() as session:
+                await handle_knowledge_ingest(
+                    session,
+                    {
+                        "resource_id": target_resource_id,
+                        "force_reprocess": force_reprocess,
+                    },
+                )
+
+        asyncio.run(run_knowledge_job(resource_id))
+        ready = client.get(
+            f"/api/v1/knowledge/resources/{resource_id}",
+            headers=headers(admin_token),
+        )
+        assert ready.status_code == 200
+        assert ready.json()["data"]["status"] == "READY"
 
         patched = client.patch(
             f"/api/v1/admin/knowledge/resources/{resource_id}",
@@ -330,22 +365,39 @@ class TestAdminAPI:
                 admin_token, **{"Idempotency-Key": f"reprocess-{uuid4()}"}
             ),
         )
-        assert reprocessed.status_code == 200
-        assert reprocessed.json()["data"]["status"] == "READY"
+        assert reprocessed.status_code == 202
+        assert reprocessed.json()["data"]["status"] == "UPLOADED"
+        asyncio.run(run_knowledge_job(resource_id, force_reprocess=True))
+        ready_again = client.get(
+            f"/api/v1/knowledge/resources/{resource_id}",
+            headers=headers(admin_token),
+        )
+        assert ready_again.json()["data"]["status"] == "READY"
 
+        pdf_content = _minimal_pdf("PDF 文本抽取成功")
         pdf = client.post(
             "/api/v1/admin/knowledge/resources",
-            headers=headers(admin_token, **{"Idempotency-Key": "upload-pdf-1"}),
-            files={"file": ("book.pdf", b"%PDF-1.4", "application/pdf")},
+            headers=headers(admin_token, **{"Idempotency-Key": f"upload-pdf-{uuid4()}"}),
+            files={"file": ("book.pdf", pdf_content, "application/pdf")},
             data={
                 "source_name": "PDF 测试",
-                "source_url": "https://test.shuangling.local/book.pdf",
+                "source_url": f"https://test.shuangling.local/book-{uuid4()}.pdf",
                 "license": "CC-BY-4.0",
                 "copyright_status": "测试",
             },
         )
-        assert pdf.status_code == 422
-        assert pdf.json()["error"]["code"] == "UNSUPPORTED_FILE_TYPE"
+        assert pdf.status_code == 202
+        assert pdf.json()["data"]["file_type"] == "PDF"
+        pdf_resource_id = pdf.json()["data"]["resource_id"]
+        asyncio.run(run_knowledge_job(pdf_resource_id))
+        pdf_chunks = client.get(
+            f"/api/v1/knowledge/resources/{pdf_resource_id}/chunks",
+            headers=headers(admin_token),
+        )
+        assert pdf_chunks.status_code == 200
+        assert "PDF 文本抽取成功" in "\n".join(
+            row["content"] for row in pdf_chunks.json()["data"]
+        )
 
         missing_key = client.post(
             "/api/v1/admin/knowledge/resources",
@@ -551,7 +603,7 @@ class TestAdminAPI:
                 "copyright_status": "测试",
             },
         )
-        assert uploaded.status_code == 201
+        assert uploaded.status_code == 202
         after = client.get("/api/v1/admin/stats", headers=headers(admin_token)).json()[
             "data"
         ]
@@ -575,7 +627,7 @@ class TestAdminAPI:
                 "copyright_status": "测试",
             },
         )
-        assert first.status_code == 201
+        assert first.status_code == 202
         replay = client.post(
             "/api/v1/admin/knowledge/resources",
             headers=headers(admin_token, **{"Idempotency-Key": key}),
