@@ -109,6 +109,60 @@
       "grade_max": 6,
       "difficulty": "EASY",
       "chapters": 5
+    },
+    {
+      "slug": "prompt-craft-101",
+      "title": "提示词入门：和大模型好好说话",
+      "topic": "AI 应用",
+      "grade_min": 10,
+      "grade_max": 12,
+      "difficulty": "MEDIUM",
+      "chapters": 5
+    },
+    {
+      "slug": "spreadsheet-thinker",
+      "title": "表格里的数学脑",
+      "topic": "数据素养",
+      "grade_min": 7,
+      "grade_max": 9,
+      "difficulty": "EASY",
+      "chapters": 5
+    },
+    {
+      "slug": "robotics-hands-on",
+      "title": "动手做机器人",
+      "topic": "机器人",
+      "grade_min": 7,
+      "grade_max": 9,
+      "difficulty": "MEDIUM",
+      "chapters": 5
+    },
+    {
+      "slug": "code-art-python",
+      "title": "用 Python 画世界",
+      "topic": "编程",
+      "grade_min": 7,
+      "grade_max": 9,
+      "difficulty": "MEDIUM",
+      "chapters": 5
+    },
+    {
+      "slug": "ai-safety-guardians",
+      "title": "AI 安全小卫士",
+      "topic": "网络素养",
+      "grade_min": 3,
+      "grade_max": 6,
+      "difficulty": "EASY",
+      "chapters": 5
+    },
+    {
+      "slug": "thinking-computationally",
+      "title": "计算思维：像程序员一样想问题",
+      "topic": "算法思维",
+      "grade_min": 7,
+      "grade_max": 9,
+      "difficulty": "MEDIUM",
+      "chapters": 5
     }
   ]
 }

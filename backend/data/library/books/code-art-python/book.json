@@ -1,0 +1,83 @@
+{
+  "slug": "code-art-python",
+  "title": "用 Python 画世界",
+  "description": "指挥一只小海龟当画笔：从正方形画到玫瑰线，用循环、颜色和圆弧创作你的数字艺术。",
+  "grade_min": 7,
+  "grade_max": 9,
+  "difficulty": "MEDIUM",
+  "estimated_minutes": 85,
+  "author": null,
+  "tags": ["编程", "创意"],
+  "topic": "编程",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "turtle-graphics",
+      "name": "海龟画图",
+      "description": "海龟画图是 Python 自带的绘图工具：指挥一只小海龟前进转弯，它走过的地方就留下笔迹。",
+      "topic": "编程"
+    },
+    {
+      "slug": "pen-control",
+      "name": "画笔控制",
+      "description": "抬笔与落笔控制海龟移动时是否留痕，配合颜色与粗细设定，是构图的基本功。",
+      "topic": "编程"
+    },
+    {
+      "slug": "polygon-loop",
+      "name": "多边形外角",
+      "description": "用循环画正多边形时每次转的外角度数等于三百六十除以边数，转够一圈恰好回到起点。",
+      "topic": "编程"
+    },
+    {
+      "slug": "color-fill",
+      "name": "填充上色",
+      "description": "在开始画封闭图形前开启填充、结束后关闭，图形内部就会被涂上指定颜色。",
+      "topic": "编程"
+    },
+    {
+      "slug": "circle-drawing",
+      "name": "circle 画圆",
+      "description": "circle 命令按给定半径画圆或圆弧，半径为正时圆心在海龟左侧，负值则反向。",
+      "topic": "编程"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "你的第一支画笔：认识小海龟",
+      "minutes": 15,
+      "summary": "召唤小海龟，学会前进、转弯两招，画出第一条线和第一个字母。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "正方形与多边形：循环画画",
+      "minutes": 17,
+      "summary": "发现「走加转」的重复结构，用循环画出任意正多边形和星星。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "彩色世界：颜色与填充",
+      "minutes": 16,
+      "summary": "给画笔换色、调粗细，学会给封闭图形涂色的完整流程。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "圆圈与花朵：circle 的魔法",
+      "minutes": 18,
+      "summary": "掌握 circle 命令的用法，旋转叠加圆弧画出花朵与曼陀罗。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "创意项目：我的数字花园",
+      "minutes": 19,
+      "summary": "综合四章技法完成一幅可分享的数字花园作品。"
+    }
+  ]
+}

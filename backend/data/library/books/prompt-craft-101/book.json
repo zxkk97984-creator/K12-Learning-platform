@@ -1,0 +1,89 @@
+{
+  "slug": "prompt-craft-101",
+  "title": "提示词入门：和大模型好好说话",
+  "description": "学会把话说清楚：从清晰指令四要素到少样本示例，掌握与大模型高效协作的完整方法。",
+  "grade_min": 10,
+  "grade_max": 12,
+  "difficulty": "MEDIUM",
+  "estimated_minutes": 90,
+  "author": null,
+  "tags": ["AI 应用", "技能"],
+  "topic": "AI 应用",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "prompt-definition",
+      "name": "提示词定义",
+      "description": "提示词是用户输入给大模型的全部文字信息，包括问题、要求和背景，它的质量直接决定回答的质量。",
+      "topic": "AI 应用"
+    },
+    {
+      "slug": "instruction-elements",
+      "name": "清晰指令四要素",
+      "description": "清晰指令四要素指任务、背景、要求与格式：说清做什么、基于什么、有什么约束、输出长什么样。",
+      "topic": "AI 应用"
+    },
+    {
+      "slug": "role-setting",
+      "name": "角色设定",
+      "description": "角色设定是在提示词里给模型指定一个身份或视角，让它调用该领域更典型的语言风格和知识来回答。",
+      "topic": "AI 应用"
+    },
+    {
+      "slug": "few-shot-examples",
+      "name": "少样本示例",
+      "description": "少样本示例是在提示词中给出几组输入输出的示范，让模型照葫芦画瓢地模仿格式与风格完成任务。",
+      "topic": "AI 应用"
+    },
+    {
+      "slug": "prompt-iteration",
+      "name": "迭代改进",
+      "description": "迭代改进指对首次回答指出具体不满意之处并追问修改，经过两三轮逼近理想结果的使用方式。",
+      "topic": "AI 应用"
+    },
+    {
+      "slug": "leading-question-trap",
+      "name": "诱导性提问陷阱",
+      "description": "诱导性提问在问题中预设了可能为假的结论，模型常顺着框架编造理由，是把幻觉引进门的典型问法。",
+      "topic": "AI 应用"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "提示词是什么：和大模型对话的语言",
+      "minutes": 16,
+      "summary": "理解输入即程序的思想，认识提示词质量对回答质量的决定性影响。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "清晰指令四要素",
+      "minutes": 20,
+      "summary": "掌握任务、背景、要求、格式的标准写法，告别模糊提问。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "给 AI 一个身份：角色设定",
+      "minutes": 17,
+      "summary": "学会用角色设定调动模型的专业语气与知识风格。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "少样本示例：教它模仿",
+      "minutes": 18,
+      "summary": "用输入输出示范教会模型稳定复现你想要的格式。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "迭代改进与常见陷阱",
+      "minutes": 19,
+      "summary": "通过追问打磨结果，识别诱导性提问等把对话带偏的陷阱。"
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "slug": "ai-safety-guardians",
+  "title": "AI 安全小卫士",
+  "description": "跟着小雨的故事学会上网自护：守住小秘密、告诉大人、管好屏幕时间、认出广告，领走安全小盾牌。",
+  "grade_min": 3,
+  "grade_max": 6,
+  "difficulty": "EASY",
+  "estimated_minutes": 80,
+  "author": null,
+  "tags": ["网络素养", "安全"],
+  "topic": "网络素养",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "keep-info-secret",
+      "name": "信息保密",
+      "description": "姓名、学校、住址、照片和家长电话是小秘密，网上有人问起时要说保密，先问过大人。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "tell-a-grownup",
+      "name": "告诉大人",
+      "description": "网上看到让人害怕、难过或不舒服的内容时，马上关掉并告诉爸爸妈妈或老师，这不是打小报告。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "screen-time-balance",
+      "name": "屏幕时间平衡",
+      "description": "屏幕时间要有度：定好时长、到点就停，用运动和户外活动给眼睛放假。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "spot-the-ad",
+      "name": "辨别广告",
+      "description": "广告是想让你买东西的内容，它常常打扮成游戏、视频或推荐语，认出它就不容易上当。",
+      "topic": "网络素养"
+    },
+    {
+      "slug": "safety-shield-rules",
+      "name": "安全小盾牌守则",
+      "description": "安全小盾牌由五条守则组成：不透露秘密、不舒服就说、屏幕有度、认出广告、拿不准先问大人。",
+      "topic": "网络素养"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "小雨的故事：神秘的礼物弹窗",
+      "minutes": 15,
+      "summary": "通过小雨差点泄露小秘密的故事，学会什么信息不能告诉网上的陌生人。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "小雨的故事：屏幕里的坏心情",
+      "minutes": 15,
+      "summary": "看到害怕或难受的内容怎么办？记住三个动作：关闭、深呼吸、找大人。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "小雨的故事：眼睛想休息啦",
+      "minutes": 14,
+      "summary": "和屏幕做时间的朋友：学会定时休息和安排丰富多彩的一天。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "小雨的故事：广告捉迷藏",
+      "minutes": 16,
+      "summary": "练出火眼金睛，认出藏在游戏和视频里的广告。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "我的安全小盾牌",
+      "minutes": 14,
+      "summary": "把四段故事变成五条守则，领取属于自己的安全小盾牌。"
+    }
+  ]
+}

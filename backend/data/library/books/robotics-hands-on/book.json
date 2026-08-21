@@ -1,0 +1,86 @@
+{
+  "slug": "robotics-hands-on",
+  "title": "动手做机器人",
+  "description": "从开箱认零件到赛场跑循线，亲手搭建、编程、调试一台属于自己的竞速小车。",
+  "grade_min": 7,
+  "grade_max": 9,
+  "difficulty": "MEDIUM",
+  "estimated_minutes": 90,
+  "author": null,
+  "tags": [
+    "机器人",
+    "实践"
+  ],
+  "topic": "机器人",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "robot-kit-anatomy",
+      "name": "套件部件",
+      "description": "机器人套件的部件家族包括结构件、动力件、主控、传感器与线材，认识每个家族的角色是组装的第一步。",
+      "topic": "机器人"
+    },
+    {
+      "slug": "gear-transmission",
+      "name": "齿轮传动",
+      "description": "齿轮传动通过大小齿轮啮合改变转速与力量：大带小变快变弱，小带大变慢变强。",
+      "topic": "机器人"
+    },
+    {
+      "slug": "block-code-motion",
+      "name": "图形化运动控制",
+      "description": "图形化编程用拖拽积木控制马达的转速与时长，让小车实现前进、转向和停止等基本动作。",
+      "topic": "机器人"
+    },
+    {
+      "slug": "line-following",
+      "name": "循线行驶",
+      "description": "循线行驶靠红外传感器识别地面黑线的反光差异，偏差大就转向修正，让小车沿线自动前进。",
+      "topic": "机器人"
+    },
+    {
+      "slug": "debug-cycle",
+      "name": "调试循环",
+      "description": "调试循环指预测、运行、观察、定位、修改五步反复迭代的过程，是硬件项目的核心工作方式。",
+      "topic": "机器人"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "开箱：认识零件家族",
+      "minutes": 16,
+      "summary": "盘点机器人套件的五大部件家族，建立整箱零件的全局地图。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "机械传动：齿轮与结构",
+      "minutes": 18,
+      "summary": "理解齿轮如何改变速度与力量，动手搭建一个结实的小车底盘。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "让它动起来：图形化编程控制",
+      "minutes": 18,
+      "summary": "用积木式程序指挥马达，实现前进、转弯与刹车的基本动作。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "加上传感器：会反应的小车",
+      "minutes": 19,
+      "summary": "接入红外与超声波传感器，让小车从「瞎跑」进化为「会看路」。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "赛场实战：循线竞速挑战",
+      "minutes": 21,
+      "summary": "综合全部技能挑战循线竞速赛，在真实调试中打磨出最快方案。"
+    }
+  ]
+}

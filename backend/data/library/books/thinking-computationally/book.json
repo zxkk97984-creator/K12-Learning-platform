@@ -1,0 +1,86 @@
+{
+  "slug": "thinking-computationally",
+  "title": "计算思维：像程序员一样想问题",
+  "description": "学会程序员的四大思考法宝：拆解、找规律、抓重点、定步骤，用它们攻克学习和生活中的难题。",
+  "grade_min": 7,
+  "grade_max": 9,
+  "difficulty": "MEDIUM",
+  "estimated_minutes": 85,
+  "author": null,
+  "tags": [
+    "算法思维",
+    "方法"
+  ],
+  "topic": "算法思维",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "computational-thinking",
+      "name": "计算思维",
+      "description": "计算思维是用拆解、找规律、抓重点、定步骤的方式分析并解决问题的思考方法，不需要计算机也能使用。",
+      "topic": "算法思维"
+    },
+    {
+      "slug": "decomposition-strategy",
+      "name": "拆解策略",
+      "description": "拆解策略把大问题切成若干个可解决的小问题，逐个击破后再组合出整体方案。",
+      "topic": "算法思维"
+    },
+    {
+      "slug": "pattern-recognition-thinking",
+      "name": "模式识别",
+      "description": "模式识别是在问题中寻找相似点与重复出现的结构，借助已有经验加速解决新问题。",
+      "topic": "算法思维"
+    },
+    {
+      "slug": "abstraction-thinking",
+      "name": "抽象思维",
+      "description": "抽象是抓住与目标相关的关键特征、忽略无关细节的思考方式，让复杂事物变得可操作。",
+      "topic": "算法思维"
+    },
+    {
+      "slug": "flowchart-design",
+      "name": "流程图设计",
+      "description": "流程图用图形符号把步骤与判断画出来，是设计算法和理清思路的通用工具。",
+      "topic": "算法思维"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "程序员的超能力：什么是计算思维",
+      "minutes": 16,
+      "summary": "认识计算思维的真面目：一套不需要计算机也能用的思考方法。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "大事化小：拆解的艺术",
+      "minutes": 17,
+      "summary": "学会把手问题层层切分成能下手的小问题。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "找规律：模式识别的力量",
+      "minutes": 16,
+      "summary": "发现重复结构与相似性，让老经验解决新问题。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "抓重点：抽象的智慧",
+      "minutes": 18,
+      "summary": "学会忽略无关细节，只保留解决问题的核心特征。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "步骤化：设计你的算法",
+      "minutes": 19,
+      "summary": "综合三大法宝，用流程图设计出让别人也能执行的方案。"
+    }
+  ]
+}

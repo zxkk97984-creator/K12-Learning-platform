@@ -1,0 +1,83 @@
+{
+  "slug": "spreadsheet-thinker",
+  "title": "表格里的数学脑",
+  "description": "从认识单元格到做出班级管理表，学会用电子表格计算、排序、筛选和画图，让数据替你干活。",
+  "grade_min": 7,
+  "grade_max": 9,
+  "difficulty": "EASY",
+  "estimated_minutes": 85,
+  "author": null,
+  "tags": ["数据素养", "工具"],
+  "topic": "数据素养",
+  "license": "CC-BY",
+  "copyright_status": "原创",
+  "knowledge_points": [
+    {
+      "slug": "cell-address",
+      "name": "单元格地址",
+      "description": "单元格地址由列字母加行号组成（如 B3），是表格里每个数据的唯一门牌号，公式靠它找到数据。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "spreadsheet-formula",
+      "name": "电子表格公式",
+      "description": "公式以等号开头（如 =B2+C2），让表格自动计算并随数据修改即时更新结果。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "autofill-handle",
+      "name": "自动填充",
+      "description": "自动填充指拖动单元格右下角的小方块，把公式或规律复制到相邻格子，一次输入处处生效。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "sort-filter",
+      "name": "排序与筛选",
+      "description": "排序把数据按大小或字母重新排列，筛选只显示满足条件的行，两者配合能快速定位答案。",
+      "topic": "数据素养"
+    },
+    {
+      "slug": "spreadsheet-chart",
+      "name": "表格图表",
+      "description": "表格软件能把选中的数据一键生成柱状图、折线图等图表，选对图表类型才能讲对故事。",
+      "topic": "数据素养"
+    }
+  ],
+  "chapters": [
+    {
+      "order": 1,
+      "file": "ch01.md",
+      "title": "认识表格：格子里的世界",
+      "minutes": 15,
+      "summary": "认识行列与单元格地址，建立表格思维的第一块地基。"
+    },
+    {
+      "order": 2,
+      "file": "ch02.md",
+      "title": "公式：让表格自己算",
+      "minutes": 18,
+      "summary": "学会写第一个公式，掌握求和、平均等常用函数与自动填充。"
+    },
+    {
+      "order": 3,
+      "file": "ch03.md",
+      "title": "排序与筛选：快速找到答案",
+      "minutes": 16,
+      "summary": "用排序找最高最低，用筛选锁定目标行，几秒完成人工半天的工作。"
+    },
+    {
+      "order": 4,
+      "file": "ch04.md",
+      "title": "图表：一键让数据说话",
+      "minutes": 17,
+      "summary": "把数据变成柱状图与折线图，理解选图类型就是选叙事角度。"
+    },
+    {
+      "order": 5,
+      "file": "ch05.md",
+      "title": "小项目：班级图书角管理表",
+      "minutes": 19,
+      "summary": "综合四章技能搭建一份可持续使用的图书借阅管理表。"
+    }
+  ]
+}
