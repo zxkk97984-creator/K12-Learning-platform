@@ -39,7 +39,7 @@ backend/app/scripts/import_library.py     # 幂等导入
 
 ## 五、遗留事项（需你裁决，未动手）
 
-1. **380 本测试垃圾书**（"发布测试书-xxx"等）+ 235 个"测试"知识资源：因 1614 个测验会话 FK 引用不能直接删。方案建议：`status='ARCHIVED'` 归档隐藏（前端按 PUBLISHED 过滤即消失），零风险可回滚。你点头我就执行。
+1. ~~380 本测试垃圾书~~ ✅ 已处理（2026-08-22 晨）：84 本 PUBLISHED 垃圾 + 241 本 DRAFT 垃圾 + 2 本重复副本全部 ARCHIVED（382 本，保留可回滚）；知识库删除 463 个测试资源 + 723 个 chunks。最终：**36 本 PUBLISHED 书 / 140 章 / 2004 内容块；60 篇 READY 知识文档 / 377 chunks**。
 2. 12 本原始种子书中除《AI 不是魔法》外仍是占位章节（现在有 25 本新书撑场面，影响小）。
 3. embedding 当前是 mock 向量；切真实 provider 后需 `force_reprocess` 重索引。
 
