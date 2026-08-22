@@ -72,12 +72,42 @@ open_browser() {
       nohup "$opener" "$url" >/dev/null 2>&1 &
     fi
     log "    已请求系统默认浏览器打开: $url"
+    # 浏览器已有实例时，xdg-open 只在后台开新标签、不弹窗口。
+    # 1) 有 wmctrl（X11）→ 直接把浏览器窗口激活到前台；
+    # 2) 否则发桌面通知提醒用户切换窗口（点击通知可聚焦）。
+    sleep 2
+    if ! activate_browser_window; then
+      command -v notify-send >/dev/null 2>&1 && \
+        nohup notify-send -a "霜铃" -u normal "霜铃已启动" "前端已在默认浏览器打开: ${url} （若未见窗口，请切换到浏览器标签页）" >/dev/null 2>&1 &
+    fi
   elif command -v powershell.exe >/dev/null 2>&1; then
     nohup powershell.exe -NoProfile -Command "Start-Process '$url'" \
       >/dev/null 2>&1 &
     log "    已请求系统默认浏览器打开: $url"
   else
     warn "    未找到可用的浏览器启动器，请手动打开: $url"
+  fi
+}
+
+# 把默认浏览器的既有窗口带到前台（仅 X11 会话；无工具/无窗口时静默跳过）
+activate_browser_window() {
+  local browser_class=""
+  case "$(xdg-settings get default-web-browser 2>/dev/null)" in
+    microsoft-edge*) browser_class="msedge" ;;
+    google-chrome*)  browser_class="google-chrome" ;;
+    firefox*)        browser_class="firefox" ;;
+    *) return 0 ;;
+  esac
+
+  command -v wmctrl >/dev/null 2>&1 || return 0
+  [ -n "${DISPLAY:-}" ] || return 0
+
+  # 找到该 class 的第一个窗口并激活 + 切到当前桌面
+  local win
+  win="$(wmctrl -lx 2>/dev/null | awk -v cls="$browser_class" 'tolower($3) ~ cls {print $1; exit}')"
+  if [ -n "$win" ]; then
+    wmctrl -i -a "$win" >/dev/null 2>&1 &&
+      log "    已将浏览器窗口切换到前台"
   fi
 }
 
