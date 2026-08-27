@@ -23,7 +23,14 @@ from app.infrastructure.database.base import Base
 
 
 class VECTOR(UserDefinedType):
-    """Minimal pgvector type binding; HNSW index lands in Phase 8."""
+    """Minimal pgvector type binding.
+
+    Columns are unbounded ``vector`` (no fixed dimension) so embeddings from
+    different providers (64-dim mock, 768/1024-dim real) can coexist during
+    re-index.  pgvector requires a fixed dimension for indexes, so no vector
+    index is declared here; search filters rows to the query dimension
+    (migration c7d8e9f0a1b2).
+    """
 
     def __init__(self, dimensions: int | None = None) -> None:
         self.dimensions = dimensions
@@ -142,6 +149,10 @@ class StudentProfile(Base):
     )
     learning_days: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     total_learning_minutes: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    # Phase 3：以秒为单位精确累计真实阅读/学习时长；minutes 由 seconds 派生。
+    total_learning_seconds: Mapped[int] = mapped_column(
+        Integer, server_default=text("0"), nullable=False
+    )
     completed_books: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     completed_chapters: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     quiz_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
@@ -409,7 +420,8 @@ class LearningEvent(Base):
             "'KNOWLEDGE_CARD_VIEWED','HELP_REQUESTED','EXPLAIN_REQUESTED',"
             "'SUMMARY_REQUESTED','QUIZ_CREATED','QUIZ_ANSWERED','ANSWER_CORRECT',"
             "'ANSWER_WRONG','HINT_REQUESTED','QUESTION_ASKED','BOOK_STARTED',"
-            "'BOOK_FINISHED','VOICE_SESSION_STARTED','ROLE_SWITCHED','TEXT_SELECTED')",
+            "'BOOK_FINISHED','VOICE_SESSION_STARTED','VOICE_SESSION_ENDED',"
+            "'ROLE_SWITCHED','TEXT_SELECTED')",
             name="ck_learning_events_type",
         ),
         Index(
@@ -502,13 +514,40 @@ class BookProgress(Base):
     )
 
 
+class ReadingSettlement(Base):
+    """reading_settlements（Phase 3）：LearningSession → BookProgress 时长结算台账。
+
+    session_id 主键唯一保证同一学习会话只会向 BookProgress.total_seconds
+    结算一次——重复 PATCH / 自动关闭 / Worker 重放都天然幂等。
+    """
+
+    __tablename__ = "reading_settlements"
+
+    session_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("learning_sessions.session_id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    book_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="RESTRICT")
+    )
+    settled_seconds: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Recommendation(Base):
     """recommendations（规则式学生推荐；Redis 不承担事实存储）。"""
 
     __tablename__ = "recommendations"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('ACTIVE','DISMISSED')",
+            "status IN ('ACTIVE','DISMISSED','EXPIRED')",
             name="ck_recommendations_status",
         ),
         Index(
@@ -537,6 +576,15 @@ class Recommendation(Base):
         PG_UUID(as_uuid=True),
         ForeignKey("books.book_id", ondelete="SET NULL"),
     )
+    # ---- D9 溯源（平铺列，对齐 Book.source_ids/license/copyright_status）----
+    source_ids: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+    license: Mapped[str | None] = mapped_column(String(128))
+    source_url: Mapped[str | None] = mapped_column(String(512))
+    model_info: Mapped[dict | None] = mapped_column(JSONB)
+    skill_version: Mapped[str | None] = mapped_column(String(64))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(16), server_default=text("'ACTIVE'"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -823,12 +871,6 @@ class StudentEpisode(Base):
             "student_id",
             text("occurred_at DESC"),
         ),
-        Index(
-            "ix_student_episodes_embedding_hnsw",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
     )
 
     episode_id: Mapped[UUID] = mapped_column(
@@ -854,8 +896,9 @@ class StudentEpisode(Base):
     knowledge_point_ids: Mapped[list] = mapped_column(
         JSONB, server_default=text("'[]'::jsonb")
     )
-    # pgvector 列 Phase 8 才写入；本阶段只建列不建 HNSW 索引。
-    embedding: Mapped[VECTOR | None] = mapped_column(VECTOR(64))
+    # pgvector 列与迁移 c7d8e9f0a1b2 一致：无维度 vector，兼容不同 provider；
+    # 不建向量索引（pgvector 索引要求固定维度），检索按查询维度过滤。
+    embedding: Mapped[VECTOR | None] = mapped_column(VECTOR())
     importance: Mapped[str] = mapped_column(String(8))
     tags: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(
@@ -1212,6 +1255,8 @@ class BackgroundJob(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 失败重试的指数退避：下次可被认领的最早时间；NULL 表示立即可认领。
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class KnowledgeChunk(Base):
@@ -1226,12 +1271,6 @@ class KnowledgeChunk(Base):
         CheckConstraint(
             "status IN ('PENDING','READY','FAILED')",
             name="ck_knowledge_chunks_status",
-        ),
-        Index(
-            "ix_knowledge_chunks_embedding_hnsw",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
     )
 
@@ -1251,7 +1290,7 @@ class KnowledgeChunk(Base):
     knowledge_point_ids: Mapped[list] = mapped_column(
         JSONB, server_default=text("'[]'::jsonb")
     )
-    embedding: Mapped[VECTOR | None] = mapped_column(VECTOR(64))
+    embedding: Mapped[VECTOR | None] = mapped_column(VECTOR())
     token_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     status: Mapped[str] = mapped_column(
         String(16), server_default=text("'PENDING'")

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,29 +15,36 @@ from app.modules.identity.security import decode_access_token
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
+def _unauthenticated(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=401,
+        detail={"code": "UNAUTHENTICATED", "message": message},
+    )
+
+
 async def get_current_user(
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> User:
     if credentials is None:
-        raise HTTPException(
-            status_code=401,
-            detail={"code": "UNAUTHENTICATED", "message": "missing bearer token"},
-        )
+        raise _unauthenticated("missing bearer token")
     payload = decode_access_token(credentials.credentials)
     try:
         user_id = UUID(payload["sub"])
     except (KeyError, ValueError) as exc:
-        raise HTTPException(
-            status_code=401,
-            detail={"code": "UNAUTHENTICATED", "message": "invalid token subject"},
-        ) from exc
+        raise _unauthenticated("invalid token subject") from exc
     user = await session.get(User, user_id)
     if user is None:
+        raise _unauthenticated("user not found")
+    # Phase 5-A：禁用账号立即失效（所有使用本依赖的 API 一致生效）
+    if getattr(user, "status", "ACTIVE") == "DISABLED":
         raise HTTPException(
             status_code=401,
-            detail={"code": "UNAUTHENTICATED", "message": "user not found"},
+            detail={"code": "ACCOUNT_DISABLED", "message": "account is disabled"},
         )
+    # 可观测性：把已认证用户挂到 request.state，访问日志可安全引用
+    request.state.user_id = str(user.user_id)
     return user
 
 
@@ -62,6 +69,11 @@ async def require_admin(
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> AdminPrincipal:
+    """Phase 5-A：严格后台鉴权——必须 ADMIN 用户且存在 enabled 的 admins 行。
+
+    移除旧「Legacy compatibility」放行路径：无 admins 行返回
+    403 ADMIN_PROFILE_REQUIRED。
+    """
     if user.user_type != "ADMIN":
         raise HTTPException(
             status_code=403,
@@ -75,18 +87,17 @@ async def require_admin(
             )
         )
     ).scalar_one_or_none()
-    if admin is not None:
-        return AdminPrincipal(
-            admin_id=admin.admin_id,
-            user_id=admin.user_id,
-            display_name=admin.display_name,
-            role_level=admin.role_level,
+    if admin is None:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "ADMIN_PROFILE_REQUIRED",
+                "message": "admin profile row missing or disabled",
+            },
         )
-    # Legacy compatibility: user_type=ADMIN without an admins row still passes,
-    # but writes that need an admin_id must ensure the row exists.
     return AdminPrincipal(
-        admin_id=None,
-        user_id=user.user_id,
-        display_name=user.username,
-        role_level="SUPERVISOR",
+        admin_id=admin.admin_id,
+        user_id=admin.user_id,
+        display_name=admin.display_name,
+        role_level=admin.role_level,
     )

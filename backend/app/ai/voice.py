@@ -263,7 +263,67 @@ def get_asr_provider() -> ASRProvider:
     raise ValueError(f"unsupported ASR provider: {settings.voice_provider}")
 
 
+class TTSUnavailableError(RuntimeError):
+    """TTS 不可用：未配置、配置不完整或供应商不支持。
+
+    语音链路捕获后向客户端发送 TTS_UNAVAILABLE 错误帧；
+    文字回复不受影响（先文字后音频）。
+    """
+
+
+class OpenAICompatibleTTS(TTSProvider):
+    """OpenAI 兼容 /audio/speech 端点的真实 TTS（httpx，无新依赖）。"""
+
+    def __init__(self) -> None:
+        if not settings.ai_base_url or not settings.ai_api_key:
+            raise TTSUnavailableError(
+                "TTS_PROVIDER=openai_compatible 需要同时配置 AI_BASE_URL 与 AI_API_KEY"
+            )
+        self._base_url = settings.ai_base_url.rstrip("/")
+        self._api_key = settings.ai_api_key
+        self.model_info = {
+            "provider": "openai_compatible",
+            "model": settings.tts_model or settings.ai_model,
+        }
+
+    def synthesize(self, text: str) -> bytes:
+        import httpx
+
+        try:
+            resp = httpx.post(
+                f"{self._base_url}/audio/speech",
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": settings.tts_model or settings.ai_model,
+                    "input": text,
+                    "voice": settings.tts_voice,
+                    "response_format": "wav",
+                },
+                timeout=30,
+            )
+        except httpx.HTTPError as exc:
+            raise TTSUnavailableError(f"TTS 服务不可达：{exc}") from exc
+        if resp.status_code >= 300:
+            detail = resp.text[:200]
+            quota_like = resp.status_code in (402, 429)
+            reason = "额度不足或限流" if quota_like else "服务返回错误"
+            raise TTSUnavailableError(f"TTS {reason} [{resp.status_code}]: {detail}")
+        return resp.content
+
+
 def get_tts_provider() -> TTSProvider:
-    if settings.tts_provider.strip().lower() == "mock":
+    provider = settings.tts_provider.strip().lower()
+    if provider == "mock":
+        # 显式选择 mock（本地/测试）；生产默认 none 不允许静音假音频
         return MockTTS()
-    raise ValueError(f"unsupported TTS provider: {settings.tts_provider}")
+    if provider in ("", "none"):
+        raise TTSUnavailableError(
+            "TTS 未配置：请在 .env 设置 TTS_PROVIDER=openai_compatible"
+            "（并配置 AI_BASE_URL/AI_API_KEY/TTS_MODEL），或本地开发显式设为 mock"
+        )
+    if provider == "openai_compatible":
+        return OpenAICompatibleTTS()
+    raise TTSUnavailableError(f"不支持的 TTS_PROVIDER: {settings.tts_provider!r}")

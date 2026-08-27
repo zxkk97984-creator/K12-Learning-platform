@@ -5,11 +5,11 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ProfileInsight, StudentEpisode } from '@/entities/memory/types'
-import type { StudentPreference } from '@/entities/student/types'
+import type { Stage, StudentPreference } from '@/entities/student/types'
 
 const runIntent = vi.fn()
 
-vi.mock('@/mocks/services', () => ({
+vi.mock('@/shared/services', () => ({
   studentService: {
     getPreferences: vi.fn(),
     getMe: vi.fn(),
@@ -36,9 +36,9 @@ vi.mock('@/features/auth', () => {
       nickname: '小明',
       avatar_url: null,
       grade: 8,
-      stage: 'JUNIOR',
+      stage: 'JUNIOR' as Stage,
       language: 'zh-CN',
-      learning_goal: null,
+      learning_goal: '期末 AI 成绩提升',
       current_teacher_role_id: null,
       learning_days: 1,
       total_learning_minutes: 30,
@@ -58,6 +58,7 @@ vi.mock('@/features/companion', () => ({
     setAiState: vi.fn(),
     setOpen: vi.fn(),
   }),
+  useTeacherName: () => '霜铃',
 }))
 
 vi.mock('@/features/conversation', () => ({
@@ -65,12 +66,15 @@ vi.mock('@/features/conversation', () => ({
     selector({ runIntent }),
 }))
 
+const feedbackMocks = vi.hoisted(() => ({ showToast: vi.fn() }))
 vi.mock('@/features/feedback', () => ({
-  useToastStore: () => ({ showToast: vi.fn() }),
+  useToastStore: (selector: (state: { showToast: unknown }) => unknown) =>
+    selector({ showToast: feedbackMocks.showToast }),
 }))
 
-import { memoryService, studentService } from '@/mocks/services'
+import { memoryService, studentService } from '@/shared/services'
 import ProfilePage from './ProfilePage'
+import { ScreenContextProvider } from '@/features/screen-context'
 
 const preference: StudentPreference = {
   preference_id: 'pref-1',
@@ -119,7 +123,11 @@ const episode: StudentEpisode = {
 
 function renderProfile() {
   return render(
-    React.createElement(MemoryRouter, null, React.createElement(ProfilePage)),
+    React.createElement(
+      ScreenContextProvider,
+      null,
+      React.createElement(MemoryRouter, null, React.createElement(ProfilePage)),
+    ),
   )
 }
 
@@ -191,5 +199,80 @@ describe('ProfilePage insights/episodes rendering', () => {
     )
     expect(screen.getByText('学习情节')).toBeTruthy()
     expect(screen.getByText('完成了一组随堂练习')).toBeTruthy()
+  })
+})
+
+describe('ProfilePage 学习目标持久化（Phase 4 整改 3）', () => {
+  const currentUser = {
+    student_id: 'student-1',
+    nickname: '小明',
+    avatar_url: null,
+    grade: 8,
+    stage: 'JUNIOR' as Stage,
+    language: 'zh-CN',
+    learning_goal: '期末 AI 成绩提升',
+    current_teacher_role_id: null,
+    learning_days: 1,
+    total_learning_minutes: 30,
+    completed_books: 0,
+    completed_chapters: 0,
+    quiz_count: 0,
+    created_at: '2026-08-01T00:00:00Z',
+    updated_at: '2026-08-19T00:00:00Z',
+  }
+
+  beforeEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+    vi.mocked(studentService.getPreferences).mockResolvedValue(preference)
+    vi.mocked(memoryService.getMemories).mockResolvedValue([])
+    vi.mocked(memoryService.getInsights).mockResolvedValue([])
+    vi.mocked(memoryService.getInsights).mockResolvedValue([])
+    vi.mocked(memoryService.getEpisodes).mockResolvedValue([])
+    vi.mocked(studentService.updateMe).mockResolvedValue({
+      ...currentUser,
+      learning_goal: '期末 AI 成绩提升',
+      grade: 9,
+    })
+    vi.mocked(studentService.updatePreferences).mockResolvedValue(preference)
+  })
+
+  it('当前用户 learning_goal 非空时，编辑草稿首次加载即显示', async () => {
+    const withGoal = { ...currentUser, learning_goal: '期末 AI 成绩提升' }
+    vi.mocked(studentService.updateMe).mockResolvedValue(withGoal)
+    // getMe 由 AuthProvider 提供 currentUser；此处直接断言渲染输入框取值逻辑：
+    renderProfile()
+    // 切到「AI 档案」视图并进入编辑模式
+    fireEvent.click(screen.getByRole('tab', { name: 'AI 档案' }))
+    fireEvent.click(await screen.findByRole('button', { name: '编辑' }))
+    const input = await screen.findByLabelText(/学习目标/)
+    // load() 后 profile 来自 currentUser（learning_goal 已设置）
+    await waitFor(() => expect((input as HTMLInputElement).value).toBe('期末 AI 成绩提升'))
+  })
+
+  it('保存成功后以 updateMe 返回值刷新档案（输入框显示返回的新目标）', async () => {
+    const savedProfile = { ...currentUser, learning_goal: '冲刺省级竞赛', grade: 9 }
+    vi.mocked(studentService.updateMe).mockResolvedValue(savedProfile)
+
+    renderProfile()
+    // 切到「AI 档案」→ 编辑
+    fireEvent.click(screen.getByRole('tab', { name: 'AI 档案' }))
+    fireEvent.click(await screen.findByRole('button', { name: '编辑' }))
+    const input = (await screen.findByLabelText(/学习目标/)) as HTMLInputElement
+
+    // 输入一个与初始值不同的目标并保存
+    fireEvent.change(input, { target: { value: '冲刺省级竞赛' } })
+    fireEvent.click(await screen.findByRole('button', { name: '保存修改' }))
+
+    await waitFor(() =>
+      expect(vi.mocked(studentService.updateMe)).toHaveBeenCalledWith(
+        expect.objectContaining({ learning_goal: '冲刺省级竞赛' }),
+      ),
+    )
+    // 保存后组件切回预览；预览 frontmatter 显示 updateMe 返回的最新档案值
+    const previewLine = await screen.findByText(/learning_goal:/)
+    expect(previewLine.parentElement?.textContent).toContain('冲刺省级竞赛')
+    // 本用例未修改偏好 frontmatter，故不触发偏好接口（真实条件持久化）
+    expect(vi.mocked(studentService.updateMe)).toHaveBeenCalledTimes(1)
   })
 })

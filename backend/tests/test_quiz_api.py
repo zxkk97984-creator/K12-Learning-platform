@@ -177,7 +177,7 @@ class TestQuizAPI:
 
         assert session["status"] == "ACTIVE"
         assert session["quiz_kind"] == "CHAPTER_QUIZ"
-        assert session["skill_version"] == "quiz-v1"
+        assert session["skill_version"] == "quiz-v2"
         assert len(session["questions_snapshot"]) == 3
         assert all("correct_answer" in question for question in session["questions_snapshot"])
 

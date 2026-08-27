@@ -27,6 +27,8 @@ class CreateQuizSessionRequest(BaseModel):
     quiz_kind: QuizKind = "CHAPTER_QUIZ"
     question_count: int = Field(default=3, ge=1, le=10)
     difficulty: QuizDifficulty = "MEDIUM"
+    # 直连 API 创建时允许在章节缺内容时审计回退题库（默认旧行为）。
+    allow_bank_fallback: bool = True
 
 
 class QuizSessionListItemDTO(BaseModel):

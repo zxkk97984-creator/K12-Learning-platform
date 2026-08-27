@@ -347,7 +347,7 @@ class TestConversationSSE:
         assert tool_result["tool_run_id"] == tool_start["tool_run_id"]
         assert tool_result["tool"] == "quiz"
         assert tool_result["status"] == "success"
-        assert tool_result["payload"]["skill_version"] == "quiz-v1"
+        assert tool_result["payload"]["skill_version"] == "quiz-v2"
         quiz_session_id = tool_result["payload"]["quiz_session_id"]
         assert quiz_session_id
         assert "好的，我来出一道题" in text_done["content"]

@@ -9,7 +9,7 @@ def test_quiz_skill_is_registered_with_a_stable_version() -> None:
     skill = get_skill("quiz")
 
     assert isinstance(skill, QuizSkill)
-    assert skill.skill_version == "quiz-v1"
+    assert skill.skill_version == "quiz-v2"
     assert skill.name == "quiz"
 
 

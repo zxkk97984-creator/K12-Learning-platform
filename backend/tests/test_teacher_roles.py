@@ -1,12 +1,13 @@
 """Phase 11 teacher role tests (student switch + admin CRUD + defaults)."""
 
 import asyncio
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.infrastructure.database.models import (
     Admin,
@@ -98,6 +99,30 @@ def client() -> TestClient:
     _ensure_admin()
     _ensure_student()
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def cleanup_created_roles() -> Iterator[None]:
+    """删除测试期间新建的 teacher_roles，避免污染开发库（角色切换测试直接跑真实库）。"""
+
+    async def snapshot() -> set[UUID]:
+        async with async_session() as session:
+            rows = await session.execute(select(TeacherRole.role_id))
+            return {row[0] for row in rows}
+
+    async def purge(before: set[UUID]) -> None:
+        async with async_session() as session:
+            rows = await session.execute(select(TeacherRole.role_id))
+            for (role_id,) in rows:
+                if role_id not in before:
+                    await session.execute(
+                        delete(TeacherRole).where(TeacherRole.role_id == role_id)
+                    )
+            await session.commit()
+
+    before = asyncio.run(snapshot())
+    yield
+    asyncio.run(purge(before))
 
 
 @pytest.fixture(scope="module")
@@ -198,10 +223,10 @@ class TestTeacherRoles:
         assert roles.status_code == 200
         data = roles.json()["data"]
         names = {row["name"] for row in data}
-        assert "shuangling" in names
-        assert "strict-mentor" in names
+        assert "温暖鼓励" in names
+        assert "严谨清晰" in names
         assert all("persona" not in row for row in data)
-        strict = next(row for row in data if row["name"] == "strict-mentor")
+        strict = next(row for row in data if row["name"] == "严谨清晰")
 
         patched = client.patch(
             "/api/v1/me",
@@ -285,7 +310,7 @@ class TestTeacherRoles:
             "/api/v1/teacher-roles?enabled=true",
             headers=headers(student_token),
         ).json()["data"]
-        strict = next(row for row in roles if row["name"] == "strict-mentor")
+        strict = next(row for row in roles if row["name"] == "严谨清晰")
         client.patch(
             "/api/v1/me",
             headers=headers(student_token),
@@ -331,7 +356,7 @@ class TestTeacherRoles:
             "/api/v1/teacher-roles?enabled=true",
             headers=headers(student_token),
         ).json()["data"]
-        strict = next(row for row in roles if row["name"] == "strict-mentor")
+        strict = next(row for row in roles if row["name"] == "严谨清晰")
         for _ in range(2):
             response = client.patch(
                 "/api/v1/me",
@@ -414,7 +439,7 @@ class TestTeacherRoles:
             "/api/v1/teacher-roles?enabled=true",
             headers=headers(student_token),
         ).json()["data"]
-        strict = next(row for row in roles if row["name"] == "strict-mentor")
+        strict = next(row for row in roles if row["name"] == "严谨清晰")
         client.patch(
             "/api/v1/me",
             headers=headers(student_token),
@@ -454,7 +479,7 @@ class TestTeacherRoles:
             "/api/v1/teacher-roles?enabled=true",
             headers=headers(student_token),
         ).json()["data"]
-        strict = next(row for row in roles if row["name"] == "strict-mentor")
+        strict = next(row for row in roles if row["name"] == "严谨清晰")
         client.patch(
             "/api/v1/me",
             headers=headers(student_token),

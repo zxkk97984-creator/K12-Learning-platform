@@ -3,29 +3,33 @@ import { useState } from 'react'
 import type { MemoryAction } from '@/shared/api/memory-service'
 import type { StudentMemory } from '@/entities/memory/types'
 import { useToastStore } from '@/features/feedback'
-import { memoryService } from '@/mocks/services'
+import { useTeacherName } from '@/features/companion'
+import { memoryService } from '@/shared/services'
 
 interface MemoryListProps {
   memories: StudentMemory[]
   onChanged: () => void
 }
 
-const ACTION_TOAST: Record<MemoryAction, string> = {
-  CONFIRM: '已确认，霜铃会继续使用这条记忆',
-  DISPUTE: '已标记为「不完全正确」，霜铃会重新验证',
-  EDIT: '已保存修改',
-  FORGET: '已忘记这条记忆，霜铃不会再使用',
+function actionToast(teacherName: string): Record<MemoryAction, string> {
+  return {
+    CONFIRM: `已确认，${teacherName}会继续使用这条记忆`,
+    DISPUTE: `已标记为「不完全正确」，${teacherName}会重新验证`,
+    EDIT: '已保存修改',
+    FORGET: `已忘记这条记忆，${teacherName}不会再使用`,
+  }
 }
 
 export function MemoryList({ memories, onChanged }: MemoryListProps) {
   const showToast = useToastStore((state) => state.showToast)
+  const teacherName = useTeacherName()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
 
   const runAction = async (memory: StudentMemory, action: MemoryAction, content?: string) => {
     try {
       await memoryService.updateMemory(memory.memory_id, action, content)
-      showToast(ACTION_TOAST[action])
+      showToast(actionToast(teacherName)[action])
       setEditingId(null)
       onChanged()
     } catch {

@@ -41,6 +41,17 @@ export function persistPosition(position: Point): void {
   window.localStorage.setItem(COMPANION_POSITION_KEY, JSON.stringify(position))
 }
 
+/** 当前桌宠对应的 AI 教师名字（组件内使用，随桌宠切换自动更新） */
+export function useTeacherName(): string {
+  const selectedPetId = useCompanionStore((state) => state.selectedPetId)
+  return getCompanionPet(selectedPetId).displayName
+}
+
+/** 当前桌宠对应的 AI 教师名字（store/非组件上下文使用） */
+export function currentTeacherName(): string {
+  return getCompanionPet(useCompanionStore.getState().selectedPetId).displayName
+}
+
 interface CompanionStore {
   open: boolean
   position: Point

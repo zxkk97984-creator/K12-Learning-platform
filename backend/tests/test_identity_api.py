@@ -7,9 +7,35 @@ from app.main import app
 from app.scripts.seed import seed
 
 
+def _ensure_seed_profile_grade8() -> None:
+    async def run() -> None:
+        from sqlalchemy import select
+
+        from app.infrastructure.database.models import StudentProfile, User
+        from app.infrastructure.database.session import async_session
+
+        async with async_session() as session:
+            user = (
+                await session.execute(select(User).where(User.username == "xiaoming"))
+            ).scalar_one_or_none()
+            if user is None:
+                return
+            profile = (
+                await session.execute(
+                    select(StudentProfile).where(StudentProfile.user_id == user.user_id)
+                )
+            ).scalar_one_or_none()
+            if profile is not None:
+                profile.grade = 8
+                await session.commit()
+
+    asyncio.run(run())
+
+
 @pytest.fixture(scope="module")
 def client() -> TestClient:
     asyncio.run(seed())
+    _ensure_seed_profile_grade8()
     return TestClient(app)
 
 

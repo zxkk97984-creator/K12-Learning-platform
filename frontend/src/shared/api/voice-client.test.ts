@@ -126,3 +126,52 @@ describe('createVoiceClient', () => {
     client.close()
   })
 })
+
+describe('createVoiceClient screen-context frames (Phase 2-A4)', () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = []
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('initialScreenContext 在连接建立后立即发送 context 帧', async () => {
+    const client = createVoiceClient({
+      conversationId: 'conversation-1',
+      callbacks: {},
+      initialScreenContext: { route: '/learn/b1/c1', pageType: 'chapter_reader' },
+      createSocket: (url) => new FakeWebSocket(url) as unknown as WebSocket,
+    })
+    const connectPromise = client.connect()
+    const socket = FakeWebSocket.instances[0]
+    socket.open()
+    await connectPromise
+    const frames = socket.sent.map((raw) => JSON.parse(raw) as Record<string, unknown>)
+    expect(frames[0]).toEqual({
+      type: 'context',
+      screen_context: { route: '/learn/b1/c1', pageType: 'chapter_reader' },
+    })
+    client.close()
+  })
+
+  it('sendScreenContext 可在任意时刻更新服务端上下文；未配置时不发送额外帧', async () => {
+    const client = createVoiceClient({
+      conversationId: 'conversation-1',
+      callbacks: {},
+      createSocket: (url) => new FakeWebSocket(url) as unknown as WebSocket,
+    })
+    const connectPromise = client.connect()
+    const socket = FakeWebSocket.instances[0]
+    socket.open()
+    await connectPromise
+    client.sendScreenContext({ route: '/home', pageType: 'home' })
+    const frames = socket.sent.map((raw) => JSON.parse(raw) as Record<string, unknown>)
+    expect(frames.at(-1)).toEqual({
+      type: 'context',
+      screen_context: { route: '/home', pageType: 'home' },
+    })
+    expect(frames.filter((frame) => frame.type === 'context')).toHaveLength(1)
+    client.close()
+  })
+})

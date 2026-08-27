@@ -98,6 +98,7 @@ async def list_learning_events(
         "BOOK_STARTED",
         "BOOK_FINISHED",
         "VOICE_SESSION_STARTED",
+        "VOICE_SESSION_ENDED",
         "ROLE_SWITCHED",
         "TEXT_SELECTED",
     ] = Query(default=None),

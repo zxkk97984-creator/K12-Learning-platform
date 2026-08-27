@@ -12,22 +12,25 @@ test('设置页 grade 修改持久化', async ({ page, request }) => {
   }, accessToken)
 
   await page.goto('/settings')
-  const gradeSelect = page.getByLabel('年级（1~12）')
-  await expect(gradeSelect).toHaveValue('8')
+  const gradeSelect = page.getByLabel('年级', { exact: true })
+  const initialValue = await gradeSelect.inputValue()
+  const targetValue = initialValue === '9' ? '8' : '9'
 
-  // 改为 9 → 保存 → toast
-  await gradeSelect.selectOption('9')
+  // 改为另一档 → 保存 → toast
+  await gradeSelect.selectOption(targetValue)
   await page.getByRole('button', { name: '保存设置' }).click()
   await expect(page.getByText('设置已保存')).toBeVisible()
 
-  // 刷新持久
+  // 刷新持久：值切换为目标档位
   await page.reload()
-  await expect(page.getByLabel('年级（1~12）')).toHaveValue('9')
+  await expect(page.getByLabel('年级', { exact: true })).toHaveValue(targetValue)
 
-  // 还原为 8，保持 seed 数据干净
-  await page.getByLabel('年级（1~12）').selectOption('8')
-  await page.getByRole('button', { name: '保存设置' }).click()
-  await expect(page.getByText('设置已保存')).toBeVisible()
+  // 刷新持久断言完成后，统一还原为 8（seed 基线），避免影响后端单测
+  if (targetValue !== '8') {
+    await page.getByLabel('年级', { exact: true }).selectOption('8')
+    await page.getByRole('button', { name: '保存设置' }).click()
+    await expect(page.getByText('设置已保存')).toBeVisible()
+  }
   await page.reload()
-  await expect(page.getByLabel('年级（1~12）')).toHaveValue('8')
+  await expect(page.getByLabel('年级', { exact: true })).toHaveValue('8')
 })

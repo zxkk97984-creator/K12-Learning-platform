@@ -1,7 +1,7 @@
 export { Companion } from './components/Companion'
 export { CompanionSprite } from './components/CompanionSprite'
 export { CompanionPetPicker } from './components/CompanionPetPicker'
-export { useCompanionStore } from './store/companion-store'
+export { useCompanionStore, useTeacherName, currentTeacherName } from './store/companion-store'
 export { COMPANION_PETS, getCompanionPet } from './lib/sprite'
 export { spriteFrames, COMPANION_STATES } from './types'
 export type { CompanionAiState } from './types'

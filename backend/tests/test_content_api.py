@@ -31,52 +31,46 @@ KP2_ID = UUID("10000000-0000-0000-0000-000000000002")
 
 
 def _ensure_content() -> None:
-    """幂等 seed：按固定 UUID 逐项检查，缺什么补什么（不与 3-C seed_content 随机 UUID 冲突）。"""
+    """幂等且自愈的固定夹具 seed。
+
+    不做「存在即跳过」的弱检查：固定 UUID 的书/章/块若曾被外部操作污染
+    （如批量归档脚本按标题误杀、状态被改、内容缺失），这里一律恢复为
+    期望状态（缺陷 B 的自愈要求），测试不依赖手工修库。
+    """
 
     async def run() -> None:
         async with async_session() as session:
-            existing_books = {
-                row[0]
-                for row in (
-                    await session.execute(select(Book.book_id).where(Book.book_id == BOOK_ID))
-                ).all()
-            }
-            if BOOK_ID in existing_books:
-                return
-            session.add(
-                Book(
-                    book_id=BOOK_ID,
-                    title="AI 不是魔法",
-                    description="从推荐系统、训练数据到算法公平。",
-                    grade_min=7,
-                    grade_max=9,
-                    difficulty="MEDIUM",
-                    estimated_minutes=90,
-                    tags=["AI 基础"],
-                    status="PUBLISHED",
-                    published_at=datetime.now(timezone.utc),
-                )
-            )
-            session.add(
-                Chapter(
-                    chapter_id=CH1_ID,
-                    book_id=BOOK_ID,
-                    title="从“会回答”开始",
-                    chapter_order=1,
-                    estimated_minutes=13,
-                    status="PUBLISHED",
-                )
-            )
-            session.add(
-                Chapter(
-                    chapter_id=CH2_ID,
-                    book_id=BOOK_ID,
-                    title="训练数据",
-                    chapter_order=2,
-                    estimated_minutes=13,
-                    status="PUBLISHED",
-                )
-            )
+            book = await session.get(Book, BOOK_ID)
+            if book is None:
+                book = Book(book_id=BOOK_ID)
+                session.add(book)
+            book.title = "AI 不是魔法"
+            book.description = "从推荐系统、训练数据到算法公平。"
+            book.grade_min = 7
+            book.grade_max = 9
+            book.difficulty = "MEDIUM"
+            book.estimated_minutes = 90
+            book.tags = ["AI 基础"]
+            book.status = "PUBLISHED"
+            if book.published_at is None:
+                book.published_at = datetime.now(timezone.utc)
+
+            chapter_specs = [
+                (CH1_ID, 1, "从“会回答”开始", 13),
+                (CH2_ID, 2, "训练数据", 13),
+            ]
+            for chapter_id, order, title, minutes in chapter_specs:
+                ch = await session.get(Chapter, chapter_id)
+                if ch is None:
+                    ch = Chapter(chapter_id=chapter_id, book_id=BOOK_ID, chapter_order=order)
+                    session.add(ch)
+                # 防历史误挂：夹具章节必须归属夹具书并保持可读状态。
+                ch.book_id = BOOK_ID
+                ch.chapter_order = order
+                ch.title = title
+                ch.estimated_minutes = minutes
+                ch.status = "PUBLISHED"
+
             existing_kps = {
                 row[0]
                 for row in (
@@ -107,28 +101,41 @@ def _ensure_content() -> None:
                         topic="AI 基础",
                     )
                 )
-            session.add(
-                ContentBlock(
-                    block_id=BLK1_ID,
-                    chapter_id=CH2_ID,
-                    block_type="PARAGRAPH",
-                    content={"text": "机器学习里的训练数据，就像反复展示的例子。"},
-                    block_order=1,
-                    section_key="训练数据 · 定义",
-                    knowledge_point_ids=[str(KP1_ID)],
-                )
-            )
-            session.add(
-                ContentBlock(
-                    block_id=BLK2_ID,
-                    chapter_id=CH2_ID,
-                    block_type="KNOWLEDGE_CARD",
-                    content={"title": "训练数据", "text": "例子越有代表性，机器判断越可靠。"},
-                    block_order=2,
-                    section_key="知识卡片 · 训练数据",
-                    knowledge_point_ids=[str(KP1_ID), str(KP2_ID)],
-                )
-            )
+
+            block_specs = [
+                (
+                    BLK1_ID,
+                    {
+                        "block_type": "PARAGRAPH",
+                        "content": {"text": "机器学习里的训练数据，就像反复展示的例子。"},
+                        "block_order": 1,
+                        "section_key": "训练数据 · 定义",
+                        "knowledge_point_ids": [str(KP1_ID)],
+                    },
+                ),
+                (
+                    BLK2_ID,
+                    {
+                        "block_type": "KNOWLEDGE_CARD",
+                        "content": {"title": "训练数据", "text": "例子越有代表性，机器判断越可靠。"},
+                        "block_order": 2,
+                        "section_key": "知识卡片 · 训练数据",
+                        "knowledge_point_ids": [str(KP1_ID), str(KP2_ID)],
+                    },
+                ),
+            ]
+            for block_id, spec in block_specs:
+                block = await session.get(ContentBlock, block_id)
+                if block is None:
+                    block = ContentBlock(block_id=block_id, chapter_id=CH2_ID)
+                    session.add(block)
+                block.chapter_id = CH2_ID
+                block.block_type = spec["block_type"]
+                block.content = spec["content"]
+                block.block_order = spec["block_order"]
+                block.section_key = spec["section_key"]
+                block.knowledge_point_ids = spec["knowledge_point_ids"]
+
             await session.commit()
 
     asyncio.run(run())

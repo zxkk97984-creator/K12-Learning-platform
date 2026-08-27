@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from 'react'
 import type { MemoryEvidence, MemoryStatus, StudentMemory } from '@/entities/memory/types'
 import type { MemoryAction, MemoryListParams } from '@/shared/api/memory-service'
 import { useToastStore } from '@/features/feedback'
-import { memoryService } from '@/mocks/services'
+import { useTeacherName } from '@/features/companion'
+import { memoryService } from '@/shared/services'
 
 type MemoryFilter = Extract<MemoryStatus, 'ACTIVE' | 'DISPUTED' | 'REMOVED'>
 
@@ -27,11 +28,13 @@ const SOURCE_LABEL: Record<MemoryEvidence['source_type'], string> = {
   BOOK_PROGRESS: '阅读进度',
 }
 
-const ACTION_TOAST: Record<MemoryAction, string> = {
-  CONFIRM: '已确认，霜铃会继续使用这条记忆',
-  DISPUTE: '已标记为「不完全正确」，霜铃会重新验证',
-  EDIT: '已保存修改',
-  FORGET: '已忘记这条记忆，霜铃不会再使用',
+function actionToast(teacherName: string): Record<MemoryAction, string> {
+  return {
+    CONFIRM: `已确认，${teacherName}会继续使用这条记忆`,
+    DISPUTE: `已标记为「不完全正确」，${teacherName}会重新验证`,
+    EDIT: '已保存修改',
+    FORGET: `已忘记这条记忆，${teacherName}不会再使用`,
+  }
 }
 
 function payloadText(payload: Record<string, unknown>): string {
@@ -42,6 +45,7 @@ function payloadText(payload: Record<string, unknown>): string {
 
 export default function MemoriesPage() {
   const showToast = useToastStore((state) => state.showToast)
+  const teacherName = useTeacherName()
   const [memories, setMemories] = useState<StudentMemory[]>([])
   const [statusFilter, setStatusFilter] = useState<MemoryFilter>('ACTIVE')
   const [loading, setLoading] = useState(true)
@@ -77,7 +81,7 @@ export default function MemoriesPage() {
     }
     try {
       await memoryService.updateMemory(memory.memory_id, action, content)
-      showToast(ACTION_TOAST[action])
+      showToast(actionToast(teacherName)[action])
       setEditingId(null)
 
       // DISPUTED/REMOVED 有独立筛选页，操作后切到结果所在的列表，便于继续确认或复核。
@@ -117,7 +121,7 @@ export default function MemoriesPage() {
       <p className="font-mono text-xs uppercase tracking-widest text-accent">成长 · 记忆管理</p>
       <h1 className="mt-3 font-display text-4xl text-fg">AI 记得什么</h1>
       <p className="mt-2 max-w-[52ch] text-sm text-muted">
-        霜铃对你的每条理解都来自真实学习记录。你可以确认、质疑、修改或忘记。
+        {teacherName}对你的每条理解都来自真实学习记录。你可以确认、质疑、修改或忘记。
       </p>
       <p className="mt-2 text-xs text-muted">记忆由学习记录与 Memory Skill 生成，当前不支持手动添加。</p>
 

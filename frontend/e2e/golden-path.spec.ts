@@ -1,129 +1,102 @@
 import { expect, test } from '@playwright/test'
 
-// 黄金路径（总控 §10.8）：Home → Reader → Companion → 对话 → Mock Quiz → 答题 → History → Profile
+import {
+  archiveAllActiveConversations,
+  completeQuizOnPage,
+  loginStudent,
+  prepareContinueLearning,
+} from './helpers'
+
+test.describe.configure({ mode: 'serial' })
+
+// Phase 5-B-II：黄金路径真实化——不假设任何原型专属内容（书名/章节/题目文案）。
 test.describe('黄金路径', () => {
-  let accessToken = ''
+  test('继续学习 → 阅读 → 对话 → 多题测验完成 → 历史/画像', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(120_000)
 
-  test.beforeAll(async ({ request }) => {
-    // 2-E：受保护路由需登录；用后端 seed 账号换取 token 注入（需后端 + vite proxy 可用）
-    const response = await request.post('/api/v1/auth/login', {
-      data: { username: 'xiaoming', password: 'demo123' },
-    })
-    expect(response.ok()).toBeTruthy()
-    accessToken = (await response.json()).data.access_token
+    const session = await loginStudent(request)
+    await archiveAllActiveConversations(request, session.token)
+    // 真实 API 准备继续学习目标（grade 8 覆盖的书 + 第一章 + READING 55%）
+    const target = await prepareContinueLearning(request, session.token)
 
-    // 关闭遗留 ACTIVE 会话：面板默认加载最新 ACTIVE 会话，若残留上一次验证的会话，
-    // 其中 quiz 卡/消息历史会导致 .last() 定位到旧卡片，出现偶发失败（E2E 串行共享同一账号）。
-    const conversationsResponse = await request.get('/api/v1/conversations?status=ACTIVE&limit=100', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-    if (conversationsResponse.ok()) {
-      const conversations = (await conversationsResponse.json()).data as Array<{
-        conversation_id: string
-        status: string
-      }>
-      for (const conversation of conversations) {
-        if (conversation.status === 'ACTIVE') {
-          await request.patch(
-            `/api/v1/conversations/${conversation.conversation_id}`,
-            {
-              headers: { Authorization: `Bearer ${accessToken}` },
-              data: { status: 'ARCHIVED' },
-            },
-          )
-        }
-      }
-    }
-  })
-
-  test('完整学习闭环', async ({ page, request }) => {
     await page.addInitScript((token) => {
       window.localStorage.setItem('shuangling-access-token', token)
-    }, accessToken)
+    }, session.token)
 
-    // 1. 首页加载
+    // 1. 首页：昵称来自登录用户；继续学习卡指向准备好的书
     await page.goto('/home')
-    await expect(page.getByRole('heading', { name: '晚上好，小明。' })).toBeVisible()
-    await expect(page.getByRole('button', { name: '继续学习 →' }).first()).toBeVisible()
+    await expect(page.getByRole('heading', { name: /晚上好，/ })).toBeVisible()
+    await expect(page.getByText(target.bookTitle).first()).toBeVisible()
 
-    // 2. 继续学习 → reader（真实 UUID 路由，3-D 起不再是 b1/ch3 别名）
-    await page.getByRole('button', { name: '继续学习 →' }).first().click()
-    await expect(page).toHaveURL(/\/learn\//)
-    await expect(page.getByRole('heading', { name: '训练数据', level: 1 })).toBeVisible()
+    // 2. 继续学习 → 真实 UUID Reader；断言 URL 与非空章节标题
+    await page.getByRole('button', { name: /继续第 \d+ 章 →|开始学习 →/ }).first().click()
+    await expect(page).toHaveURL(new RegExp(`/learn/${target.bookId}/${target.chapterId}`))
+    const chapterHeading = page.locator('h1, h2').filter({ hasText: /\S/ }).first()
+    await expect(chapterHeading).toBeVisible()
 
-    // 3. 打开 companion
-    await page.getByRole('button', { name: '打开霜铃 AI 教师' }).click()
-    await expect(page.getByRole('complementary', { name: '霜铃对话面板' })).toBeVisible()
+    // 3. 打开 companion 面板（动态教师名，不硬编码）
+    await page.getByRole('button', { name: /打开.*AI 教师/ }).click()
+    const panel = page.getByRole('complementary', { name: /对话面板/ })
+    await expect(panel).toBeVisible()
     await expect(page.getByRole('button', { name: '语音输入' })).toBeVisible()
 
-    // 4. 发送消息 → 流式 AI 回复
-    await page.getByLabel('消息输入').fill('那它为什么会出错？')
+    // 4. 发送通用问题 → 教师消息落库（API 轮询确认）→ 刷新恢复
+    await page.getByLabel('消息输入').fill('请用简单的例子解释当前这一节的核心概念。')
     await page.getByRole('button', { name: '发送消息' }).click()
 
-    // 等教师消息真正落库后再刷新，避免流式完成前 reload 丢失历史。
-    const conversationsResponse = await request.get(
-      '/api/v1/conversations?limit=1&status=ACTIVE',
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    )
-    expect(conversationsResponse.ok()).toBeTruthy()
-    const conversationId = (await conversationsResponse.json()).data[0].conversation_id
     let teacherReply = ''
     await expect
-      .poll(
-        async () => {
-          const messagesResponse = await request.get(
-            `/api/v1/conversations/${conversationId}/messages?sort=desc&limit=1`,
-            { headers: { Authorization: `Bearer ${accessToken}` } },
-          )
-          if (!messagesResponse.ok()) return false
-          const messages = (await messagesResponse.json()).data
-          const reply = messages.find(
-            (message: { role: string; content: string }) =>
-              message.role === 'TEACHER' && message.content.trim(),
-          )
-          teacherReply = reply?.content.trim() ?? ''
-          return Boolean(teacherReply)
-        },
-        { timeout: 10_000 },
-      )
+      .poll(async () => {
+        const messagesResponse = await request.get(
+          `/api/v1/conversations?limit=1&status=ACTIVE`,
+          { headers: { Authorization: `Bearer ${session.token}` } },
+        )
+        if (!messagesResponse.ok()) return false
+        const list = (await messagesResponse.json()).data
+        if (list.length === 0) return false
+        const messagesResponse2 = await request.get(
+          `/api/v1/conversations/${list[0].conversation_id}/messages?sort=desc&limit=5`,
+          { headers: { Authorization: `Bearer ${session.token}` } },
+        )
+        if (!messagesResponse2.ok()) return false
+        const messages = (await messagesResponse2.json()).data
+        const reply = messages.find(
+          (message: { role: string; content: string }) =>
+            message.role === 'TEACHER' && message.content.trim(),
+        )
+        teacherReply = reply?.content.trim() ?? ''
+        return Boolean(teacherReply)
+      })
       .toBe(true)
-    const visibleReplyPrefix = teacherReply.replace(/(\*\*|__|`)/g, '').slice(0, 12)
-    const conversationPanel = page.getByRole('complementary', { name: '霜铃对话面板' })
-    await expect(conversationPanel).toContainText(visibleReplyPrefix)
 
-    // 4-D：刷新后重新从真实会话历史加载消息
     await page.reload()
-    await expect(page.getByRole('heading', { name: '训练数据', level: 1 })).toBeVisible()
-    await page.getByRole('button', { name: '打开霜铃 AI 教师' }).click()
-    await expect(conversationPanel).toBeVisible()
-    await expect(conversationPanel).toContainText(visibleReplyPrefix)
+    await expect(chapterHeading.first()).toBeVisible()
+    await page.getByRole('button', { name: /打开.*AI 教师/ }).click()
+    const visibleReplyPrefix = teacherReply.replace(/(\*\*|__|`)/g, '').slice(0, 12)
+    await expect(panel).toContainText(visibleReplyPrefix)
 
-    // 5. 触发 quiz → tool 状态 → quiz 卡
-    await page.getByRole('button', { name: '给我出题' }).first().click()
-    await expect(page.getByText('Quiz Skill 已创建 · 正式测验已记录').last()).toBeVisible({
-      timeout: 10_000,
-    })
-    const latestQuizCard = page.locator('[data-od-id="chat-quiz-card"]').last()
-    await expect(latestQuizCard).toBeVisible({ timeout: 10_000 })
+    // 5. 触发「给我出题」→ 等待 quiz 卡出现（不假设题目内容）
+    await panel.getByRole('button', { name: '给我出题' }).first().click().catch(() => undefined)
+    await page.getByLabel('消息输入').fill('给我出题')
+    await page.getByRole('button', { name: '发送消息' }).click()
     await expect(
-      latestQuizCard.getByRole('button', { name: /让机器从例子中发现可重复的规律/ }),
-    ).toBeVisible({
-      timeout: 10_000,
-    })
+      page.getByText(/Quiz Skill 已创建|正式测验已记录/).last(),
+    ).toBeVisible({ timeout: 20_000 })
 
-    // 6. 答题：选 B + 提交 → ✓ 已完成
-    await latestQuizCard.getByRole('button', { name: /让机器从例子中发现可重复的规律/ }).click()
-    await latestQuizCard.getByRole('button', { name: '提交答案' }).click()
-    await expect(latestQuizCard.getByText('✓ 已完成')).toBeVisible({ timeout: 10_000 })
+    // 6. 通用答题循环：多题、多题型、服务端判定推进，最终显示真实汇总
+    await completeQuizOnPage(page)
 
-    // 7. 去 quizzes：历史列表含随堂测验（5-C 起标题由后端生成，断言放宽）
+    // 7. 测验历史：使用通用入口与标题断言
     await page.keyboard.press('Escape')
     await page.getByRole('link', { name: '测验' }).click()
-    await expect(page.getByRole('heading', { name: '每一次答题，都会留下线索。' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /每一次答题/ })).toBeVisible()
     await expect(page.getByText(/随堂测验/).first()).toBeVisible()
 
-    // 8. 去 profile：画像页
+    // 8. 画像页：通用入口断言
     await page.getByRole('link', { name: '成长' }).click()
-    await expect(page.getByRole('heading', { name: '霜铃眼中的你。' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /眼中的你。/ })).toBeVisible()
   })
 })

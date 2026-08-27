@@ -4,6 +4,8 @@ const LINKS = [
   { to: '/admin', label: '总览', end: true },
   { to: '/admin/books', label: '书籍', end: false },
   { to: '/admin/knowledge', label: '知识库', end: false },
+  { to: '/admin/styles', label: '教师风格', end: false },
+  { to: '/admin/chapters', label: '章节内容', end: false },
 ]
 
 export function AdminLayout() {

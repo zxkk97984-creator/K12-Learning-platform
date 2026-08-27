@@ -129,6 +129,15 @@ def test_recommendations_return_rule_output_and_evidence(
     assert continue_rows[0]["reason"]
     assert continue_rows[0]["evidence_ids"]
     assert continue_rows[0]["related_book_id"]
+    # D9 溯源字段：规则式推荐不引用外部知识来源，source_ids 为空、license/source_url 为空、
+    # model_info 为空、skill_version 记录规则版本、expires_at 给出默认 TTL。
+    d9 = continue_rows[0]
+    assert d9["source_ids"] == []
+    assert d9["license"] is None
+    assert d9["source_url"] is None
+    assert d9["model_info"] is None
+    assert d9["skill_version"] == "rules-v1"
+    assert d9["expires_at"] is not None
 
 
 def test_recommendations_return_empty_array_when_no_rule_matches(
@@ -147,6 +156,53 @@ def test_recommendations_require_student_role(client: TestClient, admin_token: s
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_expired_recommendation_is_excluded_from_list(
+    client: TestClient, student_token: str
+) -> None:
+    """D9：过期的 ACTIVE 推荐仍保留在库（status 不变），但不再出现在列表。"""
+
+    async def seed_expired() -> None:
+        from datetime import timedelta
+
+        from app.infrastructure.database.models import Recommendation
+
+        async with async_session() as session:
+            profile = (
+                await session.execute(
+                    select(StudentProfile).join(User).where(User.username == STUDENT_NAME)
+                )
+            ).scalar_one()
+            session.add(
+                Recommendation(
+                    student_id=profile.student_id,
+                    recommendation_type="CONTINUE_READING",
+                    title="过期推荐",
+                    description="应被过滤",
+                    reason="expired · 测试过期排除",
+                    evidence_ids=[],
+                    related_book_id=None,
+                    source_ids=[],
+                    license=None,
+                    source_url=None,
+                    model_info=None,
+                    skill_version="rules-v1",
+                    expires_at=datetime.now(timezone.utc) - timedelta(days=1),
+                    status="ACTIVE",
+                )
+            )
+            await session.commit()
+
+    asyncio.run(seed_expired())
+    response = client.get("/api/v1/me/recommendations", headers=_headers(student_token))
+    assert response.status_code == 200
+    expired_like = [
+        row
+        for row in response.json()["data"]
+        if row["reason"].startswith("expired ·")
+    ]
+    assert expired_like == []
 
 
 def test_dismissed_recommendation_is_not_returned_again(

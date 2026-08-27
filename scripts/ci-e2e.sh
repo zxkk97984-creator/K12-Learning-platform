@@ -7,18 +7,46 @@ FRONTEND_DIR="$ROOT_DIR/frontend"
 BACKEND_PORT="${BACKEND_PORT:-8002}"
 API_TARGET="${VITE_API_PROXY_TARGET:-http://127.0.0.1:${BACKEND_PORT}}"
 BACKEND_LOG="$(mktemp "${TMPDIR:-/tmp}/shuangling-backend.XXXXXX.log")"
+WORKER_LOG="$(mktemp "${TMPDIR:-/tmp}/shuangling-worker.XXXXXX.log")"
 BACKEND_PID=""
+WORKER_PID=""
 
 cleanup() {
   local code=$?
+  if [[ -n "$WORKER_PID" ]] && kill -0 "$WORKER_PID" 2>/dev/null; then
+    kill "$WORKER_PID" 2>/dev/null || true
+    wait "$WORKER_PID" 2>/dev/null || true
+  fi
   if [[ -n "$BACKEND_PID" ]] && kill -0 "$BACKEND_PID" 2>/dev/null; then
     kill "$BACKEND_PID" 2>/dev/null || true
     wait "$BACKEND_PID" 2>/dev/null || true
   fi
-  rm -f "$BACKEND_LOG"
+  rm -f "$BACKEND_LOG" "$WORKER_LOG"
   exit "$code"
 }
 trap cleanup EXIT
+
+# Phase 5-B-I：E2E 前确保 postgres + redis 可用（不启动 minio/worker 镜像）
+ensure_deps() {
+  if command -v docker >/dev/null 2>&1; then
+    if ! docker compose ps postgres 2>/dev/null | grep -q "running"; then
+      (cd "$ROOT_DIR" && docker compose up -d postgres >/dev/null)
+    fi
+    if ! docker compose ps redis 2>/dev/null | grep -q "running"; then
+      (cd "$ROOT_DIR" && docker compose up -d redis >/dev/null)
+    fi
+    for _ in $(seq 1 30); do
+      if docker compose exec -T postgres pg_isready -U shuangling >/dev/null 2>&1 \
+        && docker compose exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; then
+        return 0
+      fi
+      sleep 1
+    done
+    echo "[ci-e2e] WARN: postgres/redis 未就绪，继续（可能使用本机已有服务）"
+  fi
+}
+
+ensure_deps
 
 prepare_backend_env() {
   if [[ ! -f "$BACKEND_DIR/.env" ]]; then
@@ -85,6 +113,41 @@ if [[ "$ready" != "1" ]]; then
   exit 1
 fi
 echo "    ✓ 后端就绪"
+
+echo "==> 启动后台 Worker（消费 knowledge_ingest / conversation_summary / memory_consolidation）"
+(
+  cd "$BACKEND_DIR"
+  exec env AI_PROVIDER=mock AI_MODEL=mock-model EMBEDDING_PROVIDER=mock VOICE_PROVIDER=mock \
+    uv run python -m app.jobs.worker
+) >"$WORKER_LOG" 2>&1 &
+WORKER_PID=$!
+
+worker_ready=1
+for _ in $(seq 1 10); do
+  if ! kill -0 "$WORKER_PID" 2>/dev/null; then
+    worker_ready=0
+    break
+  fi
+  sleep 0.5
+done
+if [[ "$worker_ready" != "1" ]]; then
+  echo "✗ Worker 进程启动即退出；日志尾部："
+  tail -40 "$WORKER_LOG" || true
+  exit 1
+fi
+echo "    ✓ Worker 运行中（pid $WORKER_PID）"
+
+echo "==> 内容初始化（validate_library --all → import_library --all，幂等）"
+if ! (cd "$BACKEND_DIR" && uv run python -m app.scripts.validate_library --all >/dev/null); then
+  echo "✗ validate_library --all 未通过，禁止导入内容"
+  exit 1
+fi
+echo "    ✓ validate_library --all 通过"
+if ! (cd "$BACKEND_DIR" && uv run python -m app.scripts.import_library --all >/dev/null); then
+  echo "✗ import_library --all 失败"
+  exit 1
+fi
+echo "    ✓ import_library --all 完成"
 
 echo "==> 执行 seed（恢复 E2E 账号 / 记忆）"
 if ! (cd "$BACKEND_DIR" && uv run python -m app.scripts.seed); then

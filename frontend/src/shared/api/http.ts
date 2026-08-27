@@ -3,6 +3,22 @@ import { getToken } from './auth'
 /** 相对路径，由 vite proxy 转发到后端（默认 localhost:8000，可用 VITE_API_PROXY_TARGET 覆盖） */
 export const API_BASE = '/api/v1'
 
+/** 全局 401 事件：任何 API/SSE 收到 401 时派发，AuthProvider 监听后清除登录态 */
+export const UNAUTHORIZED_EVENT = 'shuangling:unauthorized'
+
+export function emitUnauthorized(): void {
+  // 兼容非 DOM 测试环境（node 下可能存在不完整 window 全局）
+  const target = typeof window !== 'undefined' ? window : undefined
+  if (target && typeof target.dispatchEvent === 'function') {
+    target.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT))
+  }
+}
+
+/** 供测试注入：读取事件名常量，避免魔法串散落 */
+export function isUnauthorizedStatus(status: number): boolean {
+  return status === 401
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -37,6 +53,9 @@ export async function apiRequest<T>(
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   })
 
+  if (response.status === 401) {
+    emitUnauthorized()
+  }
   if (response.status === 204) {
     return undefined as T
   }

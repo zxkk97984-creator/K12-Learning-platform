@@ -1,5 +1,5 @@
 import { getToken } from './auth'
-import { ApiError } from './http'
+import { emitUnauthorized, ApiError  } from './http'
 
 export interface ParsedSSEEvent {
   id: string | null
@@ -104,6 +104,9 @@ export async function fetchSSE(url: string, options: FetchSSEOptions): Promise<v
       body: options.body,
       signal: options.signal,
     })
+    if (response.status === 401) {
+      emitUnauthorized()
+    }
     if (!response.ok) {
       const payload: unknown = await response.json().catch(() => null)
       throw responseError(response, payload)

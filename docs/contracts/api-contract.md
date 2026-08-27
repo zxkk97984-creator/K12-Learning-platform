@@ -373,7 +373,7 @@
 
 | 模块 | 端点数 | 说明 |
 | --- | --- | --- |
-| Identity / Auth | 5 | 登录/登出/me/教师角色 |
+| Identity / Auth | 8 | 登录/登出/me/教师角色/后台身份/头像/头像文件 |
 | Students | 2 | 偏好读写 |
 | Content | 5 | 书/章/块/知识点读取 |
 | Learning | 7 | 时段、事件、进度 |
@@ -383,11 +383,11 @@
 | Knowledge | 4 | 骨架（资源/块/检索） |
 | Personalization | 2 | 推荐列表/忽略 |
 | Admin | 17 | 统计 1 / 书 4 / 章·块·知识点 6 / 知识资源 3 / 教师角色 3 |
-| **HTTP 业务端点合计** | **65** | |
+| **HTTP 业务端点合计** | **68** | |
 | Voice WebSocket | 1 | `/api/v1/voice/ws` |
-| **API 路由合计** | **66** | |
+| **API 路由合计** | **69** | |
 
-> **实现核对（2026-08-21）**：以 `backend/app/main.py` 注册的业务 router 及其 `@router` 装饰器为事实源，当前实际为 Identity 7、Admin 17、Content 5、Knowledge 4、Learning 7、Conversation 7、Memory 8、Quiz 8、Recommendation 2 个 HTTP 端点，合计 65 个 HTTP；Voice 另有 1 个 WebSocket。契约总表按 Identity/Auth 与 Students 拆分，因此两行合计仍与 router 计数一致。`GET /health` 与 `GET /api/v1/ping` 是运行探针，不计入业务 API 契约总数。
+> **实现核对（2026-08-27）**：以 `backend/app/main.py` 注册的业务 router 及其 `@router` 装饰器为事实源，当前实际为 Identity 10、Admin 17、Content 5、Knowledge 4、Learning 7、Conversation 7、Memory 8、Quiz 8、Recommendation 2 个 HTTP 端点，合计 **68** 个 HTTP；另含 1 个 WebSocket = 69 条路由。本表按 Identity/Auth 与 Students 拆分（8+2=10），故两行合计仍与 router 计数一致。Identity 相比 §5「登录/登出/me/教师角色」骨架新增了 Phase 5-A 的 `GET /me/admin`、`POST /me/avatar` 与 `GET /files/avatars/{filename}` 三个端点（见 §5.6~§5.8）。`GET /health` 与 `GET /api/v1/ping` 是运行探针，不计入业务 API 契约总数。
 
 ---
 
@@ -456,6 +456,26 @@
 - 鉴权：STUDENT。
 - 查询：`enabled`（默认 `true`）。
 - 响应 `200` `data: TeacherRoleDTO[]`；错误：`401`。
+
+### 5.6 GET `/api/v1/me/admin`
+
+- 用途：Phase 5-A 新增。受 `require_admin` 保护的稳定后台身份 DTO；前端登录/刷新时调用此接口做**真实后台鉴权验证**（不再只信前端 JWT decode）。
+- 鉴权：ADMIN。
+- 幂等：N/A（GET）。
+- 响应 `200` `data: { admin_id, user_id, display_name, role_level }`；错误：`401`、`403 ADMIN_ONLY`。
+
+### 5.7 POST `/api/v1/me/avatar`
+
+- 用途：Phase 5-A 新增。上传当前学生头像（`avatar_upload_max_bytes` 上限，默认 2MB）。
+- 鉴权：STUDENT。
+- 请求：multipart 文件（经统一存储抽象落地）。
+- 响应 `200` `data: { avatar_url }`；错误：`422`、`413 PAYLOAD_TOO_LARGE`。
+
+### 5.8 GET `/api/v1/files/avatars/{filename}`
+
+- 用途：Phase 5-A 新增。读取已上传头像文件（经统一存储抽象）。
+- 鉴权：已登录。
+- 响应文件流；错误：`404`。
 
 ---
 

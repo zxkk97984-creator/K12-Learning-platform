@@ -22,6 +22,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgresql+asyncpg://shuangling:shuangling@localhost:5432/shuangling
       JWT_SECRET: ci-only-32bytes-jwt-secret-0123456789
@@ -39,8 +48,23 @@ jobs:
         run: uv sync --frozen
       - name: Alembic upgrade head
         run: alembic upgrade head
+      - name: Content init (validate_library --all → import_library --all)
+        run: |
+          uv run python -m app.scripts.validate_library --all
+          uv run python -m app.scripts.import_library --all
       - name: Pytest
         run: pytest -q
+      - name: Start background worker (smoke: boot + poll against Postgres)
+        run: |
+          uv run python -m app.jobs.worker > /tmp/worker.log 2>&1 &
+          echo $! > /tmp/worker.pid
+          sleep 5
+          kill -0 "$(cat /tmp/worker.pid)" || { cat /tmp/worker.log; exit 1; }
+          echo "Worker is alive and polling the queue"
+      - name: Stop background worker
+        if: always()
+        run: |
+          if [ -f /tmp/worker.pid ]; then kill "$(cat /tmp/worker.pid)" || true; fi
 
   frontend:
     name: Frontend (vitest + build)
@@ -80,6 +104,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgresql+asyncpg://shuangling:shuangling@localhost:5432/shuangling
       JWT_SECRET: ci-only-32bytes-jwt-secret-0123456789
@@ -109,5 +142,5 @@ jobs:
       - name: Install Playwright browser
         working-directory: frontend
         run: pnpm exec playwright install --with-deps chromium
-      - name: Run E2E (script starts backend + seed + cleans up)
+      - name: Run E2E (script starts backend + worker + seed + content init + cleans up)
         run: bash scripts/ci-e2e.sh

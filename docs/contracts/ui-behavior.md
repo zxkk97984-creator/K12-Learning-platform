@@ -3,6 +3,8 @@
 > 来源：`prototypes/shuangling-v3-prototype.html`（1797 行）
 > 审计日期：2026-08-19（Phase 0 Task 0-B）
 > 范围：视觉 token、交互契约、Mock 数据形状、Mock 逻辑边界。只记录原型真实实现。
+>
+> **实现状态（2026-08-27 核对）**：本文是**原型（0-B）的行为契约**，不代表当前 React 实现的逐项状态。实际实现以 `frontend/src/` 为准，已在原型基础上新增：登录/鉴权（`RequireAuth`/`AdminGuard`、`/login`）、书本详情页（`/books/:bookId`）、记忆管理页（`/profile/memories`）、设置页（`/settings`）、Admin 5 页（`/admin`）。Companion 新增**桌宠选择器**（`CompanionPetPicker`，`selectedPetId`，localStorage `shuangling-companion-pet`）；消息走 **Markdown 渲染**（`MarkdownMessage.tsx`）；对话历史支持切换/新建/归档/删除（`conversation-history.ts`，localStorage `shuangling-active-conversation`）；intent 文案已从原型 hardcode 移到 `features/conversation/data/intents.ts`。原型中的 `role`/age 演示（`data-age`、`shuangling-age`、`demo-new`）在 React 中已由 StudentProfile/labels 与 SettingsPage 取代，不再存在。本文后续仅作原型→实现的映射参考，不再逐条同步 React 行为。
 
 ## 1. 视觉契约
 

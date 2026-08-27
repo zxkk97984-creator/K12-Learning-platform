@@ -4,15 +4,21 @@
 #
 # 用法: bash scripts/start.sh [--with-minio] [--backend-only]
 #
-# 默认启动: PostgreSQL(docker) → 后端 API(:8002) → 前端 dev(:5174)
+# 默认启动: PostgreSQL(docker) → 迁移 → 后端 API(:8002) → Worker(队列消费)
+#           → 前端 dev(:5174) → 内容初始化 → 演示账号
 #   --with-minio   同时启动 redis + minio（默认只起 postgres，MVP 用不上 redis/minio）
-#   --backend-only 只起数据库 + 后端（不启动前端）
+#   --backend-only 只起数据库 + 后端 + Worker（不启动前端）
 #
 # 说明:
 #   - 宿主 8000 被 DAI 项目占用，后端固定用 8002；前端 5173 也被 DAI 前端占用，改用 5174；
 #     前端 vite proxy 经 VITE_API_PROXY_TARGET=http://localhost:8002 转发到后端（规避 CORS）。
+#   - Worker 与 API 共用 backend 代码与环境（PostgreSQL 表驱动队列，FOR UPDATE SKIP LOCKED），
+#     消费 knowledge_ingest / conversation_summary / memory_consolidation 三类任务。
+#   - 内容初始化统一走 validate_library --all → import_library --all（幂等）；
+#     seed.py 只负责演示账号与演示记忆。
 #   - 幂等: 已运行的服务自动跳过；重复执行安全。
-#   - PID 记录在 backend/.server.pid / frontend/.server.pid，stop.sh 据此关闭。
+#   - PID 记录在 backend/.server.pid / backend/.worker.pid / frontend/.server.pid，
+#     stop.sh 据此关闭。
 # =============================================================================
 set -euo pipefail
 
@@ -119,7 +125,7 @@ command -v uv     >/dev/null || die "uv 未安装（后端包管理器）"
 cd "$ROOT"
 
 # ---------- 2. 数据库 ----------
-log "1/4 启动 PostgreSQL（pgvector:pg18）..."
+log "1/7 启动 PostgreSQL（pgvector:pg18）..."
 if docker ps --format '{{.Names}}' | grep -q '^k12.*postgres\|-postgres-1$'; then
   log "    PostgreSQL 已在运行，跳过"
 else
@@ -141,13 +147,21 @@ else
   log "    PostgreSQL 就绪"
 fi
 
-# ---------- 3. 后端 ----------
-log "2/4 启动后端 API（uvicorn :${BACKEND_PORT}）..."
+cd "$ROOT/backend"
+[ -d .venv ] || { warn "    未找到 .venv，执行 uv sync..."; uv sync; }
+
+# ---------- 3. 数据库迁移（全新环境可迁移）----------
+log "2/7 执行数据库迁移（alembic upgrade head）..."
+if ! uv run alembic upgrade head; then
+  die "alembic upgrade head 失败"
+fi
+log "    迁移完成"
+
+# ---------- 4. 后端 ----------
+log "3/7 启动后端 API（uvicorn :${BACKEND_PORT}）..."
 if lsof -ti :"$BACKEND_PORT" >/dev/null 2>&1; then
   warn "    :${BACKEND_PORT} 已被占用，跳过启动（可能已在运行）"
 else
-  cd "$ROOT/backend"
-  [ -d .venv ] || { warn "    未找到 .venv，执行 uv sync..."; uv sync; }
   nohup setsid uv run uvicorn app.main:app --host 0.0.0.0 --port "$BACKEND_PORT" \
     > /tmp/k12-backend.log 2>&1 &
   echo $! > .server.pid
@@ -161,15 +175,31 @@ else
   log "    后端就绪: http://localhost:${BACKEND_PORT}（pid $(cat .server.pid)）"
 fi
 
-# ---------- 4. 前端 ----------
+# ---------- 5. 后台 Worker ----------
+log "4/7 启动后台 Worker（PostgreSQL 队列消费）..."
+if [ -f .worker.pid ] && kill -0 "$(cat .worker.pid)" >/dev/null 2>&1; then
+  log "    Worker 已在运行（pid $(cat .worker.pid)），跳过"
+else
+  nohup setsid uv run python -m app.jobs.worker > /tmp/k12-worker.log 2>&1 &
+  echo $! > .worker.pid
+  sleep 1
+  if ! kill -0 "$(cat .worker.pid)" >/dev/null 2>&1; then
+    die "Worker 启动失败（日志: /tmp/k12-worker.log）"
+  fi
+  log "    Worker 就绪（pid $(cat .worker.pid)，日志: /tmp/k12-worker.log）"
+fi
+
+# ---------- 6. 前端 ----------
 if [ -z "$BACKEND_ONLY" ]; then
-  log "3/4 启动前端 dev（vite :${FRONTEND_PORT}）..."
+  log "5/7 启动前端 dev（vite :${FRONTEND_PORT}）..."
   if lsof -ti :"$FRONTEND_PORT" >/dev/null 2>&1; then
     warn "    :${FRONTEND_PORT} 已被占用，跳过启动（可能已在运行）"
   else
     cd "$ROOT/frontend"
     [ -d node_modules ] || { warn "    未找到 node_modules，执行 pnpm install..."; "${PNPM_CMD[@]}" install; }
+    # 本地开发默认显示演示账号提示（生产构建不设置该变量）
     VITE_API_PROXY_TARGET="http://localhost:${BACKEND_PORT}" \
+      VITE_SHOW_DEMO_CREDENTIALS=true \
       nohup setsid "${PNPM_CMD[@]}" dev --port "$FRONTEND_PORT" --strictPort > /tmp/k12-frontend.log 2>&1 &
     echo $! > .server.pid
     for i in $(seq 1 30); do
@@ -182,17 +212,29 @@ if [ -z "$BACKEND_ONLY" ]; then
     log "    前端就绪: http://localhost:${FRONTEND_PORT}（pid $(cat .server.pid)）"
   fi
 else
-  log "3/4 --backend-only：跳过前端"
+  log "5/7 --backend-only：跳过前端"
 fi
 
-# ---------- 5. 演示数据 ----------
-log "4/4 检查演示数据（seed）..."
+# ---------- 7. 内容初始化 + 演示数据 ----------
+log "6/7 初始化图书馆内容（validate_library → import_library）..."
 cd "$ROOT/backend"
+if ! uv run python -m app.scripts.validate_library --all >/tmp/k12-validate-library.log 2>&1; then
+  cat /tmp/k12-validate-library.log
+  die "validate_library --all 未通过，禁止导入内容（详见上方输出）"
+fi
+log "    validate_library --all 通过（$(grep -oE 'books=[0-9]+' /tmp/k12-validate-library.log | tail -1)）"
+
+if ! uv run python -m app.scripts.import_library --all >/tmp/k12-import-library.log 2>&1; then
+  tail -40 /tmp/k12-import-library.log
+  die "import_library --all 失败（日志: /tmp/k12-import-library.log）"
+fi
+log "    import_library --all 完成（幂等，日志: /tmp/k12-import-library.log）"
+
+log "7/7 检查演示数据（seed 只负责演示账号与演示记忆）..."
 if ! curl -sf "http://localhost:${BACKEND_PORT}/api/v1/auth/login" \
     -H "Content-Type: application/json" \
     -d '{"username":"xiaoming","password":"demo123"}' >/dev/null 2>&1; then
   uv run python -m app.scripts.seed
-  uv run python -m app.scripts.seed_content
   log "    演示数据已 seed（xiaoming/demo123, admin/admin123）"
 else
   log "    演示账号已存在，跳过 seed"
@@ -203,6 +245,7 @@ echo "==========================================================================
 log "✅ 启动完成！"
 echo "    前端:     http://localhost:${FRONTEND_PORT}"
 echo "    后端 API: http://localhost:${BACKEND_PORT}/docs"
+echo "    Worker:   PostgreSQL 队列消费（日志 /tmp/k12-worker.log）"
 echo "    学生账号: xiaoming / demo123"
 echo "    管理账号: admin / admin123"
 echo "    关闭:     bash scripts/stop.sh"

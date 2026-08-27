@@ -113,12 +113,15 @@ export interface ConversationService {
     conversationId: string,
     input: SendMessageInput,
     callbacks?: SendMessageCallbacks,
+    /** Phase 5-A：重试复用同一用户消息的幂等键 */
+    idempotencyKey?: string,
   ): Promise<void>
   sendMessage(
     conversationId: string,
     content: string,
     screenContext?: ScreenContext,
     callbacks?: SendMessageCallbacks,
+    idempotencyKey?: string,
   ): Promise<void>
   getSummary(conversationId: string): Promise<ConversationSummary | null>
 }

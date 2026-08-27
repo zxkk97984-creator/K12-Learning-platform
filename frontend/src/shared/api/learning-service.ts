@@ -20,6 +20,7 @@ export type LearningEventType =
   | 'BOOK_STARTED'
   | 'BOOK_FINISHED'
   | 'VOICE_SESSION_STARTED'
+  | 'VOICE_SESSION_ENDED'
   | 'ROLE_SWITCHED'
   | 'TEXT_SELECTED'
 
@@ -47,7 +48,12 @@ export interface CreateLearningEventInput {
   occurred_at: string
   book_id?: string
   chapter_id?: string
+  /** 关联真实学习会话（Phase 3）：Reader 进入章节后使用后端返回的 session_id */
+  session_id?: string
   block_id?: string
+  knowledge_point_ids?: string[]
+  conversation_id?: string
+  quiz_session_id?: string
   payload?: Record<string, unknown>
 }
 
@@ -61,6 +67,9 @@ export interface LearningEvent {
   chapter_id: string | null
   block_id: string | null
   knowledge_point_ids: string[]
+  /** Phase 3：与后端 DTO 对齐，事件可追溯到会话 */
+  conversation_id: string | null
+  quiz_session_id: string | null
   payload: Record<string, unknown>
   created_at: string
 }

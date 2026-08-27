@@ -68,7 +68,7 @@ export function AdminKnowledge() {
         <div className="mt-3 grid gap-2">
           <input
             type="file"
-            accept=".md,.markdown,.txt,.html"
+            accept=".md,.markdown,.txt,.html,.pdf"
             aria-label="选择文件"
             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             className="text-xs text-muted"

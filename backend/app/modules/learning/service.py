@@ -1,12 +1,13 @@
 import base64
 import json
-import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select, tuple_
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.infrastructure.database.models import (
     Book,
@@ -14,8 +15,14 @@ from app.infrastructure.database.models import (
     Chapter,
     LearningEvent,
     LearningSession,
+    ReadingSettlement,
     StudentProfile,
 )
+
+# 单次会话计入时长的上限（秒）：防止客户端崩溃后长期未关闭的会话
+# 在下次自动关闭时把数小时的墙钟时间一次性记入统计。
+MAX_SESSION_CREDIT_SECONDS = 4 * 3600
+from app.jobs.queue import enqueue_memory_consolidation
 from app.modules.learning.schemas import (
     BookProgressDTO,
     CreateLearningEventRequest,
@@ -27,8 +34,6 @@ from app.modules.learning.schemas import (
     PatchLearningSessionRequest,
     UpsertBookProgressRequest,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def _encode_cursor(occurred_at: datetime, event_id: UUID) -> str:
@@ -52,6 +57,72 @@ def _decode_cursor(cursor: str) -> tuple[datetime, UUID]:
 
 class LearningService:
     """学习进度 Domain Service（Router 只做编排，SQL 在此层）。"""
+
+    @staticmethod
+    async def _credit_reading_stats(
+        session: AsyncSession, learning_session: LearningSession, now: datetime
+    ) -> int:
+        """关闭一个学习会话时的真实时长结算（幂等）。
+
+        - reading_settlements 以 session_id 为主键：重复结算（重复 PATCH、
+          自动关闭竞态、重放）只会成功一次，其余被唯一约束挡下；
+        - BookProgress.total_seconds 只在首次结算成功时累加真实时长；
+        - 学生统计同步更新：total_learning_seconds 精确累计，
+          total_learning_minutes 为其整分钟派生值；
+        - learning_days 按「当日首次结算」判定，一天多次学习不重复加天。
+        返回本次实际入账的秒数（0 表示该会话此前已结算过）。
+        """
+        duration = max(0, int((now - learning_session.started_at).total_seconds()))
+        credit_seconds = min(duration, MAX_SESSION_CREDIT_SECONDS)
+
+        ledger = pg_insert(ReadingSettlement).values(
+            session_id=learning_session.session_id,
+            student_id=learning_session.student_id,
+            book_id=learning_session.book_id,
+            settled_seconds=credit_seconds,
+        )
+        result = await session.execute(
+            ledger.on_conflict_do_nothing(index_elements=["session_id"])
+        )
+        if result.rowcount != 1:
+            return 0
+
+        progress = (
+            await session.execute(
+                select(BookProgress).where(
+                    BookProgress.student_id == learning_session.student_id,
+                    BookProgress.book_id == learning_session.book_id,
+                )
+            )
+        ).scalar_one_or_none()
+        # 仅当该学生已有此书的阅读进度时才累加时长；
+        # 从未通过正常阅读流程产生进度的直接会话不凭空创建进度行，
+        # 避免 API 直连调用污染书架初始状态。
+        if progress is not None:
+            progress.total_seconds = (progress.total_seconds or 0) + credit_seconds
+            progress.last_read_at = now
+
+        profile = (
+            await session.execute(
+                select(StudentProfile).where(
+                    StudentProfile.student_id == learning_session.student_id
+                )
+            )
+        ).scalar_one()
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        settled_today = await session.execute(
+            select(func.count(ReadingSettlement.session_id)).where(
+                ReadingSettlement.student_id == learning_session.student_id,
+                ReadingSettlement.created_at >= midnight,
+                ReadingSettlement.session_id != learning_session.session_id,
+            )
+        )
+        prior_today = int(settled_today.scalar_one())
+        if prior_today == 0:
+            profile.learning_days = (profile.learning_days or 0) + 1
+        profile.total_learning_seconds = (profile.total_learning_seconds or 0) + credit_seconds
+        profile.total_learning_minutes = profile.total_learning_seconds // 60
+        return credit_seconds
 
     async def _get_student_id(self, session: AsyncSession, user_id: UUID) -> UUID:
         """users.user_id -> student_profiles.student_id（learning 表 FK 指向后者）。"""
@@ -109,6 +180,7 @@ class LearningService:
             active.ended_at = now
             active.duration_seconds = max(0, int((now - active.started_at).total_seconds()))
             active.status = "ENDED"
+            await self._credit_reading_stats(session, active, now)
 
         learning_session = LearningSession(
             student_id=student_id,
@@ -162,9 +234,47 @@ class LearningService:
                 ).total_seconds()
             ),
         )
+        await self._credit_reading_stats(session, learning_session, learning_session.ended_at)
         await session.commit()
         await session.refresh(learning_session)
         return LearningSessionDTO.model_validate(learning_session)
+
+
+    @staticmethod
+    async def _refresh_completion_counters(
+        session: AsyncSession, student_id: UUID, event_type: str
+    ) -> None:
+        """CHAPTER_FINISHED / BOOK_FINISHED 事件驱动重算完成计数。
+
+        直接从事件流 COUNT(DISTINCT ...) 重算而非 +1：
+        重复事件、乱序到达都不会导致计数虚高（天然幂等）。
+        """
+        if event_type not in ("CHAPTER_FINISHED", "BOOK_FINISHED"):
+            return
+        profile = (
+            await session.execute(
+                select(StudentProfile).where(StudentProfile.student_id == student_id)
+            )
+        ).scalar_one_or_none()
+        if profile is None:
+            return
+        if event_type == "CHAPTER_FINISHED":
+            chapters_done = await session.execute(
+                select(func.count(func.distinct(LearningEvent.chapter_id))).where(
+                    LearningEvent.student_id == student_id,
+                    LearningEvent.event_type == "CHAPTER_FINISHED",
+                )
+            )
+            profile.completed_chapters = int(chapters_done.scalar_one())
+        else:
+            books_done = await session.execute(
+                select(func.count(func.distinct(LearningEvent.book_id))).where(
+                    LearningEvent.student_id == student_id,
+                    LearningEvent.event_type == "BOOK_FINISHED",
+                )
+            )
+            profile.completed_books = int(books_done.scalar_one())
+
 
     async def create_event(
         self,
@@ -197,14 +307,12 @@ class LearningService:
             payload=request.payload,
         )
         session.add(event)
+        await self._refresh_completion_counters(session, student_id, request.event_type)
+        # 记忆整合改为异步：job 行与事件同事务落库（原子交接，失败则整体失败），
+        # 由 Worker 消费并自带重试；HTTP 路径不再同步执行 MemoryPipeline。
+        await enqueue_memory_consolidation(session, student_id)
         await session.commit()
         await session.refresh(event)
-        try:
-            from app.modules.memory.pipeline import MemoryPipeline
-
-            await MemoryPipeline().process_student(session, student_id)
-        except Exception:  # pragma: no cover - telemetry must not break writes
-            logger.warning("memory pipeline failed after learning event", exc_info=True)
         return LearningEventDTO.model_validate(event)
 
     async def get_progress(self, session: AsyncSession, user_id: UUID) -> list[BookProgressDTO]:

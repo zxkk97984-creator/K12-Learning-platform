@@ -16,7 +16,6 @@ export type {
   HintResult,
 } from './quiz-service'
 export type { MemoryService, MemoryAction, MemoryListParams } from './memory-service'
-export type { TeacherRoleService } from './teacher-role-service'
 export type { Recommendation, RecommendationService, RecommendationType } from './recommendation-service'
 export { ApiStudentService } from './api-student-service'
 export { ApiConversationService } from './api-conversation-service'

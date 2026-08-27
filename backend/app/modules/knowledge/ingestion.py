@@ -71,12 +71,37 @@ def chunk_blocks(
 
 
 def storage_path_for(storage_key: str) -> Path:
-    """Resolve a stored resource key without allowing path traversal."""
+    """Resolve a stored resource key without allowing path traversal.
+
+    仅在 storage_backend=local 时用于直接读盘；s3 后端请使用
+    load_resource_bytes()。
+    """
     path = STORAGE_ROOT / storage_key
     root = STORAGE_ROOT.resolve()
     if root not in path.resolve().parents:
         raise ValueError("invalid storage key")
     return path
+
+
+async def load_resource_bytes(storage_key: str) -> bytes:
+    """按当前存储后端读取资源原始字节（Phase 4 统一抽象）。
+
+    键约定：knowledge/<owner>/<file>（与上传端一致；历史数据兼容：
+    若抽象层缺失且本地旧路径存在，则回退旧路径读取一次）。
+    """
+    from app.infrastructure.storage import get_storage
+    from app.infrastructure.storage.base import StorageError
+    from app.config import settings as _settings
+
+    try:
+        stored = await get_storage().get(storage_key)
+        return stored.data
+    except StorageError:
+        if (_settings.storage_backend or "local").strip().lower() == "local":
+            legacy = storage_path_for(storage_key)
+            if legacy.is_file():
+                return legacy.read_bytes()
+        raise ValueError(f"knowledge resource object missing: {storage_key}")
 
 
 def _pdf_literal_strings(data: bytes) -> list[str]:
@@ -300,10 +325,11 @@ async def ingest_stored_resource(
         resource.updated_at = datetime.now(timezone.utc)
         await session.commit()
 
-        path = storage_path_for(str(resource.storage_key))
-        if not path.is_file():
-            raise FileNotFoundError("stored source file is missing")
-        raw = path.read_bytes()
+        # Phase 4：按存储后端读取（local 读盘 / s3 走对象存储）
+        try:
+            raw = await load_resource_bytes(str(resource.storage_key))
+        except ValueError as exc:
+            raise FileNotFoundError("stored source file is missing") from exc
         if resource.file_type == "PDF":
             text = parse_pdf(raw)
         else:

@@ -48,6 +48,8 @@ export interface ConversationListItem {
   channel: ConversationChannel
   teacher_role_id: string | null
   teacher_role: Record<string, unknown> | null
+  /** Phase 4：最近一条消息预览（列表页） */
+  last_message_preview?: string | null
   last_message_at: string | null
   updated_at: string
 }
@@ -56,6 +58,7 @@ export interface Conversation {
   conversation_id: string
   student_id: string
   teacher_role_id: string | null
+  teacher_role?: Record<string, unknown> | null
   title: string | null
   status: ConversationStatus
   channel: ConversationChannel

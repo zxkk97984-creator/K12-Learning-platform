@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
-from app.ai.voice import ASRProvider, get_asr_provider, get_tts_provider
+from app.ai.voice import ASRProvider, TTSUnavailableError, get_asr_provider, get_tts_provider
 from app.infrastructure.database.models import (
     Conversation,
     StudentProfile,
@@ -27,6 +27,13 @@ conversation_service = ConversationService()
 
 @dataclass
 class VoiceSession:
+    """按学生复用的语音状态机（barge-in / 分块缓冲）。
+
+    注意：页面 ScreenContext 不放在这里——它必须随连接生命周期隔离，
+    否则上一条连接的 book/chapter 会跨会话残留。见 voice_ws 内的
+    ``screen_context_box``。
+    """
+
     state: str = "IDLE"
     chunks: list[str] = field(default_factory=list)
     task: asyncio.Task | None = None
@@ -82,6 +89,7 @@ async def _handle_utterance(
     conversation_id: UUID,
     voice_session: VoiceSession,
     asr_provider: ASRProvider,
+    screen_context_box: dict,
 ) -> None:
     transcript_id = str(uuid4())
     try:
@@ -112,7 +120,11 @@ async def _handle_utterance(
                 session,
                 user_id,
                 conversation_id,
-                SendMessageRequest(content=text, type="TEXT"),
+                SendMessageRequest(
+                    content=text,
+                    type="TEXT",
+                    screen_context=screen_context_box["value"],
+                ),
             )
             reply = await _collect_reply(stream)
 
@@ -127,17 +139,31 @@ async def _handle_utterance(
             },
         )
 
-        audio = get_tts_provider().synthesize(reply)
-        if voice_session.state == "THINKING":
-            await _set_state(websocket, voice_session, "SPEAKING")
+        try:
+            audio = get_tts_provider().synthesize(reply)
+        except TTSUnavailableError as exc:
+            # Phase 4：TTS 未配置/失败时明确告知，不再静音假音频；
+            # 文字回复已在上方送达，会话回到 IDLE 可继续下一轮。
             await _send(
                 websocket,
                 {
-                    "type": "audio",
-                    "data": base64.b64encode(audio).decode("ascii"),
+                    "type": "error",
+                    "code": "TTS_UNAVAILABLE",
+                    "message": str(exc),
                 },
             )
             await _set_state(websocket, voice_session, "IDLE")
+        else:
+            if voice_session.state == "THINKING":
+                await _set_state(websocket, voice_session, "SPEAKING")
+                await _send(
+                    websocket,
+                    {
+                        "type": "audio",
+                        "data": base64.b64encode(audio).decode("ascii"),
+                    },
+                )
+                await _set_state(websocket, voice_session, "IDLE")
     except Exception as exc:
         await _send(
             websocket,
@@ -183,6 +209,10 @@ async def voice_ws(websocket: WebSocket):
         if user is None or user.user_type != "STUDENT":
             await reject(4403, "FORBIDDEN", "student access required")
             return
+        # Phase 5-A：禁用账号的 WebSocket 一并拒绝
+        if getattr(user, "status", "ACTIVE") == "DISABLED":
+            await reject(4401, "ACCOUNT_DISABLED", "account is disabled")
+            return
         profile = (
             await session.execute(
                 select(StudentProfile).where(StudentProfile.user_id == user.user_id)
@@ -202,6 +232,8 @@ async def voice_ws(websocket: WebSocket):
         voice_session = SESSIONS.setdefault(
             str(profile.student_id), VoiceSession()
         )
+        # 连接级页面上下文：新连接从空开始，断开即丢弃（Phase 2 缺口 1）。
+        screen_context_box: dict = {"value": None}
         asr_provider = get_asr_provider()
         await _send(websocket, {"type": "state", "state": voice_session.state})
         try:
@@ -211,6 +243,23 @@ async def voice_ws(websocket: WebSocket):
                 frame_type = message.get("type")
                 if frame_type == "ping":
                     await _send(websocket, {"type": "pong"})
+                elif frame_type == "context":
+                    # Phase 2-A4 + 缺口 1：客户端可在连接建立后或任意时刻
+                    # 上报/更新结构化页面上下文（例如语音中切换 Reader 页面）；
+                    # 仅接受 JSON 对象，下一轮 utterance 使用最新值。
+                    context = message.get("screen_context")
+                    if isinstance(context, dict):
+                        screen_context_box["value"] = context
+                        await _send(websocket, {"type": "state", "state": voice_session.state})
+                    else:
+                        await _send(
+                            websocket,
+                            {
+                                "type": "error",
+                                "code": "INVALID_FRAME",
+                                "message": "context frame requires screen_context object",
+                            },
+                        )
                 elif frame_type == "cancel":
                     if voice_session.task is not None:
                         voice_session.task.cancel()
@@ -241,6 +290,7 @@ async def voice_ws(websocket: WebSocket):
                             conversation_id=conversation_id,
                             voice_session=voice_session,
                             asr_provider=asr_provider,
+                            screen_context_box=screen_context_box,
                         )
                     )
                 else:
@@ -257,3 +307,4 @@ async def voice_ws(websocket: WebSocket):
                 voice_session.task.cancel()
                 voice_session.task = None
             voice_session.chunks = []
+            screen_context_box["value"] = None  # 断开即清，杜绝跨连接残留

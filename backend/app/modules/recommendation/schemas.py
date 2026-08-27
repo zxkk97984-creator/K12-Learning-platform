@@ -15,6 +15,12 @@ class RecommendationDTO(BaseModel):
     reason: str
     evidence_ids: list[str]
     related_book_id: UUID | None
+    source_ids: list[str]
+    license: str | None
+    source_url: str | None
+    model_info: dict | None
+    skill_version: str | None
+    expires_at: datetime | None
     status: str
     created_at: datetime
     updated_at: datetime

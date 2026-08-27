@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import type { QuizSession } from '@/entities/quiz/types'
+import { useTeacherName } from '@/features/companion'
 import { quizSource } from '@/features/quiz/lib'
-import { quizService } from '@/mocks/services'
+import { quizService } from '@/shared/services'
 import type { QuizListParams } from '@/shared/api/quiz-service'
 
 type QuizFilter = '全部' | '章节测验' | 'AI 小测' | '更早'
@@ -23,6 +24,7 @@ function paramsForFilter(filter: QuizFilter): QuizListParams {
 
 export default function QuizzesPage() {
   const navigate = useNavigate()
+  const teacherName = useTeacherName()
   const [sessions, setSessions] = useState<QuizSession[]>([])
   const [sources, setSources] = useState<Record<string, { bookTitle: string; chapterTitle: string }>>({})
   const [filter, setFilter] = useState<QuizFilter>('全部')
@@ -89,7 +91,7 @@ export default function QuizzesPage() {
             <h3 className="font-display text-xl text-fg">
               {filter === '更早' ? '更早的测验' : '这里还没有这类测验'}
             </h3>
-            <p className="mt-2 text-[13px] text-muted">换一个筛选条件，或者让霜铃现场出一份。</p>
+            <p className="mt-2 text-[13px] text-muted">换一个筛选条件，或者让{teacherName}现场出一份。</p>
           </div>
         ) : (
           filtered.map((session) => {

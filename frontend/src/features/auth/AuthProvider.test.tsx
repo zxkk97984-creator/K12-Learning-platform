@@ -12,7 +12,7 @@ const { loginMock, logoutMock, getMeMock } = vi.hoisted(() => ({
   getMeMock: vi.fn(),
 }))
 
-vi.mock('@/mocks/services', () => ({
+vi.mock('@/shared/services', () => ({
   studentService: {
     login: loginMock,
     logout: logoutMock,
@@ -73,6 +73,10 @@ function renderAuth() {
   )
 }
 
+function makeToken(user_type = 'STUDENT', sub = 'u-student'): string {
+  return `hdr.${btoa(JSON.stringify({ sub, user_type })).replace(/=/g, '')}.sig`
+}
+
 describe('AuthProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -86,7 +90,7 @@ describe('AuthProvider', () => {
   })
 
   it('有 token → 初始化拉取 currentUser（刷新保持登录）', async () => {
-    window.localStorage.setItem('shuangling-access-token', 'jwt-1')
+    window.localStorage.setItem('shuangling-access-token', makeToken())
     getMeMock.mockResolvedValue(profile)
     renderAuth()
     await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('user:小明'))
@@ -94,7 +98,7 @@ describe('AuthProvider', () => {
   })
 
   it('初始化 getMe 401 → 清 token 未登录', async () => {
-    window.localStorage.setItem('shuangling-access-token', 'jwt-expired')
+    window.localStorage.setItem('shuangling-access-token', makeToken())
     // 真实场景 apiRequest 抛 ApiError；普通 Error 不满足 AuthProvider 的 instanceof 判断
     getMeMock.mockRejectedValue(new ApiError(401, 'UNAUTHENTICATED', 'unauthorized'))
     renderAuth()

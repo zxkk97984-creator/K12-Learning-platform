@@ -83,17 +83,32 @@ async def send_message(
     session: Annotated[AsyncSession, Depends(get_session)],
     conversation_id: UUID,
     body: SendMessageRequest,
+    idempotency_key: str | None = Header(
+        default=None,
+        alias="Idempotency-Key",
+        max_length=128,
+    ),
 ):
-    stream = await service.send_message(session, user.user_id, conversation_id, body)
-    return StreamingResponse(
-        stream,
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+    """Phase 5-A：携带 Idempotency-Key 时同一会话内重复请求返回可消费的
+    replay SSE（恢复原教师正文），不会新增第二条学生消息。"""
+    replay_flag: dict = {}
+    stream = await service.send_message(
+        session,
+        user.user_id,
+        conversation_id,
+        body,
+        idempotency_key=idempotency_key,
+        replay_flag=replay_flag,
     )
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    if idempotency_key:
+        # Phase 5-A 整改 4：按真实重放结果设置响应头
+        headers["Idempotency-Replayed"] = "true" if replay_flag.get("replayed") else "false"
+    return StreamingResponse(stream, media_type="text/event-stream", headers=headers)
 
 
 @router.get("/conversations/{conversation_id}/messages")

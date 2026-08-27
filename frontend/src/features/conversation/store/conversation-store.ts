@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 
 import type { Message } from '@/entities/conversation/types'
-import { useCompanionStore } from '@/features/companion'
-import { conversationService } from '@/mocks/services'
+import { currentTeacherName, useCompanionStore } from '@/features/companion'
+import { conversationService } from '@/shared/services'
 import type { SendMessageCallbacks, StreamErrorEvent } from '@/shared/api/conversation-service'
 import type { ScreenContext } from '@/features/screen-context/types'
 
@@ -10,6 +10,42 @@ import { INTENT_AI_STATE } from '../data/intents'
 import type { ChatMessage, ConversationIntent } from '../types'
 
 let messageSeq = 100
+
+export interface ConversationHistoryEntry {
+  id: string
+  title: string | null
+  status: 'ACTIVE' | 'ARCHIVED' | 'DELETED'
+  teacher_role_name: string | null
+  last_message_preview: string | null
+  updated_at: string
+}
+
+const ACTIVE_CONVERSATION_KEY = 'shuangling-active-conversation'
+
+/** 环境安全的持久化（node 测试环境无 window/localStorage 时静默跳过）。 */
+function persistActiveConversation(id: string): void {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(ACTIVE_CONVERSATION_KEY, id)
+}
+
+function readActiveConversation(): string | null {
+  if (typeof window === 'undefined') return null
+  return window.localStorage.getItem(ACTIVE_CONVERSATION_KEY)
+}
+
+function clearActiveConversation(): void {
+  if (typeof window === 'undefined') return
+  window.localStorage.removeItem(ACTIVE_CONVERSATION_KEY)
+}
+
+type ConversationHistoryEntrySource = {
+  conversation_id: string
+  title: string | null
+  status: string
+  teacher_role: Record<string, unknown> | null
+  last_message_preview?: string | null
+  updated_at: string
+}
 function nextId(): string {
   messageSeq += 1
   return `chat-${messageSeq}`
@@ -80,7 +116,7 @@ const INTENT_PROMPTS: Record<ConversationIntent, string> = {
   'profile-why-pace': '为什么这样判断我的学习节奏？',
   'profile-why-question': '为什么这样判断我的提问习惯？',
   'profile-why-change': '最近我有什么变化？',
-  'presence-ask': '霜铃在吗？',
+  'presence-ask': '在吗？',
   'today-learn': '今天学什么？',
   'continue-yesterday': '继续昨天的内容',
   'recent-status': '看看最近学习状态',
@@ -103,11 +139,12 @@ function isAbortError(error: unknown): boolean {
 
 function errorText(error: StreamErrorEvent | Error): string {
   if ('code' in error && error.code) return `${error.message}（${error.code}）`
-  return error.message || '网络似乎开了小差，霜铃没有收到完整的内容。'
+  return error.message || `网络似乎开了小差，${currentTeacherName()}没有收到完整的内容。`
 }
 
 function intentPrompt(intent: ConversationIntent, selectedText?: string): string {
   if (intent === 'selected' && selectedText) return `解释我选中的“${selectedText}”`
+  if (intent === 'presence-ask') return `${currentTeacherName()}在吗？`
   return INTENT_PROMPTS[intent]
 }
 
@@ -115,13 +152,32 @@ interface ConversationStore {
   messages: ChatMessage[]
   conversationId: string | null
   loaded: boolean
+  /** 最后一次随消息发送的真实 ScreenContext（重试时复用；Phase 2-A2）。 */
+  lastScreenContext: ScreenContext | null
+  /** 最后一次发送的幂等键：重试必须复用，防止重复消息（Phase 5-A）。 */
+  lastIdempotencyKey: string | null
+  /** Phase 4：对话历史（ACTIVE + ARCHIVED，来自后端） */
+  history: ConversationHistoryEntry[]
+  historyLoaded: boolean
   load: () => Promise<void>
   ensureConversationId: () => Promise<string>
   refresh: () => Promise<void>
-  send: (raw: string, screenContext?: ScreenContext) => Promise<void>
+  send: (raw: string, screenContext?: ScreenContext, idempotencyKeyOverride?: string) => Promise<void>
   abortCurrent: () => void
-  runIntent: (intent: ConversationIntent, selectedText?: string) => void
+  runIntent: (
+    intent: ConversationIntent,
+    selectedText?: string,
+    screenContext?: ScreenContext,
+  ) => void
   retry: () => void
+  /** Phase 4：拉取历史（ACTIVE + ARCHIVED），按更新时间倒序 */
+  loadHistory: () => Promise<void>
+  /** 切换到指定会话并加载其消息 */
+  switchConversation: (conversationId: string) => Promise<void>
+  /** 新建对话并切换；「清空当前对话」= 开启新会话，旧会话保留在历史中可切回 */
+  startNewConversation: () => Promise<string>
+  /** 归档 / 软删除指定会话；若作用于当前会话则自动切换到最新 ACTIVE 或新建 */
+  setConversationStatus: (conversationId: string, status: 'ARCHIVED' | 'DELETED') => Promise<void>
   /** 追加一条 AI 文本消息（quiz 结果/提示等，非流式） */
   appendAiText: (content: string, meta: string) => void
   /** 内部：逐字流式输出（22ms/字），组件不直接调用 */
@@ -132,21 +188,40 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   messages: [],
   conversationId: null,
   loaded: false,
+  lastScreenContext: null,
+  history: [],
+  historyLoaded: false,
+  lastIdempotencyKey: null,
 
   async load() {
     if (get().loaded) return
     if (loadPromise) return loadPromise
     loadPromise = (async () => {
       try {
-        const conversations = await conversationService.getConversations({
-          status: 'ACTIVE',
-          limit: 1,
-        })
-        const conversation = conversations[0]
+        let conversation = (
+          await conversationService.getConversations({ status: 'ACTIVE', limit: 20 })
+        )[0]
+        // Phase 4：刷新后恢复上次会话（localStorage 记录优先）
+        let storedId = readActiveConversation()
+        if (storedId && !conversation) {
+          try {
+            const detail = await conversationService.getConversation(storedId)
+            if (detail.status !== 'DELETED') {
+              conversation = {
+                ...detail,
+                teacher_role: detail.teacher_role ?? null,
+              } as typeof conversation
+            }
+          } catch {
+            clearActiveConversation()
+            storedId = null
+          }
+        }
         if (!conversation) {
           set({ loaded: true })
           return
         }
+        persistActiveConversation(conversation.conversation_id)
         const serviceMessages = await conversationService.getMessages(
           conversation.conversation_id,
           { sort: 'asc' },
@@ -183,6 +258,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       const conversation = await conversationService.createConversation({ channel: 'TEXT' })
       conversationId = conversation.conversation_id
       set({ conversationId })
+      persistActiveConversation(conversationId)
     }
     return conversationId
   },
@@ -200,11 +276,15 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     }
   },
 
-  async send(raw: string, screenContext?: ScreenContext) {
+  async send(raw: string, screenContext?: ScreenContext, idempotencyKeyOverride?: string) {
     const text = raw.trim()
     if (!text) return
     await get().load()
     const conversationId = await get().ensureConversationId()
+    // 记录最后一次真实上下文与幂等键，供「重试」复用（Phase 2-A2 / 5-A）
+    if (screenContext) set({ lastScreenContext: screenContext })
+    const idempotencyKey = idempotencyKeyOverride ?? crypto.randomUUID()
+    set({ lastIdempotencyKey: idempotencyKey })
 
     const userMessage: ChatMessage = {
       id: nextId(),
@@ -272,7 +352,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
                 role: 'ai',
                 kind: 'text',
                 content: '',
-                meta: '霜铃 · 连续会话',
+                meta: `${currentTeacherName()} · 连续会话`,
                 streaming: true,
                 ...patch,
               },
@@ -389,7 +469,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
           showError(error)
         },
       }
-      await conversationService.sendMessage(conversationId, input, callbacks)
+      await conversationService.sendMessage(conversationId, input, callbacks, idempotencyKey)
     } catch (error) {
       if (!isAbortError(error)) showError(error instanceof Error ? error : new Error(String(error)))
       else removePendingMessages()
@@ -398,22 +478,88 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     }
   },
 
-  runIntent(intent: ConversationIntent, selectedText?: string) {
+  runIntent(intent: ConversationIntent, selectedText?: string, screenContext?: ScreenContext) {
     useCompanionStore.getState().setAiState(INTENT_AI_STATE[intent] ?? 'speaking')
     const text = intentPrompt(intent, selectedText)
     if (intent === 'quiz') {
       // 5-D：真实链路——「给我出题」只发文本，后端 SSE 返回 tool.start/tool.result，
       // store 用 tool.result 的 quiz_session_id 渲染真实 QuizCard（不再走 Mock 创建）。
-      void get().send(text).catch(() => undefined)
+      void get().send(text, screenContext).catch(() => undefined)
       return
     }
-    void get().send(text)
+    void get().send(text, screenContext)
   },
 
   async retry() {
     const lastUserMessage = [...get().messages].reverse().find((message) => message.role === 'user')
     set((state) => ({ messages: state.messages.filter((message) => message.kind !== 'error') }))
-    if (lastUserMessage) await get().send(lastUserMessage.content)
+    if (lastUserMessage) {
+      // Phase 5-A 整改：重试必须复用最后一次发送的幂等键，
+      // 避免网络中断重试产生第二条学生消息。
+      await get().send(
+        lastUserMessage.content,
+        get().lastScreenContext ?? undefined,
+        get().lastIdempotencyKey ?? undefined,
+      )
+    }
+  },
+
+  async loadHistory() {
+    try {
+      const [active, archived] = await Promise.all([
+        conversationService.getConversations({ status: 'ACTIVE', limit: 50 }),
+        conversationService.getConversations({ status: 'ARCHIVED', limit: 50 }),
+      ])
+      const toEntry = (item: ConversationHistoryEntrySource): ConversationHistoryEntry => ({
+        id: item.conversation_id,
+        title: item.title,
+        status: item.status as ConversationHistoryEntry['status'],
+        teacher_role_name:
+          item.teacher_role && typeof item.teacher_role.name === 'string'
+            ? (item.teacher_role.name as string)
+            : null,
+        last_message_preview:
+          (item as unknown as { last_message_preview?: string | null })
+            .last_message_preview ?? null,
+        updated_at: item.updated_at,
+      })
+      const merged = [...active.map(toEntry), ...archived.map(toEntry)].sort(
+        (a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at),
+      )
+      set({ history: merged, historyLoaded: true })
+    } catch {
+      set({ historyLoaded: true })
+    }
+  },
+
+  async switchConversation(targetId: string) {
+    if (get().conversationId === targetId) return
+    activeAbortController?.abort()
+    activeAbortController = undefined
+    persistActiveConversation(targetId)
+    const serviceMessages = await conversationService.getMessages(targetId, { sort: 'asc' })
+    set({ conversationId: targetId, messages: toChatMessages(serviceMessages), loaded: true })
+    void get().loadHistory()
+  },
+
+  async startNewConversation() {
+    const created = await conversationService.createConversation({ channel: 'TEXT', title: null })
+    persistActiveConversation(created.conversation_id)
+    set({ conversationId: created.conversation_id, messages: [], loaded: true })
+    void get().loadHistory()
+    return created.conversation_id
+  },
+
+  async setConversationStatus(targetId: string, status: 'ARCHIVED' | 'DELETED') {
+    await conversationService.updateConversation(targetId, { status })
+    if (get().conversationId === targetId) {
+      await get().loadHistory()
+      const nextActive = get().history.find((entry) => entry.status === 'ACTIVE')
+      if (nextActive) await get().switchConversation(nextActive.id)
+      else await get().startNewConversation()
+    } else {
+      await get().loadHistory()
+    }
   },
 
   abortCurrent: () => {

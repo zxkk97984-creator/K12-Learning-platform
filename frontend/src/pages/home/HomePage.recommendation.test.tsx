@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Recommendation } from '@/shared/api/recommendation-service'
 
 const mocks = vi.hoisted(() => ({
+  dismissRecommendation: vi.fn(),
   getMe: vi.fn(),
   getProgress: vi.fn(),
   getBook: vi.fn(),
@@ -16,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   getRecommendations: vi.fn(),
 }))
 
-vi.mock('@/mocks/services', () => ({
+vi.mock('@/shared/services', () => ({
   studentService: { getMe: mocks.getMe },
   contentService: {
     getProgress: mocks.getProgress,
@@ -28,12 +29,24 @@ vi.mock('@/mocks/services', () => ({
     getMemories: mocks.getMemories,
   },
   quizService: { getQuizSessions: mocks.getQuizSessions },
-  recommendationService: { getRecommendations: mocks.getRecommendations },
+  recommendationService: {
+    getRecommendations: mocks.getRecommendations,
+    dismissRecommendation: mocks.dismissRecommendation,
+  },
+}))
+
+vi.mock('@/features/auth', () => ({
+  useAuth: () => ({
+    currentUser: { nickname: '小明', grade: 8, learning_goal: '期末冲刺' },
+    authUser: { user_type: 'STUDENT' },
+  }),
 }))
 
 vi.mock('@/features/companion', () => ({
   CompanionSprite: () => <span aria-hidden="true" />,
   useCompanionStore: { getState: () => ({ setOpen: vi.fn() }) },
+  // Phase 4 验收：使用非硬编码的 mock 教师名
+  useTeacherName: () => '温暖老师',
 }))
 
 vi.mock('@/features/conversation', () => ({
@@ -42,6 +55,7 @@ vi.mock('@/features/conversation', () => ({
 }))
 
 import HomePage from './HomePage'
+import { ScreenContextProvider } from '@/features/screen-context'
 
 const recommendation: Recommendation = {
   recommendation_id: 'recommendation-1',
@@ -63,20 +77,29 @@ function LocationProbe() {
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/']}>
-      <LocationProbe />
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/books/:bookId" element={<p>书本详情</p>} />
-      </Routes>
-    </MemoryRouter>,
+    <ScreenContextProvider>
+      <MemoryRouter initialEntries={['/']}>
+        <LocationProbe />
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/books/:bookId" element={<p>书本详情</p>} />
+        </Routes>
+      </MemoryRouter>
+    </ScreenContextProvider>,
   )
 }
 
 describe('HomePage recommendations', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.getMe.mockResolvedValue({ nickname: '小明' })
+    mocks.getMe.mockResolvedValue({
+      nickname: '小明',
+      learning_days: 3,
+      total_learning_minutes: 42,
+      completed_books: 1,
+      completed_chapters: 4,
+      quiz_count: 5,
+    })
     mocks.getProgress.mockResolvedValue([])
     mocks.getEpisodes.mockResolvedValue([])
     mocks.getMemories.mockResolvedValue([])
@@ -118,5 +141,93 @@ describe('HomePage recommendations', () => {
 
     expect(await screen.findByText(/推荐暂时不可用/)).toBeTruthy()
     expect(screen.getByRole('heading', { name: /晚上好/ })).toBeTruthy()
+  })
+
+  it('点击「不感兴趣」调用 dismiss 并从列表移除对应卡片', async () => {
+    const dismissed = { ...recommendation, status: 'DISMISSED' as const }
+    // 首次返回推荐；dismiss 后的刷新返回空
+    mocks.getRecommendations
+      .mockResolvedValueOnce([recommendation])
+      .mockResolvedValue([dismissed])
+    mocks.dismissRecommendation.mockResolvedValue(dismissed)
+
+    renderPage()
+    expect(await screen.findByText(recommendation.title)).toBeTruthy()
+
+    fireEvent.click(screen.getByTestId('home-dismiss-recommendation-1'))
+
+    await waitFor(() =>
+      expect(mocks.dismissRecommendation).toHaveBeenCalledWith('recommendation-1'),
+    )
+    await waitFor(() => {
+      expect(screen.queryByText(recommendation.title)).toBeNull()
+    })
+  })
+
+  it('有进度时展示完整继续学习卡（书名/章节/百分比/最近阅读/按钮），并使用 mock 教师名', async () => {
+    mocks.getProgress.mockResolvedValue([
+      {
+        progress_id: 'p-9',
+        student_id: 'student-1',
+        book_id: 'book-1',
+        chapter_id: 'ch-2',
+        block_id: null,
+        status: 'READING',
+        position_percent: 55,
+        last_read_at: '2026-08-24T19:30:00Z',
+        total_seconds: 600,
+        started_at: '2026-08-20T08:00:00Z',
+        completed_at: null,
+        created_at: '2026-08-20T08:00:00Z',
+        updated_at: '2026-08-24T19:30:00Z',
+      },
+    ])
+    mocks.getBook.mockResolvedValue({ book_id: 'book-1', title: 'AI 不是魔法', description: '面向初学者的 AI 入门' })
+    mocks.getChapter.mockResolvedValue({
+      chapter_id: 'ch-2',
+      book_id: 'book-1',
+      title: '训练数据',
+      chapter_order: 2,
+      summary: '本章讲训练数据与标签的关系。',
+      estimated_minutes: 13,
+      content_blocks: [],
+      knowledge_points: [],
+    })
+
+    renderPage()
+
+    // 加载完成后不出现 loading，也不出现空态
+    expect(await screen.findByTestId('continue-learning')).toBeTruthy()
+    expect(screen.queryByTestId('continue-loading')).toBeNull()
+    expect(screen.queryByTestId('continue-empty')).toBeNull()
+
+    expect(screen.getByText(/第 2 章 · 训练数据/)).toBeTruthy()
+    expect(screen.getByText(/55%/)).toBeTruthy()
+    expect(screen.getByText(/最近阅读/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: '继续第 2 章 →' })).toBeTruthy()
+    // 动态教师名来自 useTeacherName mock
+    expect(screen.getAllByText(/温暖老师/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/霜铃/)).toBeNull()
+  })
+
+  it('无进度时显示明确空态而非加载态', async () => {
+    renderPage()
+    expect(await screen.findByTestId('continue-empty')).toBeTruthy()
+    expect(screen.getByText(/还没有开始学习/)).toBeTruthy()
+    expect(screen.queryByTestId('continue-loading')).toBeNull()
+    expect(screen.queryByTestId('continue-learning')).toBeNull()
+  })
+
+  it('空 memories/episodes/quizzes 时显示明确空态且不出现伪造文案', async () => {
+    renderPage()
+    expect(await screen.findByTestId('memories-empty')).toBeTruthy()
+    expect(screen.getByTestId('episodes-empty')).toBeTruthy()
+    expect(screen.getByTestId('quizzes-empty')).toBeTruthy()
+    // 不再回退到硬编码画像文案 / 标签
+    expect(screen.queryByText(/你喜欢通过例子学习/)).toBeNull()
+    expect(screen.queryByText('例子优先')).toBeNull()
+    // 真实统计条渲染（来自 getMe 数据库列）
+    expect(screen.getByTestId('learning-stats').textContent).toContain('学习天数 · 3')
+    expect(screen.getByTestId('learning-stats').textContent).toContain('测验次数 · 5')
   })
 })

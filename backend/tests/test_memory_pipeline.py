@@ -294,3 +294,12 @@ def test_incremental_rebuild_creates_one_evidence_and_keeps_event_ids_unique(
             return len(event_ids) == len(set(event_ids))
 
     assert asyncio.run(check_unique())
+
+
+def test_llm_text_numbers_grounded_rejects_hallucinated_ids() -> None:
+    facts = {"dimension": "book_progress", "book_started_count": 1}
+    assert MemoryPipeline._text_numbers_grounded("已开始阅读 3 本书。", facts)
+    assert not MemoryPipeline._text_numbers_grounded(
+        "该学生已开始阅读 3184409785610735087255552 本书。", facts
+    )
+    assert not MemoryPipeline._text_numbers_grounded("阅读 123456 分钟", None)

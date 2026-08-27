@@ -1,4 +1,8 @@
-export type RecommendationType = 'CONTINUE_READING' | 'REVIEW_WEAK' | 'READ_NEXT'
+export type RecommendationType =
+  | 'CONTINUE_READING'
+  | 'REVIEW_WEAK'
+  | 'READ_NEXT'
+  | 'INTEREST_MATCH'
 
 export interface Recommendation {
   recommendation_id: string
@@ -8,7 +12,13 @@ export interface Recommendation {
   reason: string
   evidence_ids: string[]
   related_book_id: string | null
-  status: 'ACTIVE' | 'DISMISSED'
+  source_ids?: string[]
+  license?: string | null
+  source_url?: string | null
+  model_info?: Record<string, unknown> | null
+  skill_version?: string | null
+  expires_at?: string | null
+  status: 'ACTIVE' | 'DISMISSED' | 'EXPIRED'
   created_at: string
   updated_at: string
 }

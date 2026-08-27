@@ -41,7 +41,6 @@ test('桌宠使用真实精灵图、支持拖动动画并可持久切换', async
           stage: 'JUNIOR',
           language: 'zh-CN',
           learning_goal: null,
-          current_teacher_role_id: 'role-shuangling',
         }
       : isPreferencesRequest
         ? {
@@ -81,12 +80,13 @@ test('桌宠使用真实精灵图、支持拖动动画并可持久切换', async
   await expect(page.getByRole('img', { name: '霜铃待机中' })).toHaveCount(2)
 
   await page.goto('/settings')
-  const anyaOption = page.getByRole('button', { name: '选择阿尼亚桌宠' })
+  const anyaOption = page.getByRole('button', { name: '选择阿尼亚形象' })
   await expect(anyaOption).toBeVisible()
   await anyaOption.click()
   await expect(anyaOption).toHaveAttribute('aria-pressed', 'true')
 
-  const selectedSprite = page.getByRole('button', { name: '打开霜铃 AI 教师' }).getByRole('img')
+  // 切换桌宠后，dock 可访问名跟随新形象（useTeacherName 返回形象名）
+  const selectedSprite = page.getByRole('button', { name: '打开阿尼亚 AI 教师' }).getByRole('img')
   await expect(selectedSprite).toHaveAttribute('data-pet-id', 'anya')
   await expect(selectedSprite).toHaveCSS(
     'background-image',
@@ -95,11 +95,11 @@ test('桌宠使用真实精灵图、支持拖动动画并可持久切换', async
   await page.screenshot({ path: testInfo.outputPath('companion-picker.png'), fullPage: true })
 
   await page.reload()
-  await expect(page.getByRole('button', { name: '选择阿尼亚桌宠' })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: '选择阿尼亚形象' })).toHaveAttribute(
     'aria-pressed',
     'true',
   )
-  await expect(page.getByRole('button', { name: '打开霜铃 AI 教师' }).getByRole('img')).toHaveAttribute(
+  await expect(page.getByRole('button', { name: '打开阿尼亚 AI 教师' }).getByRole('img')).toHaveAttribute(
     'data-pet-id',
     'anya',
   )

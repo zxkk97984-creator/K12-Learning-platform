@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Book, BookProgress, Chapter, ChapterDetail } from '@/entities/book/types'
 
-vi.mock('@/mocks/services', () => ({
+vi.mock('@/shared/services', () => ({
   contentService: {
     getBooks: vi.fn(),
     getBook: vi.fn(),
@@ -17,7 +17,7 @@ vi.mock('@/mocks/services', () => ({
   },
 }))
 
-import { contentService } from '@/mocks/services'
+import { contentService } from '@/shared/services'
 import BookDetailPage from './BookDetailPage'
 
 const book: Book = {

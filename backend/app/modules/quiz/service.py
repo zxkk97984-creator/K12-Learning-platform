@@ -1,7 +1,6 @@
 import base64
 import binascii
 import json
-import logging
 from datetime import datetime, timezone
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -22,6 +21,7 @@ from app.infrastructure.database.models import (
     QuizSession,
     StudentProfile,
 )
+from app.jobs.queue import enqueue_memory_consolidation
 from app.modules.quiz.skill import QuizGenerationContext, QuizSkill
 from app.modules.identity.service import IdentityService
 from app.modules.quiz.schemas import (
@@ -36,9 +36,6 @@ from app.modules.quiz.schemas import (
     SubmitQuizAnswerRequest,
 )
 from app.skills.registry import get_skill
-
-
-logger = logging.getLogger(__name__)
 
 
 MAX_ATTEMPTS = 3
@@ -217,6 +214,7 @@ class QuizService:
             question_count=request.question_count,
             difficulty=request.difficulty,
             title=title,
+            allow_bank_fallback=request.allow_bank_fallback,
         )
         await self.skill.generate(session, context)
         quiz_session = context.generated_session
@@ -427,6 +425,11 @@ class QuizService:
         quiz_session, question, profile = await self._get_owned_question(
             session, user_id, quiz_session_id, question_id
         )
+        # Phase 5-A：对 QuizSession 行 FOR UPDATE，interaction 序号与
+        # attempt 计数在锁内串行化（Redis/本地锁之外的第二重保护）
+        await session.execute(
+            select(QuizSession).where(QuizSession.quiz_session_id == quiz_session_id).with_for_update()
+        )
         replay = await self._find_answer_replay(
             session,
             quiz_session_id,
@@ -552,6 +555,17 @@ class QuizService:
             "hints_used": int(hints_used),
         }
         if all_questions and final_question_ids >= set(all_questions):
+            if quiz_session.status != "COMPLETED":
+                # Phase 3：仅在真正完成（状态迁移）时计一次测验数，
+                # 重复提交最后一题的重放不会重复累计。
+                profile_row = (
+                    await session.execute(
+                        select(StudentProfile).where(
+                            StudentProfile.student_id == profile.student_id
+                        )
+                    )
+                ).scalar_one()
+                profile_row.quiz_count += 1
             quiz_session.status = "COMPLETED"
             quiz_session.completed_at = now
             quiz_session.ai_feedback = (
@@ -560,14 +574,11 @@ class QuizService:
                 else "这次完成了尝试，可以回看解析并总结规律。"
             )
         quiz_session.updated_at = now
+        # 记忆整合改为异步：job 行与答题结果同事务落库，由 Worker 消费并自带重试；
+        # HTTP 路径不再同步执行 MemoryPipeline。
+        await enqueue_memory_consolidation(session, profile.student_id)
         await session.commit()
         await session.refresh(answer)
-        try:
-            from app.modules.memory.pipeline import MemoryPipeline
-
-            await MemoryPipeline().process_student(session, profile.student_id)
-        except Exception:  # pragma: no cover - grading must not break on telemetry
-            logger.warning("memory pipeline failed after quiz answer", exc_info=True)
         return _answer_dto(answer), False
 
     async def _find_hint_replay(
@@ -623,6 +634,10 @@ class QuizService:
     ) -> tuple[QuizHintDTO, bool]:
         quiz_session, question, profile = await self._get_owned_question(
             session, user_id, quiz_session_id, question_id
+        )
+        # Phase 5-A：hint 与 answer 一致，先对 QuizSession 行 FOR UPDATE
+        await session.execute(
+            select(QuizSession).where(QuizSession.quiz_session_id == quiz_session_id).with_for_update()
         )
         replay = await self._find_hint_replay(
             session, quiz_session_id, question_id, idempotency_key

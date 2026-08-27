@@ -76,17 +76,6 @@ const STAGE_RANGE: Record<NonNullable<ContentListParams['stage']>, [number, numb
   SENIOR: [10, 12],
 }
 
-/** 现有原型路由仍使用 b1/ch3；真实 API 主键为 UUID，暂保留这两个入口别名。 */
-const LEGACY_BOOK_TITLES: Record<string, string> = {
-  b1: 'AI 不是魔法',
-}
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
-function isUuid(value: string): boolean {
-  return UUID_PATTERN.test(value)
-}
-
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
@@ -188,22 +177,19 @@ export class ApiContentService implements ContentService {
   }
 
   async getBook(bookId: string): Promise<Book> {
-    const resolvedBookId = await this.resolveBookId(bookId)
-    return mapBook(await apiRequest<ApiBookDTO>(`/books/${encodeURIComponent(resolvedBookId)}`))
+    // Phase 5-B-I：仅接受真实 UUID，不再做 b1 等旧原型别名换算
+    return mapBook(await apiRequest<ApiBookDTO>(`/books/${encodeURIComponent(bookId)}`))
   }
 
   async getChapters(bookId: string): Promise<Chapter[]> {
-    const resolvedBookId = await this.resolveBookId(bookId)
-    const chapters = await apiRequest<ApiChapterDTO[]>(
-      `/books/${encodeURIComponent(resolvedBookId)}/chapters`,
+    return apiRequest<ApiChapterDTO[]>(`/books/${encodeURIComponent(bookId)}/chapters`).then(
+      (chapters) => chapters.map(mapChapter),
     )
-    return chapters.map(mapChapter)
   }
 
   async getChapter(chapterId: string): Promise<ChapterDetail> {
-    const resolvedChapterId = await this.resolveChapterId(chapterId)
     const detail = await apiRequest<ApiChapterDetailDTO>(
-      `/chapters/${encodeURIComponent(resolvedChapterId)}`,
+      `/chapters/${encodeURIComponent(chapterId)}`,
     )
     return {
       ...mapChapter(detail.chapter),
@@ -225,28 +211,13 @@ export class ApiContentService implements ContentService {
   }
 
   async getBookProgress(bookId: string): Promise<BookProgress | null> {
-    const resolvedBookId = await this.resolveBookId(bookId)
     try {
-      return await apiRequest<BookProgress>(`/me/progress/${encodeURIComponent(resolvedBookId)}`)
+      return await apiRequest<BookProgress>(`/me/progress/${encodeURIComponent(bookId)}`)
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null
       throw error
     }
   }
 
-  private async resolveBookId(bookId: string): Promise<string> {
-    if (isUuid(bookId)) return bookId
-    const title = LEGACY_BOOK_TITLES[bookId]
-    if (!title) return bookId
-    const books = await this.getBooks({ limit: 100 })
-    return books.find((book) => book.title === title)?.book_id ?? bookId
-  }
 
-  private async resolveChapterId(chapterId: string): Promise<string> {
-    if (isUuid(chapterId)) return chapterId
-    const match = /^ch(\d+)$/.exec(chapterId)
-    if (!match) return chapterId
-    const chapters = await this.getChapters('b1')
-    return chapters.find((chapter) => chapter.chapter_order === Number(match[1]))?.chapter_id ?? chapterId
-  }
 }

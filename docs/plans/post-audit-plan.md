@@ -1,3 +1,5 @@
+> 本文件为 2026-08-21 历史记录；当前现状以 current-phase.md 与最终验收报告为准。
+
 # 霜铃 V3 — 实施后整改执行计划（Post-Audit Plan）
 
 > 依据：`docs/plans/current-phase.md`（Phase 12 已完成）+ 2026-08-21《项目实施情况》审计报告

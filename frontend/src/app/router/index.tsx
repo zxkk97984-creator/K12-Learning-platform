@@ -1,3 +1,5 @@
+import { AdminStyles } from '@/pages/admin/AdminStyles'
+import { AdminChapters } from '@/pages/admin/AdminChapters'
 import type { ReactNode } from 'react'
 import { createBrowserRouter, Navigate, useLocation } from 'react-router-dom'
 
@@ -87,6 +89,8 @@ export const router = createBrowserRouter([
           { index: true, element: <AdminDashboard /> },
           { path: 'books', element: <AdminBooks /> },
           { path: 'knowledge', element: <AdminKnowledge /> },
+          { path: 'styles', element: <AdminStyles /> },
+          { path: 'chapters', element: <AdminChapters /> },
         ],
       },
     ],

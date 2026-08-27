@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
+import logging
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -9,31 +10,59 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.factory import get_ai_provider
 from app.config import settings
 from app.infrastructure.database.models import QuizQuestion, QuizSession
+from app.modules.quiz.chapter_source import (
+    ChapterSourceData,
+    generate_chapter_questions,
+    load_chapter_source,
+)
 from app.modules.quiz.quiz_bank import QUIZ_BANK, QuizBankQuestion, select_questions
 
 
-SKILL_VERSION = "quiz-v1"
+SKILL_VERSION = "quiz-v2"
 MODEL_INFO = {"provider": "quiz-bank", "model": "quiz-bank-v1"}
+CHAPTER_MODEL_INFO = {"provider": "quiz-skill", "model": "chapter-content-v2"}
 MAX_HINT_LEVEL = 3
+
+logger = logging.getLogger(__name__)
+
+_CHOICE_TYPES = ("SINGLE_CHOICE", "TRUE_FALSE")
+
+
+def _valid_choice_options(options: Any) -> bool:
+    return (
+        isinstance(options, list)
+        and bool(options)
+        and all(
+            isinstance(option, dict) and option.get("key") and option.get("text")
+            for option in options
+        )
+    )
 
 
 def _is_valid_question(item: Any, required: set[str]) -> bool:
+    """按题型校验 LLM 输出：四种题型均可，结构必须可判分。"""
     if not isinstance(item, dict) or not required.issubset(item):
         return False
-    if item.get("question_type") != "SINGLE_CHOICE":
-        return False
-    options = item.get("options")
-    if not isinstance(options, list) or not options:
-        return False
-    if not all(
-        isinstance(option, dict) and option.get("key") and option.get("text")
-        for option in options
-    ):
-        return False
+    question_type = item.get("question_type")
     correct_answer = item.get("correct_answer")
-    if not isinstance(correct_answer, dict) or not correct_answer.get("key"):
+    knowledge_point_ids = item.get("knowledge_point_ids")
+    if not isinstance(knowledge_point_ids, list):
         return False
-    return isinstance(item.get("knowledge_point_ids"), list)
+    if not isinstance(correct_answer, dict):
+        return False
+    if question_type in _CHOICE_TYPES:
+        if not _valid_choice_options(item.get("options")):
+            return False
+        return bool(correct_answer.get("key"))
+    if question_type == "MULTIPLE_CHOICE":
+        if not _valid_choice_options(item.get("options")):
+            return False
+        keys = correct_answer.get("keys")
+        return isinstance(keys, list) and len(keys) > 0
+    if question_type == "FILL_BLANK":
+        value = correct_answer.get("value")
+        return isinstance(value, str) and value.strip() != ""
+    return False
 
 
 @dataclass
@@ -49,6 +78,9 @@ class QuizGenerationContext:
     question_count: int = 3
     difficulty: str = "MEDIUM"
     title: str = "霜铃随堂测验"
+    # 对话链路（页面感知出题）必须严格：无内容即报错；
+    # 直连 API/管理路径保持旧行为：可审计地回退内置题库。
+    allow_bank_fallback: bool = True
     generated_session: QuizSession | None = field(default=None, init=False, repr=False)
 
 
@@ -80,58 +112,105 @@ class QuizSkill:
 
         now = datetime.now(timezone.utc)
         quiz_session_id = uuid4()
+
+        # ---- 题目来源解析（Phase 2-B）----
+        # 携带章节上下文时：LLM 优先，其次基于本章真实内容确定性生成；
+        # 两者都失败必须显式抛错（由调用方转成 QUIZ_SKILL_ERROR），绝不
+        # 静默回退到与章节无关的训练数据题库。
+        # 未携带章节时：保持原有内置题库路径（与章节无关的通用测验）。
+        chapter_source: ChapterSourceData | None = None
+        bank_fallback_reason: str | None = None
+        if context.chapter_id is not None:
+            chapter_source = await load_chapter_source(
+                session, context.book_id, context.chapter_id
+            )
+            if chapter_source is None:
+                from app.infrastructure.database.models import Chapter as _Chapter
+
+                chapter_row = await session.get(_Chapter, context.chapter_id)
+                if chapter_row is None or not context.allow_bank_fallback:
+                    # 章节不存在，或调用方要求严格语义（对话链路）：
+                    # 必须显式失败，绝不静默给出与章节无关的题目。
+                    state = "不存在" if chapter_row is None else "缺少可出题的内容"
+                    raise ValueError(
+                        f"当前章节{state}，无法生成相关题目："
+                        f"chapter_id={context.chapter_id}"
+                    )
+                bank_fallback_reason = "chapter_content_unavailable"
+                logger.warning(
+                    "chapter %s lacks quiz-able content; "
+                    "falling back to bank (audited)",
+                    context.chapter_id,
+                )
+
         bank_questions = select_questions(context.difficulty, context.question_count)
-        llm_items = await self._try_llm_generate(context)
-        source_items = llm_items if llm_items is not None else bank_questions
+        llm_items = (
+            None
+            if bank_fallback_reason
+            else await self._try_llm_generate(context, chapter_source)
+        )
         session_model_info = self.model_info
+        generation_kind = "bank_fallback" if bank_fallback_reason else "bank"
         if llm_items is not None:
+            source_items: list[Any] = llm_items
             session_model_info = {
                 "provider": "openai_compatible",
                 "model": settings.ai_model,
             }
+            generation_kind = "llm"
+        elif chapter_source is not None:
+            source_items = generate_chapter_questions(
+                chapter_source, count=context.question_count
+            )
+            session_model_info = dict(CHAPTER_MODEL_INFO)
+            generation_kind = "chapter_deterministic"
+        else:
+            source_items = bank_questions
+
         question_rows: list[QuizQuestion] = []
         snapshot: list[dict[str, Any]] = []
 
-        for order, bank_question in enumerate(source_items, start=1):
-            question_id = uuid4()
-            question_type = (
-                bank_question["question_type"]
-                if isinstance(bank_question, dict)
-                else bank_question.question_type
-            )
-            stem = bank_question["stem"] if isinstance(bank_question, dict) else bank_question.stem
-            options = (
-                bank_question["options"]
-                if isinstance(bank_question, dict)
-                else bank_question.options
-            )
+        for order, item in enumerate(source_items, start=1):
+            is_dict = isinstance(item, dict)
+            question_type = item["question_type"] if is_dict else item.question_type
+            stem = item["stem"] if is_dict else item.stem
+            options = item["options"] if is_dict else item.options
             correct_answer = (
-                bank_question["correct_answer"]
-                if isinstance(bank_question, dict)
-                else bank_question.correct_answer
+                item["correct_answer"] if is_dict else item.correct_answer
             )
             explanation = (
-                bank_question["explanation"]
-                if isinstance(bank_question, dict)
-                else bank_question.explanation
+                item["explanation"] if is_dict else item.explanation
             )
             knowledge_point_ids = (
-                bank_question["knowledge_point_ids"]
-                if isinstance(bank_question, dict)
-                else bank_question.knowledge_point_ids
+                item["knowledge_point_ids"]
+                if is_dict
+                else list(item.knowledge_point_ids)
             )
-            source_context = {
-                "bank_id": bank_question.get("bank_id", "llm")
-                if isinstance(bank_question, dict)
-                else bank_question.bank_id,
-                "book_id": str(context.book_id) if context.book_id is not None else None,
-                "chapter_id": (
-                    str(context.chapter_id) if context.chapter_id is not None else None
-                ),
-            }
+            if generation_kind in ("bank", "bank_fallback"):
+                source_context = {
+                    "bank_id": item.bank_id,
+                    "book_id": str(context.book_id) if context.book_id is not None else None,
+                    "chapter_id": (
+                        str(context.chapter_id) if context.chapter_id is not None else None
+                    ),
+                    "generation": generation_kind,
+                }
+                if bank_fallback_reason:
+                    source_context["fallback_reason"] = bank_fallback_reason
+            else:
+                source_context = {
+                    "generation": generation_kind,
+                    "source": "chapter_content",
+                    "book_id": str(chapter_source.book_id) if chapter_source else None,
+                    "chapter_id": (
+                        str(chapter_source.chapter_id) if chapter_source else None
+                    ),
+                    "chapter_title": chapter_source.chapter_title if chapter_source else None,
+                    "book_title": chapter_source.book_title if chapter_source else None,
+                }
             interaction_policy = {"allow_hint": True, "max_hint_level": MAX_HINT_LEVEL}
             question = QuizQuestion(
-                question_id=question_id,
+                question_id=uuid4(),
                 quiz_session_id=quiz_session_id,
                 question_order=order,
                 question_type=question_type,
@@ -147,7 +226,7 @@ class QuizSkill:
             question_rows.append(question)
             snapshot.append(
                 {
-                    "question_id": str(question_id),
+                    "question_id": str(question.question_id),
                     "quiz_session_id": str(quiz_session_id),
                     "question_order": order,
                     "question_type": question_type,
@@ -191,25 +270,71 @@ class QuizSkill:
         return question_rows
 
     async def _try_llm_generate(
-        self, context: QuizGenerationContext
+        self,
+        context: QuizGenerationContext,
+        chapter_source: ChapterSourceData | None = None,
     ) -> list[dict[str, Any]] | None:
-        """Ask the real LLM for JSON questions; fall back to quiz bank on any failure."""
+        """Ask the real LLM for JSON questions; fall back per source policy.
+
+        携带章节上下文时，prompt 注入本章真实内容节选；LLM 失败/输出非法
+        返回 None，由调用方走本章确定性生成（而非章节无关题库）。
+        """
         if settings.ai_provider.strip().lower() != "openai_compatible":
             return None
-        prompt = (
-            "请生成 K12 随堂测验题目，严格输出 JSON 数组，每项包含："
-            "question_type(SINGLE_CHOICE)、stem、options(数组，每项 key/text)、"
-            "correct_answer(对象含 key)、explanation、knowledge_point_ids。"
-            f"难度：{context.difficulty}；题数：{context.question_count}；知识点主题：{context.title}。"
+        type_spec = (
+            "question_type(SINGLE_CHOICE/MULTIPLE_CHOICE/TRUE_FALSE/FILL_BLANK)"
         )
+        if chapter_source is not None:
+            sections = list(chapter_source.section_keys)
+            excerpt_lines = []
+            for i, text in enumerate(chapter_source.texts[:8]):
+                section = sections[i] if i < len(sections) else ""
+                excerpt_lines.append(f"- [{section or '正文'}] {text}")
+            kp_line = (
+                "、".join(kp["name"] for kp in chapter_source.knowledge_points)
+                or "暂无"
+            )
+            prompt = (
+                "你是 K12 出题助手。请只依据下面的真实章节内容出题，"
+                "严格输出 JSON 数组，每项包含："
+                f"{type_spec}、stem、options(数组，每项 key/text；FILL_BLANK 可为空数组)、"
+                "correct_answer(SINGLE_CHOICE/TRUE_FALSE 含 key；MULTIPLE_CHOICE 含 keys 数组；"
+                "FILL_BLANK 含 value 字符串)、explanation、knowledge_point_ids(可使用空数组)。"
+                f"难度：{context.difficulty}；题数：{context.question_count}；"
+                "题型需覆盖至少两种。\n"
+                f"【章节】《{chapter_source.book_title}》·{chapter_source.chapter_title}\n"
+                f"【知识点】{kp_line}\n"
+                "【内容节选】\n" + "\n".join(excerpt_lines)
+            )
+        else:
+            prompt = (
+                "请生成 K12 随堂测验题目，严格输出 JSON 数组，每项包含："
+                f"{type_spec}、stem、options(数组，每项 key/text)、"
+                "correct_answer(对象含 key 或 keys/value)、explanation、knowledge_point_ids。"
+                f"难度：{context.difficulty}；题数：{context.question_count}；知识点主题：{context.title}。"
+            )
         try:
             chunks = []
             async for chunk in get_ai_provider().stream_chat([], prompt):
                 chunks.append(chunk)
             data = self._parse_llm_questions("".join(chunks))
         except Exception:
+            logger.warning("quiz LLM generation failed; falling back", exc_info=True)
             return None
         if data is None:
+            logger.warning("quiz LLM output invalid; falling back")
+            return None
+        # 缺口 3：合法题数必须足额。LLM 只给出 1-2 道而请求 3 道时，
+        # 若截断接受会导致 result_summary.total 与实际题数不一致；
+        # 视为本次输出不可用，交由调用方按来源策略回退
+        # （章节上下文 → 确定性生成；无章节 → 内置题库）。
+        if len(data) < context.question_count:
+            logger.warning(
+                "quiz LLM returned %d valid questions but %d requested; "
+                "treating output as unusable",
+                len(data),
+                context.question_count,
+            )
             return None
         return data[: context.question_count]
 

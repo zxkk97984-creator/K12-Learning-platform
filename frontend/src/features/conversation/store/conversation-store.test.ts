@@ -13,9 +13,10 @@ const mocks = vi.hoisted(() => ({
   setAiState: vi.fn(),
 }))
 
-vi.mock('@/mocks/services', () => mocks)
+vi.mock('@/shared/services', () => mocks)
 vi.mock('@/features/companion', () => ({
   useCompanionStore: { getState: () => ({ setAiState: mocks.setAiState }) },
+  currentTeacherName: () => '霜铃',
 }))
 
 import { useConversationStore } from './conversation-store'
@@ -75,6 +76,7 @@ describe('conversation store real service lifecycle', () => {
       'conversation-1',
       { content: '解释训练数据' },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      expect.any(String),
     )
     expect(useConversationStore.getState().messages).toEqual([
       expect.objectContaining({ role: 'user', content: '解释训练数据' }),
@@ -244,6 +246,7 @@ describe('conversation store real service lifecycle', () => {
       'conversation-1',
       { content: '给我出题' },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      expect.any(String),
     )
     expect(mocks.quizService.createQuizSession).not.toHaveBeenCalled()
   })
@@ -425,5 +428,80 @@ describe('conversation store real service lifecycle', () => {
         quiz: null,
       }),
     ])
+  })
+})
+
+describe('conversation store screen-context passing (Phase 2-A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useConversationStore.getState().abortCurrent()
+    useConversationStore.setState({
+      messages: [],
+      conversationId: null,
+      loaded: false,
+      lastScreenContext: null,
+    })
+    mocks.conversationService.getConversations.mockResolvedValue([])
+    mocks.conversationService.getMessages.mockResolvedValue([])
+    mocks.conversationService.createConversation.mockResolvedValue({
+      ...conversation,
+      student_id: 'student-1',
+      current_page_context: {},
+      recent_messages: [],
+      conversation_summary: null,
+      created_at: '2026-08-19T08:00:00Z',
+    })
+  })
+
+  const readerContext = {
+    route: '/learn/b1/c1',
+    pageType: 'chapter_reader',
+    bookId: 'b1',
+    chapterId: 'c1',
+    chapterTitle: '训练数据',
+  }
+
+  it('runIntent 把当前 ScreenContext 随消息发送（quiz intent 同样携带）', async () => {
+    mocks.conversationService.sendMessage.mockResolvedValue(undefined)
+
+    await new Promise<void>((resolve) => {
+      mocks.conversationService.sendMessage.mockImplementation(
+        async (_id: string, input: { screen_context?: unknown }, callbacks?: SendMessageCallbacks) => {
+          callbacks?.onDone?.({ message_id: 'm-ctx', conversation_id: 'conversation-1', sequence: 2 })
+          resolve()
+          expect(input.screen_context).toEqual(readerContext)
+        },
+      )
+      useConversationStore.getState().runIntent('explain', undefined, readerContext)
+    })
+
+    const input = mocks.conversationService.sendMessage.mock.calls[0][1] as {
+      screen_context?: unknown
+    }
+    expect(input.screen_context).toEqual(readerContext)
+    // 最后一次真实上下文已保存
+    expect(useConversationStore.getState().lastScreenContext).toEqual(readerContext)
+  })
+
+  it('retry 复用最后一次真实上下文', async () => {
+    mocks.conversationService.sendMessage.mockImplementation(async (_id, _input, callbacks) => {
+      callbacks?.onDone?.({ message_id: 'm-retry', conversation_id: 'conversation-1', sequence: 2 })
+    })
+
+    await useConversationStore.getState().send('解释我选中的内容', readerContext)
+    await useConversationStore.getState().retry()
+
+    const retryCall = mocks.conversationService.sendMessage.mock.calls.at(-1)!
+    const input = retryCall[1] as { screen_context?: unknown; content: string }
+    expect(input.content).toBe('解释我选中的内容')
+    expect(input.screen_context).toEqual(readerContext)
+
+    // Phase 5-A 整改 2：retry 的第四个参数（幂等键）必须与首次 send 相同且非空
+    const firstCall = mocks.conversationService.sendMessage.mock.calls[0]
+    const firstKey = firstCall[3] as string | undefined
+    expect(typeof firstKey).toBe('string')
+    expect((firstKey as string).length).toBeGreaterThan(0)
+    const retryKey = retryCall[3] as string | undefined
+    expect(retryKey).toBe(firstKey)
   })
 })

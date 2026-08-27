@@ -5,6 +5,7 @@ Stable Memory / StudentEpisode -> ProfileInsight (5 qualitative levels only).
 """
 
 import logging
+import re
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
@@ -30,6 +31,8 @@ RULE_VERSION = "memory-rule-v1"
 INSIGHT_RULE_VERSION = "profile-rule-v1"
 MODEL_INFO = {"provider": "rule", "model": RULE_VERSION}
 MAX_SAMPLE_TEXTS = 3
+# LLM 输出中出现 ≥5 位连续数字且不在事实里 → 视为幻觉，回退规则文案
+_LONG_NUMBER = re.compile(r"\d{5,}")
 
 QUIZ_EVENT_TYPES = {
     "ANSWER_CORRECT",
@@ -173,7 +176,7 @@ def _episode_meta(source_type: str, facts: dict[str, Any]) -> tuple[str, str, st
 class MemoryPipeline:
     """Deterministic, idempotent pipeline over LearningEvent facts."""
 
-    async def _llm_text(self, prompt: str) -> str | None:
+    async def _llm_text(self, prompt: str, facts: dict[str, Any] | None = None) -> str | None:
         if settings.ai_provider.strip().lower() != "openai_compatible":
             return None
         try:
@@ -181,9 +184,21 @@ class MemoryPipeline:
             async for chunk in get_ai_provider().stream_chat([], prompt):
                 chunks.append(chunk)
             text = "".join(chunks).strip()
-            return text or None
+            if not text:
+                return None
+            if not self._text_numbers_grounded(text, facts):
+                logger.warning("LLM 记忆文案含无依据数字，回退规则模板：%s", text)
+                return None
+            return text
         except Exception:
             return None
+
+    @staticmethod
+    def _text_numbers_grounded(text: str, facts: dict[str, Any] | None) -> bool:
+        for match in _LONG_NUMBER.findall(text):
+            if facts is None or match not in str(facts):
+                return False
+        return True
 
     async def _all_evidence(
         self, session: AsyncSession, student_id: UUID
@@ -240,9 +255,10 @@ class MemoryPipeline:
         )
         llm_prompt = (
             "请用一句中文描述这位学生的稳定学习表现，只描述事实与表现，不评分。"
+            "只能使用下面给定的事实，禁止编造或改写任何数字、书名、章节名。"
             f"来源类型：{source_type}；事实：{facts}"
         )
-        llm_content = await self._llm_text(llm_prompt)
+        llm_content = await self._llm_text(llm_prompt, facts=facts)
         content = llm_content or _candidate_content(source_type, facts)
         candidate_model_info = (
             {"provider": "openai_compatible", "model": settings.ai_model}
@@ -489,6 +505,7 @@ class MemoryPipeline:
         for candidate in candidates:
             llm_description = await self._llm_text(
                 "请用一句中文、定性描述学生的画像表现，不要使用数字评分。"
+                "只能复述给定描述中的事实，禁止编造任何数字。"
                 f"类型：{candidate['insight_type']}；维度：{candidate['dimension']}；"
                 f"档位：{candidate['level']}；原描述：{candidate['description']}"
             )

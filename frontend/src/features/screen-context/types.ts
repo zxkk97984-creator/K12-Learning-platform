@@ -13,3 +13,14 @@ export interface ScreenContext {
   knowledgePoints?: string[]
   actions?: string[]
 }
+
+/** 由路由推导页面类型；路由切换清理上下文时使用。 */
+export function derivePageType(pathname: string): string {
+  if (pathname.startsWith('/learn/')) return 'chapter_reader'
+  if (pathname.startsWith('/books/')) return 'book_detail'
+  if (pathname === '/library') return 'library'
+  if (pathname === '/quizzes' || pathname.startsWith('/quizzes/')) return 'quiz_history'
+  if (pathname.startsWith('/profile')) return 'profile'
+  if (pathname === '/settings') return 'settings'
+  return 'home'
+}

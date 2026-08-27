@@ -45,6 +45,8 @@ from app.modules.admin.schemas import (
     PatchTeacherRoleRequest,
 )
 from app.modules.knowledge.schemas import KnowledgeResourceDTO
+from app.infrastructure.storage import get_storage
+from app.modules.knowledge.ingestion import load_resource_bytes
 
 
 STORAGE_ROOT = Path(__file__).resolve().parents[3] / "storage" / "knowledge"
@@ -104,6 +106,7 @@ class IdempotencyService:
         request_hash: str,
         handler: Callable[[], Awaitable[dict]],
     ) -> tuple[dict, bool]:
+        now = datetime.now(timezone.utc)
         existing = (
             await session.execute(
                 select(IdempotencyKey).where(
@@ -113,6 +116,11 @@ class IdempotencyService:
                 )
             )
         ).scalar_one_or_none()
+        # Phase 5-A：过期记录不得复用——删除后按新请求重新执行
+        if existing is not None and existing.expires_at is not None and existing.expires_at <= now:
+            await session.delete(existing)
+            await session.flush()
+            existing = None
         if existing is not None:
             if existing.request_hash != request_hash:
                 raise _error(
@@ -467,10 +475,10 @@ class AdminService:
         if not license.strip() or not copyright_status.strip():
             raise _error(422, "VALIDATION_ERROR", "license and copyright_status are required")
 
-        storage_key = f"{admin.admin_id}/{uuid4()}.{ext}"
-        path = self._storage_path(storage_key)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(file_bytes)
+        # 统一键规则：knowledge/<owner>/<uuid>.<ext>（本地根为 storage/）
+        storage_key = f"knowledge/{admin.admin_id}/{uuid4()}.{ext}"
+        # Phase 4：统一存储抽象（本地 / S3 兼容对象存储，由配置决定）
+        await get_storage().put(storage_key, file_bytes, content_type=None)
         resource = KnowledgeResource(
             resource_id=uuid4(),
             source_name=source_name,
@@ -516,9 +524,11 @@ class AdminService:
         resource = await session.get(KnowledgeResource, resource_id)
         if resource is None:
             raise _error(404, "RESOURCE_NOT_FOUND", "resource not found")
-        path = self._storage_path(str(resource.storage_key))
-        if not path.is_file():
-            raise _error(422, "SOURCE_FILE_MISSING", "stored source file is missing")
+        # Phase 4：按存储后端探测源文件（local/s3），缺失给出明确 422
+        try:
+            await load_resource_bytes(str(resource.storage_key))
+        except (ValueError, FileNotFoundError) as exc:
+            raise _error(422, "SOURCE_FILE_MISSING", "stored source file is missing") from exc
         resource.status = "UPLOADED"
         resource.error = None
         resource.updated_at = datetime.now(timezone.utc)

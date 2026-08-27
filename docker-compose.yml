@@ -17,6 +17,34 @@ services:
       timeout: 5s
       retries: 5
 
+  # 后台 Worker：消费 PostgreSQL 表驱动队列（knowledge_ingest /
+  # conversation_summary / memory_consolidation），与 API 共用 backend 代码镜像。
+  # 仅在显式 `docker compose up worker`（或 --profile worker）时启动，
+  # 本地一键启动脚本默认以宿主机进程运行 Worker，避免双实例混淆。
+  worker:
+    build:
+      context: ./backend
+    image: shuangling-backend:latest
+    container_name: shuangling-worker
+    restart: unless-stopped
+    profiles: ["worker"]
+    command: ["python", "-m", "app.jobs.worker"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-shuangling}:${POSTGRES_PASSWORD:-shuangling}@postgres:5432/${POSTGRES_DB:-shuangling}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-32bytes-secret}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      AI_MODEL: ${AI_MODEL:-mock-model}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-mock}
+      VOICE_PROVIDER: ${VOICE_PROVIDER:-mock}
+      WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-1.0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # 与宿主机 API 共享知识库源文件，保证 Worker 能解析同一批上传资源。
+      - ./backend/storage:/app/storage
+
+
   redis:
     image: redis:7-alpine
     container_name: shuangling-redis

@@ -1,27 +1,36 @@
 import { expect, test } from '@playwright/test'
 
-test('设置页切换 AI 教师并刷新保持', async ({ page, request }) => {
-  const loginResponse = await request.post('/api/v1/auth/login', {
-    data: { username: 'xiaoming', password: 'demo123' },
-  })
-  expect(loginResponse.ok()).toBeTruthy()
-  const accessToken = (await loginResponse.json()).data.access_token
-  await page.addInitScript((token) => {
-    window.localStorage.setItem('shuangling-access-token', token)
-  }, accessToken)
+import { loginStudent } from './helpers'
+
+// Phase 5-B-II：使用 seed 真实风格名「温暖鼓励」「严谨清晰」；
+// 断言切换后刷新保持，并可切回。
+test('设置页切换教师风格并刷新保持，可切回', async ({ page, request }) => {
+  const { token } = await loginStudent(request)
+  await page.addInitScript((t) => {
+    window.localStorage.setItem('shuangling-access-token', t)
+  }, token)
 
   await page.goto('/settings')
-  await expect(page.getByRole('heading', { name: '我的 AI 教师' })).toBeVisible()
-  const strictCard = page.locator('button').filter({ hasText: 'strict-mentor' })
+  await expect(page.getByRole('heading', { name: 'AI 教师风格' })).toBeVisible()
+
+  const warmCard = page.locator('button').filter({ hasText: '温暖鼓励' }).first()
+  const strictCard = page.locator('button').filter({ hasText: '严谨清晰' }).first()
+  await expect(warmCard).toBeVisible()
   await expect(strictCard).toBeVisible()
 
+  // 切到「严谨清晰」→ aria-pressed 生效 → 刷新后保持
   await strictCard.click()
-  await expect(page.getByText('已切换 AI 教师')).toBeVisible()
-
+  await expect(strictCard).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 })
   await page.reload()
-  const reloadedStrict = page.locator('button').filter({ hasText: 'strict-mentor' })
-  await expect(reloadedStrict).toHaveAttribute('aria-pressed', 'true')
+  const strictAfterReload = page.locator('button').filter({ hasText: '严谨清晰' }).first()
+  await expect(strictAfterReload).toHaveAttribute('aria-pressed', 'true')
 
-  await page.locator('button').filter({ hasText: 'shuangling' }).click()
-  await expect(page.getByText('已切换 AI 教师')).toBeVisible()
+  // 切回「温暖鼓励」→ 刷新保持
+  const warmAfterReload = page.locator('button').filter({ hasText: '温暖鼓励' }).first()
+  await warmAfterReload.click()
+  await expect(warmAfterReload).toHaveAttribute('aria-pressed', 'true')
+  await page.reload()
+  await expect(
+    page.locator('button').filter({ hasText: '温暖鼓励' }).first(),
+  ).toHaveAttribute('aria-pressed', 'true')
 })

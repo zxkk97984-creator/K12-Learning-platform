@@ -719,7 +719,9 @@
 
 #### 5.7.1 Recommendation
 
-**职责**：可解释的下一步学习建议（书/章/复习/测验/今日计划），必须能回答「为什么推荐」。
+> **实现核对（2026-08-27）**：字段以 `backend/app/infrastructure/database/models.py::Recommendation` 为准。相比本设计初稿，最终落地精简为：新增 `description`，用 `related_book_id` 替代 `book_id`/`chapter_id` 双列，且**未落地** `source_ids`/`license`/`source_url`/`model_info`/`skill_version`/`expires_at`；`status` 仅 `ACTIVE/DISMISSED`（无 EXPIRED）。D9 来源溯源尚未满足（见 §9 风险）。
+
+**职责**：可解释的下一步学习建议（书/复习/测验等），必须能回答「为什么推荐」。
 
 **关键字段**
 
@@ -727,26 +729,22 @@
 | --- | --- | --- | --- |
 | `recommendation_id` | uuid | 主键 | PK |
 | `student_id` | uuid | 学生 | FK→StudentProfile |
-| `recommendation_type` | enum | `BOOK / CHAPTER / REVIEW / QUIZ / DAILY_PLAN` | 非空 |
-| `book_id` / `chapter_id` | uuid | 推荐目标 | FK→Book/Chapter，按类型可空 |
+| `recommendation_type` | string | 推荐类型（内部枚举，DB 无 CHECK） | 非空 |
 | `title` | string | 推荐标题 | 非空 |
+| `description` | string | 推荐描述 | 非空 |
 | `reason` | text | 推荐理由（「为什么推荐？」） | **非空**（需求 §43/§72） |
-| `evidence_ids` | jsonb | 依据证据（测验表现/学习事件） | 可空 |
-| `source_ids` | jsonb | 引用知识来源 KnowledgeResource id | 可空（D9） |
-| `license` | string | 引用内容的许可 | 可空 |
-| `source_url` | string | 引用来源 URL | 可空 |
-| `status` | enum | `ACTIVE / DISMISSED / EXPIRED` | 非空 |
-| `expires_at` | datetime | 过期时间 | 可空 |
-| `model_info` | jsonb | 生成模型信息 | 可空 |
-| `skill_version` | string | 推荐 Skill 版本 | 非空 |
+| `evidence_ids` | jsonb | 依据证据（测验表现/学习事件） | 默认 '[]' |
+| `related_book_id` | uuid | 目标书 | FK→Book，可空 |
+| `status` | enum | `ACTIVE / DISMISSED` | 非空 |
 | `created_at` | datetime | 时间 | 自动维护 |
+| `updated_at` | datetime | 时间 | 自动维护 |
 
-**关系**：N:1 `StudentProfile`；N:1 `Book`（可空）；N:1 `Chapter`（可空）；N:M（引用）`MemoryEvidence`；N:M（引用）`KnowledgeResource`（source_ids）。
+**关系**：N:1 `StudentProfile`；N:1 `Book`（related，可空）。
 
 **约束/不变量**：
 - 无理由不推荐：`reason` 必须可追溯到证据或学习事件（需求 §72）。
-- 首页「霜铃推荐」「为什么推荐？」（0-B）由本实体供给；推荐被点击/忽略后状态流转（ACTIVE→DISMISSED/EXPIRED）。
-- 引用外部知识必须保留 source_ids/license/source_url（D9、总控 §17.5）。
+- 首页「霜铃推荐」「为什么推荐？」（0-B）由本实体供给；推荐被点击/忽略后状态流转（ACTIVE→DISMISSED）。
+- 引用外部知识必须保留 source_ids/license/source_url（D9、总控 §17.5）——**当前实现未落地，列为已知缺口**。
 
 ---
 
@@ -988,7 +986,8 @@ erDiagram
 2. **多 Agent / 复杂 Workflow**：MVP 是单 Teacher Agent + Skills（架构 §53），不建模 Agent 集群、LangGraph、Workflow Engine。
 3. **教师端 / 班级 / 作业 / 家长端**：User 仅 STUDENT/ADMIN 两种类型（需求 §4/§97）。
 4. **ScreenContext / TeacherContext**：是运行时输入结构（架构 §8/§14），不属于持久化实体；其字段形状由 0-D API Contract 定义，Conversation.current_page_context 只存其快照。
-5. **BackgroundJob**：架构 §40 的 Job 是基础设施状态（队列/重试/日志），不属于业务 Domain 实体；0-E 数据库设计时单独建模。
+5. **BackgroundJob**：架构 §40 的 Job 是基础设施状态（队列/重试/日志），不属于业务 Domain 实体；0-E 数据库设计时单独建模——**已落地为 `background_jobs` 表（见 database-design §3.29）**。
+5b. **ReadingSettlement**：Phase 3 学习时长结算台账，非业务 Domain 实体；0-E 单独建模——**已落地为 `reading_settlements` 表（见 database-design §3.11b）**。
 6. **语音音频/实时会话状态**：语音复用 Conversation + Message（TEXT/VOICE channel），不单独建 VoiceSession 实体；WebSocket 连接元数据归 Redis（架构 §33）。
 7. **Live2D / Spine / 3D 角色运行时**：TeacherRole.sprite_manifest 只保存资产契约，渲染 Runtime 解耦（架构 §9.2）。
 8. **事件溯源 / CQRS / 微服务 / 独立向量库**：架构 §52 明确不做，本模型按 Modular Monolith + PostgreSQL/pgvector 设计。

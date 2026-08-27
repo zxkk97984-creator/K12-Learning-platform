@@ -19,7 +19,8 @@ def test_mock_embedding_is_deterministic_and_normalized() -> None:
     again = provider.embed("训练数据")
 
     assert vector == again
-    assert len(vector) == 64
+    # mock 维度跟随配置（默认可为 64/1024）；关键是确定性 + L2 归一化。
+    assert len(vector) == provider.dimension
     norm = math.sqrt(sum(value * value for value in vector))
     assert abs(norm - 1.0) < 1e-9
 

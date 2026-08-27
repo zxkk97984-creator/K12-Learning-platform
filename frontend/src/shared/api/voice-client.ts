@@ -16,6 +16,8 @@ export interface VoiceClientOptions {
   conversationId: string
   token?: string
   callbacks: VoiceClientCallbacks
+  /** 连接建立后立即发送的结构化页面上下文（Phase 2-A4；可选，向后兼容）。 */
+  initialScreenContext?: Record<string, unknown>
   /** Test seam: default builds ws(s):// from location. */
   createSocket?: (url: string) => WebSocket
 }
@@ -27,6 +29,8 @@ export interface VoiceClient {
   cancel: () => void
   ping: () => void
   close: () => void
+  /** 显式更新服务端使用的页面上下文（下一轮 utterance 生效）。 */
+  sendScreenContext: (context: Record<string, unknown>) => void
 }
 
 function wsUrl(conversationId: string, token: string): string {
@@ -98,6 +102,9 @@ export function createVoiceClient(options: VoiceClientOptions): VoiceClient {
       socket = createSocket(url)
       socket.onopen = () => {
         startHeartbeat()
+        if (options.initialScreenContext) {
+          send({ type: 'context', screen_context: options.initialScreenContext })
+        }
         resolve()
       }
       socket.onmessage = handleMessage
@@ -120,6 +127,8 @@ export function createVoiceClient(options: VoiceClientOptions): VoiceClient {
     sendAudioEnd: () => send({ type: 'audio_end' }),
     cancel: () => send({ type: 'cancel' }),
     ping: () => send({ type: 'ping' }),
+    sendScreenContext: (context: Record<string, unknown>) =>
+      send({ type: 'context', screen_context: context }),
     close: () => {
       closed = true
       stopHeartbeat()

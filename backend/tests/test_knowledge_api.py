@@ -10,6 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.infrastructure.database.models import (
+    Admin,
+
     KnowledgeChunk,
     KnowledgeResource,
     StudentProfile,
@@ -56,6 +58,21 @@ def _ensure_user(username: str, password: str, user_type: str) -> None:
                     )
                 )
                 await session.flush()
+            # Phase 5-A：require_admin 收严后，ADMIN 必须存在启用的 admins 行
+            if user_type == "ADMIN":
+                admin_row = (
+                    await session.execute(select(Admin).where(Admin.user_id == user.user_id))
+                ).scalar_one_or_none()
+                if admin_row is None:
+                    session.add(
+                        Admin(
+                            admin_id=uuid4(),
+                            user_id=user.user_id,
+                            display_name=username,
+                            role_level="SUPERVISOR",
+                            enabled=True,
+                        )
+                    )
             if user_type == "STUDENT":
                 profile = (
                     await session.execute(

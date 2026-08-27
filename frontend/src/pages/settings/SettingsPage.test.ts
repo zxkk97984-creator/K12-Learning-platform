@@ -8,19 +8,19 @@ const mocks = vi.hoisted(() => ({
   updatePreferences: vi.fn(),
   updateMe: vi.fn(),
   getTeacherRoles: vi.fn(),
-  getRoles: vi.fn(),
+  uploadAvatar: vi.fn(),
   refreshMe: vi.fn(),
   showToast: vi.fn(),
 }))
 
-vi.mock('@/mocks/services', () => ({
+vi.mock('@/shared/services', () => ({
   studentService: {
     getPreferences: mocks.getPreferences,
     updatePreferences: mocks.updatePreferences,
     updateMe: mocks.updateMe,
     getTeacherRoles: mocks.getTeacherRoles,
+    uploadAvatar: mocks.uploadAvatar,
   },
-  teacherRoleService: { getRoles: mocks.getRoles },
 }))
 
 vi.mock('@/features/auth', () => {
@@ -56,21 +56,21 @@ import { useCompanionStore } from '@/features/companion'
 
 const roles = [
   {
-    role_id: 'role-slang',
-    name: 'shuangling',
-    description: '默认教师',
-    tone: '温暖',
-    teaching_style: '引导',
+    role_id: '00000000-0000-0000-0000-000000000001',
+    name: '温暖鼓励',
+    description: '以鼓励和引导为主的教学风格',
+    tone: '温暖、鼓励',
+    teaching_style: '从生活例子出发，逐步引导',
     avatar: null,
     voice_id: null,
     enabled: true,
   },
   {
-    role_id: 'role-strict',
-    name: 'strict-mentor',
-    description: '严谨导师',
-    tone: '严谨',
-    teaching_style: '逻辑',
+    role_id: '00000000-0000-0000-0000-000000000002',
+    name: '严谨清晰',
+    description: '以逻辑和证据为主的教学风格',
+    tone: '严谨、清晰',
+    teaching_style: '强调逻辑与证据',
     avatar: null,
     voice_id: null,
     enabled: true,
@@ -94,36 +94,36 @@ describe('SettingsPage teacher roles', () => {
       evidence_ids: [],
       updated_at: '2026-08-19T00:00:00Z',
     })
-    mocks.getRoles.mockResolvedValue([])
+    mocks.uploadAvatar.mockResolvedValue({})
     mocks.getTeacherRoles.mockResolvedValue(roles)
     mocks.updateMe.mockResolvedValue({})
   })
 
   afterEach(() => cleanup())
 
-  it('渲染角色卡片并可切换', async () => {
+  it('渲染风格卡片并可切换', async () => {
     render(React.createElement(SettingsPage))
 
-    await waitFor(() => expect(screen.getByText('strict-mentor')).toBeTruthy())
-    fireEvent.click(screen.getByText('strict-mentor'))
+    await waitFor(() => expect(screen.getByText('严谨清晰')).toBeTruthy())
+    fireEvent.click(screen.getByText('严谨清晰'))
 
     await waitFor(() =>
       expect(mocks.updateMe).toHaveBeenCalledWith({
-        current_teacher_role_id: 'role-strict',
+        current_teacher_role_id: '00000000-0000-0000-0000-000000000002',
       }),
     )
     expect(mocks.refreshMe).toHaveBeenCalled()
   })
 
-  it('展示六种桌宠并立即保存用户选择', async () => {
+  it('展示六种教师形象并立即保存用户选择', async () => {
     render(React.createElement(SettingsPage))
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: '桌宠' })).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: /选择阿尼亚/ }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'AI 教师形象' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: /选择阿尼亚形象/ }))
 
     expect(useCompanionStore.getState().selectedPetId).toBe('anya')
     expect(window.localStorage.getItem('shuangling-companion-pet')).toBe('anya')
-    expect(screen.getByRole('button', { name: /选择阿尼亚/ }).getAttribute('aria-pressed')).toBe(
+    expect(screen.getByRole('button', { name: /选择阿尼亚形象/ }).getAttribute('aria-pressed')).toBe(
       'true',
     )
   })

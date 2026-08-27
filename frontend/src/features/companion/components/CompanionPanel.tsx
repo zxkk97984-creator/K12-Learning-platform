@@ -4,7 +4,7 @@ import { ConversationPanelContent } from '@/features/conversation'
 
 import { placePanel, type PanelRect } from '../lib/geometry'
 import { getCompanionPet } from '../lib/sprite'
-import { useCompanionStore } from '../store/companion-store'
+import { useCompanionStore, useTeacherName } from '../store/companion-store'
 import { spriteFrames } from '../types'
 import { CompanionSprite } from './CompanionSprite'
 
@@ -19,6 +19,7 @@ export function CompanionPanel({ dockRef }: CompanionPanelProps) {
   const aiState = useCompanionStore((state) => state.aiState)
   const selectedPetId = useCompanionStore((state) => state.selectedPetId)
   const selectedPet = getCompanionPet(selectedPetId)
+  const teacherName = useTeacherName()
   const setOpen = useCompanionStore((state) => state.setOpen)
   const setAiState = useCompanionStore((state) => state.setAiState)
   const [rect, setRect] = useState<PanelRect | null>(null)
@@ -40,7 +41,7 @@ export function CompanionPanel({ dockRef }: CompanionPanelProps) {
     <aside
       className="fixed z-35 flex flex-col overflow-hidden rounded-[18px] border border-fg bg-surface shadow-soft"
       style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
-      aria-label="霜铃对话面板"
+      aria-label={`${teacherName}对话面板`}
       data-open="true"
     >
       <div className="flex min-h-[67px] items-center justify-between border-b border-border px-4">
@@ -50,11 +51,12 @@ export function CompanionPanel({ dockRef }: CompanionPanelProps) {
               state={aiState}
               cellWidth={33}
               label={`${selectedPet.displayName}${spriteFrames[aiState].label}`}
-              className="pointer-events-none -translate-x-1.5 -translate-y-1"
+              animated={false}
+              className="pointer-events-none"
             />
           </div>
           <div className="min-w-0">
-            <strong className="font-display text-sm">霜铃</strong>
+            <strong className="font-display text-sm">{teacherName}</strong>
             <span className="ml-2 text-[10px] text-muted">对话面板骨架 · 1-F 填充聊天内容</span>
           </div>
         </div>

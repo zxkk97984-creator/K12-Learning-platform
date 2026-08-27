@@ -4,8 +4,8 @@
 #
 # 用法: bash scripts/stop.sh [--keep-db]
 #
-# 默认: 关闭前端 + 后端 + 数据库容器（docker compose stop，数据卷保留）
-#   --keep-db  只关前端 + 后端，数据库容器保持运行
+# 默认: 关闭前端 + 后端 + 后台 Worker + 数据库容器（docker compose stop，数据卷保留）
+#   --keep-db  只关前端 + 后端 + Worker，数据库容器保持运行
 #
 # 幂等: 已关闭的服务静默跳过；重复执行安全。
 # =============================================================================
@@ -79,7 +79,23 @@ else
 fi
 cleanup_port 5174 "前端"
 
-# ---------- 2. 后端 ----------
+# ---------- 2. 后台 Worker ----------
+if [ -f backend/.worker.pid ]; then
+  PID="$(cat backend/.worker.pid)"
+  stop_pid "$PID" "后台 Worker"
+  rm -f backend/.worker.pid
+else
+  # 无 PID 文件时按进程特征兜底（仅匹配本项目 worker 入口，避免误伤）
+  WORKER_PIDS="$(pgrep -f 'python -m app\.jobs\.worker' 2>/dev/null || true)"
+  if [ -n "$WORKER_PIDS" ]; then
+    printf '%s\n' "$WORKER_PIDS" | xargs -r kill -TERM 2>/dev/null || true
+    log "已按进程特征关闭后台 Worker"
+  else
+    log "后台 Worker 未在运行"
+  fi
+fi
+
+# ---------- 3. 后端 ----------
 if [ -f backend/.server.pid ]; then
   PID="$(cat backend/.server.pid)"
   stop_pid "$PID" "后端 API"
@@ -94,7 +110,7 @@ else
 fi
 cleanup_port 8002 "后端"
 
-# ---------- 3. 数据库 ----------
+# ---------- 4. 数据库 ----------
 if [ -z "$KEEP_DB" ]; then
   log "关闭 PostgreSQL 容器（数据卷保留，--keep-db 可跳过）..."
   docker compose stop postgres 2>/dev/null && log "PostgreSQL 已停止" || log "PostgreSQL 未在运行"

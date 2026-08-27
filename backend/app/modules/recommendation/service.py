@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 from uuid import UUID
 
@@ -13,11 +13,20 @@ from app.infrastructure.database.models import (
     QuizAnswer,
     QuizSession,
     Recommendation,
+    StudentMemory,
     StudentProfile,
 )
 
 
-RecommendationType = Literal["CONTINUE_READING", "REVIEW_WEAK", "READ_NEXT"]
+RecommendationType = Literal[
+    "CONTINUE_READING",
+    "REVIEW_WEAK",
+    "READ_NEXT",
+    "INTEREST_MATCH",
+]
+
+# 规则式推荐默认过期天数：过期的推荐不再出现在列表（状态保持 ACTIVE，不写 EXPIRED）。
+RECOMMENDATION_TTL_DAYS = 7
 
 
 @dataclass(frozen=True)
@@ -32,6 +41,15 @@ class BookProgressSignal:
     grade_min: int | None = None
     grade_max: int | None = None
     tags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class InterestSignal:
+    """来自学生长期记忆（PROFILE/PREFERENCE）的兴趣标签证据。"""
+
+    tag: str
+    memory_id: UUID
+    memory_content: str
 
 
 @dataclass(frozen=True)
@@ -111,6 +129,7 @@ def build_recommendation_drafts(
     quiz_answer_signals: list[QuizAnswerSignal],
     completed_progress_signals: list[BookProgressSignal],
     book_candidates: list[BookCandidate],
+    interest_signals: list[InterestSignal] | None = None,
     recent_quiz_limit: int = 10,
 ) -> list[RecommendationDraft]:
     """Generate explainable recommendations without I/O or external services."""
@@ -195,6 +214,48 @@ def build_recommendation_drafts(
                         str(completed_progress.progress_id),
                         str(completed_progress.book_id),
                     ],
+                    related_book_id=candidate.book_id,
+                )
+            )
+
+    # R4: 长期记忆中的兴趣偏好 ↔ 未读书籍主题匹配（Phase 3 记忆驱动推荐）。
+    # 证据为命中的记忆行 id，「为什么推荐」可回查到真实记忆内容。
+    if interest_signals:
+        started_ids = {progress.book_id for progress in progress_signals}
+        matches: dict[str, list[InterestSignal]] = {}
+        title_to_candidate: dict[str, BookCandidate] = {}
+        for candidate in book_candidates:
+            if candidate.is_started or candidate.book_id in started_ids:
+                continue
+            title_to_candidate[candidate.title] = candidate
+            for signal in interest_signals:
+                tag = signal.tag.strip()
+                if len(tag) < 2:
+                    continue
+                hit_tags = any(tag in t for t in candidate.tags)
+                hit_desc = tag in (candidate.description or "")
+                if hit_tags or hit_desc:
+                    matches.setdefault(candidate.title, []).append(signal)
+        if matches:
+            best_title = sorted(matches.keys())[0]
+            signals_for_best = matches[best_title]
+            candidate = title_to_candidate[best_title]
+            memory_ids = [str(signal.memory_id) for signal in signals_for_best]
+            interest_names = sorted({signal.tag for signal in signals_for_best})
+            drafts.append(
+                RecommendationDraft(
+                    recommendation_type="INTEREST_MATCH",
+                    title=f"试试《{candidate.title}》",
+                    description=(
+                        f"你的学习档案里提到对{'、'.join(interest_names)}的兴趣，"
+                        "这本书正好围绕这些主题展开。"
+                    ),
+                    reason=(
+                        f"你的长期记忆记录了对{'、'.join(interest_names)}的兴趣"
+                        f"（依据 {len(memory_ids)} 条记忆），"
+                        f"《{candidate.title}》的主题与之匹配且尚未开始阅读。"
+                    ),
+                    evidence_ids=memory_ids,
                     related_book_id=candidate.book_id,
                 )
             )
@@ -304,11 +365,42 @@ class RecommendationService:
             )
             for book in books
         ]
+        memory_rows = (
+            await session.execute(
+                select(StudentMemory).where(
+                    StudentMemory.student_id == student_id,
+                    StudentMemory.status == "ACTIVE",
+                    StudentMemory.memory_type.in_(("PROFILE", "PREFERENCE")),
+                )
+            )
+        ).scalars().all()
+        candidate_tags = {
+            tag
+            for candidate in book_candidates
+            for tag in candidate.tags
+        }
+        interest_signals: list[InterestSignal] = []
+        seen_pairs: set[tuple[UUID, str]] = set()
+        for memory in memory_rows:
+            for tag in sorted(candidate_tags):
+                if len(tag) >= 2 and tag in memory.content:
+                    key = (memory.memory_id, tag)
+                    if key not in seen_pairs:
+                        seen_pairs.add(key)
+                        interest_signals.append(
+                            InterestSignal(
+                                tag=tag,
+                                memory_id=memory.memory_id,
+                                memory_content=memory.content,
+                            )
+                        )
+
         return (
             progress_signals,
             quiz_answer_signals,
             completed_progress_signals,
             book_candidates,
+            interest_signals,
         )
 
     async def generate_for_student(
@@ -320,6 +412,7 @@ class RecommendationService:
             quiz_answer_signals=signals[1],
             completed_progress_signals=signals[2],
             book_candidates=signals[3],
+            interest_signals=signals[4] if len(signals) > 4 else None,
         )
 
         dismissed_rows = (
@@ -355,6 +448,9 @@ class RecommendationService:
                 updated_at=now,
             )
         )
+        # 规则式推荐：无 LLM 参与，model_info 置空，skill_version 记录规则版本；
+        # expires_at 给一条默认 TTL，到期后由 list_active 自动排除（status 保持 ACTIVE，不落 EXPIRED 写路径）。
+        default_ttl = timedelta(days=RECOMMENDATION_TTL_DAYS)
         session.add_all(
             [
                 Recommendation(
@@ -365,6 +461,14 @@ class RecommendationService:
                     reason=draft.reason,
                     evidence_ids=draft.evidence_ids,
                     related_book_id=draft.related_book_id,
+                    # D9：规则推荐不引用外部知识来源，source_ids 保持空、license/source_url 置空；
+                    # 未来引入基于知识资源的推荐时可在此填充。
+                    source_ids=[],
+                    license=None,
+                    source_url=None,
+                    model_info=None,
+                    skill_version="rules-v1",
+                    expires_at=now + default_ttl,
                     status="ACTIVE",
                 )
                 for draft in drafts
@@ -382,6 +486,7 @@ class RecommendationService:
     async def list_active(
         self, session: AsyncSession, student_id: UUID
     ) -> list[Recommendation]:
+        now = datetime.now(timezone.utc)
         return list(
             (
                 await session.execute(
@@ -389,6 +494,9 @@ class RecommendationService:
                     .where(
                         Recommendation.student_id == student_id,
                         Recommendation.status == "ACTIVE",
+                        # 过期推荐自动排除（status 仍为 ACTIVE，但不再对用户可见）。
+                        (Recommendation.expires_at.is_(None))
+                        | (Recommendation.expires_at > now),
                     )
                     .order_by(
                         Recommendation.created_at.desc(),

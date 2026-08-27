@@ -46,8 +46,10 @@ class ConversationListItemDTO(BaseModel):
     status: ConversationStatus
     channel: ConversationChannel
     teacher_role_id: UUID | None
-    # TeacherRole is a Phase 11 domain; keep the contract slot null until then.
+    # Phase 4：真实教师风格摘要（名称/语气），不再恒为 null
     teacher_role: dict | None = None
+    # 列表页最近一条消息预览（内容截断），详情见 recent_messages
+    last_message_preview: str | None = None
     last_message_at: datetime | None
     updated_at: datetime
 

@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import type { Book, BookProgress } from '@/entities/book/types'
 import type { Stage } from '@/entities/student/types'
-import { useCompanionStore } from '@/features/companion'
+import { useCompanionStore, useTeacherName } from '@/features/companion'
 import type { ConversationIntent } from '@/features/conversation'
+import type { Recommendation } from '@/shared/api/recommendation-service'
 import { useConversationStore } from '@/features/conversation'
-import { bookRecommendations } from '@/mocks/data/recommendations'
-import { contentService } from '@/mocks/services'
+import { useScreenContext } from '@/features/screen-context'
+import { contentService, recommendationService } from '@/shared/services'
 
 const TOPICS = ['AI 基础', '机器人', '编程', '数据', 'AI 伦理', '数字素养']
 const TINT_BG: Record<number, string> = {
@@ -32,12 +33,57 @@ function progressLabel(progress: BookProgress | undefined): string {
 export default function LibraryPage() {
   const navigate = useNavigate()
   const runIntent = useConversationStore((state) => state.runIntent)
+  const { screenContext } = useScreenContext()
+  const teacherName = useTeacherName()
   const [books, setBooks] = useState<Book[]>([])
   const [progressByBook, setProgressByBook] = useState<Record<string, BookProgress>>({})
   const [grade, setGrade] = useState<'推荐' | Stage>('推荐')
   const [topics, setTopics] = useState<string[]>([])
   const [search, setSearch] = useState('')
   const [moreFilters, setMoreFilters] = useState(false)
+  // Phase 3：精选区来自真实推荐 API（可解释 reason + 证据 + dismiss）
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([])
+  const [recLoading, setRecLoading] = useState(true)
+  const [recError, setRecError] = useState(false)
+
+  const loadRecommendations = useCallback(async () => {
+    setRecLoading(true)
+    setRecError(false)
+    try {
+      setRecommendations(await recommendationService.getRecommendations())
+    } catch {
+      setRecommendations([])
+      setRecError(true)
+    } finally {
+      setRecLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadRecommendations()
+  }, [loadRecommendations])
+
+  const dismissRecommendation = useCallback(
+    async (recommendationId: string) => {
+      try {
+        await recommendationService.dismissRecommendation(recommendationId)
+      } catch {
+        // 忽略失败静默，刷新时自然重试
+      }
+      await loadRecommendations()
+    },
+    [loadRecommendations],
+  )
+
+  const featuredRecommendations = recommendations
+    .map((recommendation) => ({
+      recommendation,
+      book: books.find((item) => item.book_id === recommendation.related_book_id),
+    }))
+    .filter((entry): entry is { recommendation: Recommendation; book: Book } =>
+      Boolean(entry.book),
+    )
+    .slice(0, 3)
 
   useEffect(() => {
     void (async () => {
@@ -69,10 +115,9 @@ export default function LibraryPage() {
   }, [books, grade, topics, search])
 
   const showFeatured = grade === '推荐' && topics.length === 0 && !search.trim()
-  const featuredBooks = books.slice(0, 3)
 
   const triggerIntent = (intent: ConversationIntent) => {
-    runIntent(intent)
+    runIntent(intent, undefined, screenContext)
     useCompanionStore.getState().setOpen(true)
   }
 
@@ -91,7 +136,7 @@ export default function LibraryPage() {
         找到下一本适合你的书。
       </h1>
       <p className="mt-3 max-w-[52ch] text-sm leading-relaxed text-muted">
-        内容按年级和兴趣整理。霜铃会把你的最近学习变化，也放进推荐理由里。
+        内容按年级和兴趣整理。{teacherName}会把你的最近学习变化，也放进推荐理由里。
       </p>
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -162,15 +207,20 @@ export default function LibraryPage() {
         <>
           <div className="mt-6 flex items-baseline justify-between border-b border-fg pb-2.5">
             <h2 className="font-display text-xl text-fg">为你精选</h2>
-            <span className="font-mono text-[10px] text-muted">根据最近学习变化</span>
+            <span className="font-mono text-[10px] text-muted">基于你的真实学习数据</span>
           </div>
+          {recLoading ? (
+            <p className="mt-4 text-[11px] text-muted">正在根据你的学习数据生成精选…</p>
+          ) : recError ? (
+            <p className="mt-4 text-[11px] text-muted">推荐服务暂时不可用，稍后再来看看。</p>
+          ) : featuredRecommendations.length === 0 ? (
+            <p className="mt-4 text-[11px] text-muted">
+              还没有可推荐的书籍——先去阅读一章，精选会基于你的真实进度出现。
+            </p>
+          ) : null}
           <div className="mt-4 grid grid-cols-3 gap-4 max-md:grid-cols-1">
-            {featuredBooks.map((book) => {
+            {featuredRecommendations.map(({ book, recommendation }) => {
               const progress = progressByBook[book.book_id]
-              const recommendationIndex = bookRecommendations.findIndex(
-                (item) => item.bookId === book.book_id,
-              )
-              const recommendation = recommendationIndex >= 0 ? bookRecommendations[recommendationIndex] : undefined
               return (
                 <article key={book.book_id} className="overflow-hidden rounded-[14px] border border-border bg-surface">
                   <div className="relative min-h-[132px] p-4 text-surface" style={{ backgroundColor: TINT_BG[book.tint ?? 1] ?? 'var(--color-fg)' }}>
@@ -222,17 +272,32 @@ export default function LibraryPage() {
                         ) : null}
                       </div>
                     </div>
-                    {recommendation ? (
-                      <button
-                        type="button"
-                        className="mt-2 text-[11px] text-muted hover:text-fg hover:underline"
-                        onClick={() =>
-                          triggerIntent(`book-why-${recommendationIndex + 1}` as ConversationIntent)
-                        }
-                      >
-                        为什么推荐？
-                      </button>
+                    {recommendation.reason ? (
+                      <p className="mt-2 border-t border-border pt-2 text-[11px] leading-relaxed text-muted">
+                        {recommendation.reason}
+                      </p>
                     ) : null}
+                    <div className="mt-1.5 flex items-center gap-3">
+                      {recommendation.recommendation_id ? (
+                        <button
+                          type="button"
+                          data-testid={`dismiss-${recommendation.recommendation_id}`}
+                          className="text-[11px] text-muted hover:text-fg hover:underline"
+                          onClick={() => void dismissRecommendation(recommendation.recommendation_id)}
+                        >
+                          不感兴趣
+                        </button>
+                      ) : null}
+                      {recommendation.evidence_ids.length > 0 ? (
+                        <button
+                          type="button"
+                          className="text-[11px] text-muted hover:text-fg hover:underline"
+                          onClick={() => triggerIntent('recommend-next' as ConversationIntent)}
+                        >
+                          为什么推荐？
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </article>
               )
@@ -262,10 +327,6 @@ export default function LibraryPage() {
         <div className="mt-4 grid grid-cols-4 gap-3 max-lg:grid-cols-2 max-md:grid-cols-2 max-sm:grid-cols-1">
           {filtered.map((book) => {
             const progress = progressByBook[book.book_id]
-            const recommendationIndex = bookRecommendations.findIndex(
-              (item) => item.bookId === book.book_id,
-            )
-            const recommendation = recommendationIndex >= 0 ? bookRecommendations[recommendationIndex] : undefined
             return (
               <article key={book.book_id} className="overflow-hidden rounded-[12px] border border-border bg-surface">
                 <div className="relative h-[54px] border-b border-border" style={{ backgroundColor: TINT_BG[book.tint ?? 1] ?? 'var(--color-fg)' }}>
@@ -309,17 +370,6 @@ export default function LibraryPage() {
                       ) : null}
                     </div>
                   </div>
-                  {recommendation ? (
-                    <button
-                      type="button"
-                      className="mt-1 text-[11px] text-muted hover:text-fg hover:underline"
-                      onClick={() =>
-                        triggerIntent(`book-why-${recommendationIndex + 1}` as ConversationIntent)
-                      }
-                    >
-                      为什么推荐？
-                    </button>
-                  ) : null}
                 </div>
               </article>
             )

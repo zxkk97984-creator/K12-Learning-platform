@@ -164,7 +164,7 @@ class TestProfile:
     def test_patch_me_current_teacher_role_id_accepted(
         self, client: TestClient, student_token: str
     ) -> None:
-        # Phase 11：teacher_roles 已建表，使用迁移内置的 strict-mentor 角色。
+        # Phase 11：teacher_roles 已建表，使用迁移内置的严谨清晰角色。
         role_id = "00000000-0000-0000-0000-000000000002"
         response = client.patch(
             "/api/v1/me", headers=auth_headers(student_token), json={"current_teacher_role_id": role_id}
@@ -255,3 +255,46 @@ class TestPermissions:
         response = client.get("/api/v1/me", headers=auth_headers(admin_token))
         assert response.status_code == 403
         assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
+class TestAvatarUpload:
+    PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"fake-png-body"
+
+    def test_upload_avatar_roundtrip(
+        self, client: TestClient, student_token: str
+    ) -> None:
+        response = client.post(
+            "/api/v1/me/avatar",
+            headers=auth_headers(student_token),
+            files={"file": ("me.png", self.PNG_BYTES, "image/png")},
+        )
+        assert response.status_code == 200
+        avatar_url = response.json()["data"]["avatar_url"]
+        assert avatar_url and avatar_url.startswith("/api/v1/files/avatars/")
+        filename = avatar_url.rsplit("/", 1)[-1]
+
+        served = client.get(avatar_url)
+        assert served.status_code == 200
+        assert served.headers["content-type"].startswith("image/png")
+        assert served.content == self.PNG_BYTES
+
+        me = client.get("/api/v1/me", headers=auth_headers(student_token))
+        assert me.json()["data"]["avatar_url"] == avatar_url
+
+    def test_upload_avatar_rejects_bad_type(
+        self, client: TestClient, student_token: str
+    ) -> None:
+        response = client.post(
+            "/api/v1/me/avatar",
+            headers=auth_headers(student_token),
+            files={"file": ("x.txt", b"hello", "text/plain")},
+        )
+        assert response.status_code == 415
+
+    def test_get_avatar_unknown_404(self, client: TestClient) -> None:
+        response = client.get("/api/v1/files/avatars/does-not-exist.png")
+        assert response.status_code == 404
+
+    def test_get_avatar_traversal_blocked(self, client: TestClient) -> None:
+        response = client.get("/api/v1/files/avatars/..%2Fsecrets.png")
+        assert response.status_code in (403, 404)

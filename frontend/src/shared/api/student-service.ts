@@ -24,4 +24,5 @@ export interface StudentService {
   getPreferences(): Promise<StudentPreference>
   updatePreferences(patch: StudentPreferencePatch): Promise<StudentPreference>
   getTeacherRoles(): Promise<TeacherRoleDTO[]>
+  uploadAvatar(file: File): Promise<StudentProfile>
 }

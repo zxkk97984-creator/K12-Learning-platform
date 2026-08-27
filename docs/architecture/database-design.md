@@ -15,7 +15,7 @@
 - 以下数据**只允许**持久化在 PostgreSQL（架构 §3.2）：
   - 全部 27 个业务实体（users → admins）；
   - 幂等映射表 `idempotency_keys`（0-D §1.7）；
-  - 未来若引入 `background_jobs` 持久化状态，也归 PG（0-C §8 已排除出业务实体，本设计暂不建表，仅注明）。
+  - 未来若引入 `background_jobs` 持久化状态，也归 PG（0-C §8 已排除出业务实体，本设计暂不建表，仅注明）——**已落地（P1-1）**：`background_jobs` 表已建成（见 §3.29 `background_jobs`），作为 Worker 的 PostgreSQL 队列事实源。
 - Redis 丢失不影响事实：Redis 里的一切都可以从 PG 重建或容忍丢失。
 - 扩展：PostgreSQL 18 内置 `gen_random_uuid()`（无需 pgcrypto）；`vector` 扩展（pgvector）用于两个 embedding 列，**Phase 8 才启用**，维度由 Embedding Provider 决定（§1.4）。
 
@@ -81,7 +81,7 @@
 
 ---
 
-## 3. 表设计（27 实体 + 幂等映射表）
+## 3. 表设计（27 业务实体 + 幂等映射 + Worker 队列 + 结算台账）
 
 > 通用备注：所有 `jsonb` 数组引用（`*_ids`）不是物理外键，语义见 §6.2；所有 `updated_at` 由应用写入；`CHECK` 枚举取值与 domain-model 完全一致。
 
@@ -121,6 +121,7 @@
 | `current_teacher_role_id` | uuid | 是 | NULL | 当前教师角色 |
 | `learning_days` | integer | 否 | 0 | 统计摘要缓存，CHECK >=0 |
 | `total_learning_minutes` | integer | 否 | 0 | 统计摘要缓存，CHECK >=0 |
+| `total_learning_seconds` | integer | 否 | 0 | **Phase 3 新增**：以秒精确累计真实阅读/学习时长；minutes 由 seconds 派生。CHECK >=0 |
 | `completed_books` | integer | 否 | 0 | 统计摘要缓存，CHECK >=0 |
 | `completed_chapters` | integer | 否 | 0 | 统计摘要缓存，CHECK >=0 |
 | `quiz_count` | integer | 否 | 0 | 统计摘要缓存，CHECK >=0 |
@@ -305,7 +306,7 @@
 
 - PK：`event_id`。
 - FK（全部 `RESTRICT`，**已裁定：审计链 RESTRICT，隐私删除走脱敏**）：`student_id → student_profiles`；`session_id → learning_sessions`；`book_id → books`；`chapter_id → chapters`；`block_id → content_blocks`；`conversation_id → conversations`；`quiz_session_id → quiz_sessions`。
-- CHECK：`event_type IN ('CHAPTER_STARTED','CHAPTER_FINISHED','SECTION_READ','KNOWLEDGE_CARD_VIEWED','HELP_REQUESTED','EXPLAIN_REQUESTED','SUMMARY_REQUESTED','QUIZ_CREATED','QUIZ_ANSWERED','ANSWER_CORRECT','ANSWER_WRONG','HINT_REQUESTED','QUESTION_ASKED','BOOK_STARTED','BOOK_FINISHED','VOICE_SESSION_STARTED','ROLE_SWITCHED','TEXT_SELECTED')`。`TEXT_SELECTED` 为 0-D 先行支持的待 0-C 补录项（§9 风险）。
+- CHECK：`event_type IN ('CHAPTER_STARTED','CHAPTER_FINISHED','SECTION_READ','KNOWLEDGE_CARD_VIEWED','HELP_REQUESTED','EXPLAIN_REQUESTED','SUMMARY_REQUESTED','QUIZ_CREATED','QUIZ_ANSWERED','ANSWER_CORRECT','ANSWER_WRONG','HINT_REQUESTED','QUESTION_ASKED','BOOK_STARTED','BOOK_FINISHED','VOICE_SESSION_STARTED','VOICE_SESSION_ENDED','ROLE_SWITCHED','TEXT_SELECTED')`。`TEXT_SELECTED` 与 `VOICE_SESSION_ENDED` 为 0-D 先行支持的待 0-C 补录项（Phase 3 落地）。
 - 索引：`(student_id, occurred_at DESC)`；`(student_id, event_type)`；`(quiz_session_id)`；`(conversation_id)`；`(session_id)`。
 - 不可变性：**只 INSERT，不 UPDATE/DELETE**（应用层保证；审计与证据链依赖）。
 - 预留：未来按月 RANGE 分区候选（§8）。
@@ -332,6 +333,21 @@
 - FK：`student_id → student_profiles ON DELETE RESTRICT`（学生数据统一 RESTRICT，与审计链一致）；`book_id → books ON DELETE RESTRICT`；`chapter_id → chapters ON DELETE RESTRICT`；`block_id → content_blocks ON DELETE SET NULL`（位置指针）。
 - CHECK：`status IN ('NOT_STARTED','READING','COMPLETED')`；`position_percent BETWEEN 0 AND 100`；`total_seconds >= 0`。
 - 索引：唯一约束覆盖 `(student_id)` 前缀查询。
+
+### 3.11b `reading_settlements`（Phase 3 新增，非 Domain 实体）
+
+> **实现核对（2026-08-27）**：本表为 Phase 3 学习时长结算台账 `ReadingSettlement`，不属于 27 个业务 Domain 实体，额外专列。
+
+| 列 | 类型 | 可空 | 默认 | 说明 |
+| --- | --- | --- | --- | --- |
+| `session_id` | uuid | 否 | — | 主键 = learning_session_id（保证幂等结算） |
+| `student_id` | uuid | 否 | — | 学生 |
+| `book_id` | uuid | 否 | — | 书 |
+| `settled_seconds` | integer | 否 | — | 本次结算秒数 |
+| `created_at` | timestamptz | 否 | now() | — |
+
+- PK：`session_id`（唯一：同一学习会话只会向 `book_progress.total_seconds` 结算一次，重复 PATCH/自动关闭/Worker 重放天然幂等）。
+- FK：`session_id → learning_sessions ON DELETE RESTRICT`；`student_id → student_profiles ON DELETE RESTRICT`；`book_id → books ON DELETE RESTRICT`。
 
 ### 3.12 `conversations`
 
@@ -609,29 +625,26 @@
 
 ### 3.24 `recommendations`
 
+> **实现核对（2026-08-27）**：下表以 `backend/app/infrastructure/database/models.py::Recommendation` 实际列为准。相比 §5.7.1 初始设计，最终实现精简为：`description`、`related_book_id`（未采用 `book_id`/`chapter_id` 双列），且**未落地** `source_ids`/`license`/`source_url`/`model_info`/`skill_version`/`expires_at`；`status` 仅 `ACTIVE/DISMISSED`（**无 EXPIRED**）。D9 来源溯源与过期态尚未实现（见 §9 风险）。
+
 | 列 | 类型 | 可空 | 默认 | 说明 |
 | --- | --- | --- | --- | --- |
 | `recommendation_id` | uuid | 否 | gen_random_uuid() | 主键 |
 | `student_id` | uuid | 否 | — | 学生 |
-| `recommendation_type` | varchar(16) | 否 | — | BOOK/CHAPTER/REVIEW/QUIZ/DAILY_PLAN |
-| `book_id` | uuid | 是 | NULL | 目标书 |
-| `chapter_id` | uuid | 是 | NULL | 目标章 |
+| `recommendation_type` | varchar(32) | 否 | — | 推荐类型（内部枚举，非 DB CHECK） |
 | `title` | varchar(255) | 否 | — | 标题 |
+| `description` | text | 否 | — | 描述 |
 | `reason` | text | 否 | — | 推荐理由（可解释） |
 | `evidence_ids` | jsonb | 否 | '[]' | 依据（jsonb 引用） |
-| `source_ids` | jsonb | 否 | '[]' | 来源资源（jsonb 引用，D9） |
-| `license` | varchar(128) | 是 | NULL | 引用许可 |
-| `source_url` | varchar(512) | 是 | NULL | 引用 URL |
-| `status` | varchar(16) | 否 | 'ACTIVE' | ACTIVE/DISMISSED/EXPIRED |
-| `expires_at` | timestamptz | 是 | NULL | 过期时间 |
-| `model_info` | jsonb | 是 | NULL | 生成模型 |
-| `skill_version` | varchar(64) | 否 | — | 推荐 Skill 版本 |
+| `related_book_id` | uuid | 是 | NULL | 目标书（FK→books ON DELETE SET NULL） |
+| `status` | varchar(16) | 否 | 'ACTIVE' | ACTIVE / DISMISSED（实际无 EXPIRED） |
 | `created_at` | timestamptz | 否 | now() | — |
+| `updated_at` | timestamptz | 否 | now() | — |
 
 - PK：`recommendation_id`。
-- FK：`student_id → student_profiles ON DELETE RESTRICT`（**已裁定：审计链 RESTRICT，隐私删除走脱敏**）；`book_id → books ON DELETE RESTRICT`；`chapter_id → chapters ON DELETE RESTRICT`。
-- CHECK：`recommendation_type IN ('BOOK','CHAPTER','REVIEW','QUIZ','DAILY_PLAN')`；`status IN ('ACTIVE','DISMISSED','EXPIRED')`。
-- 索引：`(student_id, status, created_at DESC)`（首页推荐）；`(book_id)`；`(chapter_id)`。
+- FK：`student_id → student_profiles ON DELETE RESTRICT`（**已裁定：审计链 RESTRICT，隐私删除走脱敏**）；`related_book_id → books ON DELETE SET NULL`。
+- CHECK：`status IN ('ACTIVE','DISMISSED')`。
+- 索引：`(student_id, status, created_at DESC)`（首页推荐）。
 
 ### 3.25 `knowledge_resources`
 
@@ -717,6 +730,25 @@
 - 索引：`(actor_id, expires_at)`（TTL 清理 Worker）。
 - 物理删除：过期行由 Worker 定期清理（**唯一允许物理删除的表**）。
 - 备注：0-D §1.7 按 `(actor_id, actor_type, key)` 作用域；`actor_id` 不设物理 FK，应用层按 `actor_type` 校验归属。
+
+### 3.29 `background_jobs`（应用基础设施表，非 Domain 实体 / P1-1 新增）
+
+> **实现核对（2026-08-27）**：本表承载 Worker 的 PostgreSQL 队列（0-C §8 已通过「未来若引入……归 PG」）；本设计 §1 原注明「暂不建表」，现已落地。
+
+| 列 | 类型 | 可空 | 默认 | 说明 |
+| --- | --- | --- | --- | --- |
+| `job_id` | uuid | 否 | gen_random_uuid() | 主键 |
+| `job_type` | varchar(64) | 否 | — | 知识解析/摘要/记忆合并等 |
+| `status` | varchar(16) | 否 | 'queued' | queued/running/success/failed |
+| `attempt` | integer | 否 | 0 | 尝试次数 |
+| `payload` | jsonb | 否 | '{}' | 任务参数 |
+| `error` | text | 是 | NULL | 失败原因 |
+| `created_at` | timestamptz | 否 | now() | — |
+| `started_at` | timestamptz | 是 | NULL | — |
+| `finished_at` | timestamptz | 是 | NULL | — |
+
+- CHECK：`status IN ('queued','running','success','failed')`。
+- 索引：`(status, created_at)`（Worker 轮询取队）。
 
 ---
 
@@ -832,7 +864,7 @@
 
 ---
 
-## 7. 与 Domain Model 一致性自查表（27 ↔ 27）
+## 7. 与 Domain Model 一致性自查表（27 ↔ 27，另加 2 支撑表）
 
 | # | Domain 实体 | 表名 | 覆盖要素 | 备注 |
 | --- | --- | --- | --- | --- |
@@ -859,13 +891,15 @@
 | 21 | MemoryEvidence | `memory_evidence` | count>=1 / 不可变 | event_ids jsonb |
 | 22 | StudentEpisode | `student_episodes` | embedding 列（Phase 8） | 向量 |
 | 23 | ProfileInsight | `profile_insights` | **level 5 档 CHECK** / 无数字列 | 版本化 |
-| 24 | Recommendation | `recommendations` | source_ids/license/source_url（D9） | 可解释 |
+| 24 | Recommendation | `recommendations` | title/description/reason/evidence_ids/related_book_id + 状态 CHECK | 可解释（实际列见 §3.24 注；D9 的 source_ids/license/source_url 当前实现未落地） |
 | 25 | KnowledgeResource | `knowledge_resources` | license/copyright 非空 | storage_key |
 | 26 | KnowledgeChunk | `knowledge_chunks` | (resource_id, chunk_index) 唯一 / embedding | 向量 |
 | 27 | Admin | `admins` | role_level CHECK | 1:1 user |
 | — | （基础设施） | `idempotency_keys` | (actor_id, actor_type, key) 唯一 / TTL | **非 Domain，0-D §1.7 要求** |
+| — | （支撑） | `background_jobs` | status 机 / attempt / payload | **非 Domain，P1-1 Worker 队列** |
+| — | （支撑） | `reading_settlements` | session_id 主键幂等结算 | **非 Domain，Phase 3 时长台账** |
 
-结论：**27 个 Domain 实体 ↔ 27 张表，无遗漏、无多余业务表**；额外仅有 1 张幂等映射基础设施表（任务要求）。
+结论：**27 个 Domain 实体 ↔ 27 张业务表，无遗漏、无多余业务表**；额外 3 张基础设施/支撑表：`idempotency_keys`（0-D §1.7 幂等约定要求）、`background_jobs`（P1-1 Worker 队列）、`reading_settlements`（Phase 3 时长结算台账）。
 
 ---
 

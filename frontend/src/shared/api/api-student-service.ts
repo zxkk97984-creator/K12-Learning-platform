@@ -5,8 +5,8 @@ import type {
   TeacherRoleDTO,
 } from '@/entities/student/types'
 
-import { clearToken, setToken } from './auth'
-import { apiRequest } from './http'
+import { clearToken, getToken, setToken } from './auth'
+import { API_BASE, ApiError, apiRequest } from './http'
 import type {
   StudentPreferencePatch,
   StudentProfilePatch,
@@ -53,5 +53,26 @@ export class ApiStudentService implements StudentService {
 
   getTeacherRoles(): Promise<TeacherRoleDTO[]> {
     return apiRequest<TeacherRoleDTO[]>('/teacher-roles?enabled=true')
+  }
+
+  async uploadAvatar(file: File): Promise<StudentProfile> {
+    const form = new FormData()
+    form.append('file', file)
+    const token = getToken()
+    const response = await fetch(`${API_BASE}/me/avatar`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    })
+    const payload: unknown = await response.json().catch(() => null)
+    if (!response.ok) {
+      const error = (payload as { error?: { code?: string; message?: string } })?.error
+      throw new ApiError(
+        response.status,
+        error?.code ?? 'HTTP_ERROR',
+        error?.message ?? `HTTP ${response.status}`,
+      )
+    }
+    return (payload as { data: StudentProfile }).data
   }
 }

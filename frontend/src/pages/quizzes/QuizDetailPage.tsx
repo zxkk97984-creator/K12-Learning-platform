@@ -6,10 +6,10 @@ import type {
   QuizInteraction,
   QuizQuestion,
 } from '@/entities/quiz/types'
-import { useCompanionStore } from '@/features/companion'
+import { useCompanionStore, useTeacherName } from '@/features/companion'
 import { useConversationStore } from '@/features/conversation'
 import { quizSource } from '@/features/quiz/lib'
-import { quizService } from '@/mocks/services'
+import { quizService } from '@/shared/services'
 import type { QuizSessionDetail } from '@/shared/api/quiz-service'
 
 function answerValue(value: Record<string, unknown> | null | undefined): string | null {
@@ -23,6 +23,7 @@ function answerValue(value: Record<string, unknown> | null | undefined): string 
 export default function QuizDetailPage() {
   const { quizId = 'q1' } = useParams()
   const runIntent = useConversationStore((state) => state.runIntent)
+  const teacherName = useTeacherName()
   const [session, setSession] = useState<QuizSessionDetail | null>(null)
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [answers, setAnswers] = useState<QuizAnswer[]>([])
@@ -166,7 +167,7 @@ export default function QuizDetailPage() {
                 className="mt-3 rounded-md px-2 py-1 text-[11px] text-muted hover:text-fg hover:underline"
                 onClick={askAgain}
               >
-                现在再问霜铃
+                现在再问{teacherName}
               </button>
             </li>
           )

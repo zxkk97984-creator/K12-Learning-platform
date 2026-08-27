@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom'
 
 import { QUICK_ACTIONS } from '@/mocks/data/conversation'
+import { useScreenContext } from '@/features/screen-context'
 
 import { useConversationStore } from '../store/conversation-store'
 
@@ -17,6 +18,7 @@ function quickActionKey(pathname: string): string {
 export function QuickActions() {
   const location = useLocation()
   const runIntent = useConversationStore((state) => state.runIntent)
+  const { screenContext } = useScreenContext()
   const actions = QUICK_ACTIONS[quickActionKey(location.pathname)] ?? QUICK_ACTIONS.home
 
   return (
@@ -26,7 +28,9 @@ export function QuickActions() {
           key={intent}
           type="button"
           className="shrink-0 rounded-full border border-border bg-surface px-2.5 py-1.5 text-[10px] text-muted hover:border-fg hover:text-fg"
-          onClick={() => runIntent(intent as Parameters<typeof runIntent>[0])}
+          onClick={() =>
+            runIntent(intent as Parameters<typeof runIntent>[0], undefined, screenContext)
+          }
         >
           {label}
         </button>

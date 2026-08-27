@@ -60,8 +60,8 @@ export class MockStudentService implements StudentService {
       [
         {
           role_id: '00000000-0000-0000-0000-000000000001',
-          name: 'shuangling',
-          description: '默认 AI 教师',
+          name: '温暖鼓励',
+          description: '以鼓励和引导为主的教学风格',
           tone: '温暖、鼓励',
           teaching_style: '从生活例子出发，逐步引导',
           avatar: null,
@@ -70,8 +70,8 @@ export class MockStudentService implements StudentService {
         },
         {
           role_id: '00000000-0000-0000-0000-000000000002',
-          name: 'strict-mentor',
-          description: '严谨导师',
+          name: '严谨清晰',
+          description: '以逻辑和证据为主的教学风格',
           tone: '严谨、清晰',
           teaching_style: '强调逻辑与证据',
           avatar: null,
@@ -81,5 +81,14 @@ export class MockStudentService implements StudentService {
       ],
       150,
     )
+  }
+
+  async uploadAvatar(file: File): Promise<typeof profile> {
+    profile = {
+      ...profile,
+      avatar_url: URL.createObjectURL(file),
+      updated_at: new Date().toISOString(),
+    }
+    return delay({ ...profile }, 150)
   }
 }

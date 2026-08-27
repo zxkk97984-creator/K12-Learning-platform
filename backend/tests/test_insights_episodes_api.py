@@ -191,6 +191,44 @@ def headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _get_student_id(username: str) -> UUID:
+    async def run() -> UUID:
+        async with async_session() as session:
+            user = (
+                await session.execute(select(User).where(User.username == username))
+            ).scalar_one()
+            profile = (
+                await session.execute(
+                    select(StudentProfile).where(StudentProfile.user_id == user.user_id)
+                )
+            ).scalar_one()
+            return profile.student_id
+
+    return asyncio.run(run())
+
+
+def _claim_memory_consolidation_job(student_id: UUID) -> UUID | None:
+    """查找该学生的 queued memory_consolidation job，返回 job_id。"""
+    from app.infrastructure.database.models import BackgroundJob
+
+    async def run() -> UUID | None:
+        async with async_session() as session:
+            rows = (
+                await session.execute(
+                    select(BackgroundJob).where(
+                        BackgroundJob.job_type == "memory_consolidation",
+                        BackgroundJob.status.in_(("queued", "running")),
+                    )
+                )
+            ).scalars().all()
+            for row in rows:
+                if (row.payload or {}).get("student_id") == str(student_id):
+                    return row.job_id
+            return None
+
+    return asyncio.run(run())
+
+
 def _count_evidence(username: str, source_type: str) -> int:
     async def run() -> int:
         async with async_session() as session:
@@ -315,6 +353,8 @@ class TestInsightsEpisodesAPI:
     def test_learning_event_write_triggers_pipeline(
         self, client: TestClient, token: str
     ) -> None:
+        """Phase 1 起记忆整合异步化：事件写入只入队 memory_consolidation，
+        由 Worker 消费后才产出 MemoryEvidence（不再在请求内同步执行）。"""
         before = _count_evidence(USER_NAME, "CONVERSATION")
         response = client.post(
             "/api/v1/learning-events",
@@ -326,6 +366,30 @@ class TestInsightsEpisodesAPI:
             },
         )
         assert response.status_code == 201
+
+        # 事件返回时不产生证据，而是存在待消费的 consolidation job
+        assert _count_evidence(USER_NAME, "CONVERSATION") == before
+        student_id = _get_student_id(USER_NAME)
+        job_id = _claim_memory_consolidation_job(student_id)
+        assert job_id is not None
+
+        from app.infrastructure.database.models import BackgroundJob
+        from app.jobs.worker import process_claimed_job
+
+        async def consume() -> bool:
+            async with async_session() as session:
+                job = await session.get(BackgroundJob, job_id)
+                assert job is not None and job.status == "queued"
+                # 模拟 claim_next 的声明语义后走真实 Worker 派发路径
+                job.status = "running"
+                job.attempt += 1
+                job.started_at = datetime.now(timezone.utc)
+                await session.commit()
+                succeeded = await process_claimed_job(session, job)
+                await session.commit()
+                return succeeded
+
+        assert asyncio.run(consume()) is True
         assert _count_evidence(USER_NAME, "CONVERSATION") > before
 
     def test_invalid_insight_level_is_rejected_by_database_check(

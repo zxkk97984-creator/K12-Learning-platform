@@ -1,4 +1,4 @@
-import { contentService } from '@/mocks/services'
+import { contentService } from '@/shared/services'
 
 interface QuizSource {
   bookTitle: string

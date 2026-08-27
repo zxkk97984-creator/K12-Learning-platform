@@ -40,6 +40,10 @@ from app.modules.memory.agent_md import (
     build_evidence_reply,
     is_evidence_question,
 )
+from app.modules.conversation.teacher_context import (
+    build_teacher_context,
+    teacher_usage_note,
+)
 from app.modules.knowledge.retrieval import retrieve
 from app.modules.identity.service import IdentityService
 from app.modules.quiz.schemas import CreateQuizSessionRequest
@@ -64,6 +68,16 @@ def _conversation_lock(conversation_id: UUID) -> asyncio.Lock:
 def _is_quiz_intent(content: str) -> bool:
     normalized = content.casefold()
     return any(keyword.casefold() in normalized for keyword in QUIZ_INTENT_KEYWORDS)
+
+
+def _uuid_or_none(value: Any) -> UUID | None:
+    """把 ScreenContext 里的 id 字段安全解析为 UUID；缺失/非法返回 None。"""
+    if value is None:
+        return None
+    try:
+        return UUID(str(value))
+    except (ValueError, TypeError, AttributeError):
+        return None
 
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
@@ -144,17 +158,57 @@ def _isoformat_z(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _list_item_dto(conversation: Conversation) -> ConversationListItemDTO:
+def _role_summary(role: TeacherRole | None) -> dict | None:
+    if role is None:
+        return None
+    return {
+        "role_id": str(role.role_id),
+        "name": role.name,
+        "tone": role.tone,
+        "teaching_style": role.teaching_style,
+    }
+
+
+def _list_item_dto(
+    conversation: Conversation,
+    *,
+    role: TeacherRole | None = None,
+    preview: str | None = None,
+) -> ConversationListItemDTO:
     return ConversationListItemDTO(
         conversation_id=conversation.conversation_id,
         title=conversation.title,
         status=conversation.status,
         channel=conversation.channel,
         teacher_role_id=conversation.teacher_role_id,
-        teacher_role=None,
+        teacher_role=_role_summary(role),
+        last_message_preview=preview,
         last_message_at=conversation.last_message_at,
         updated_at=conversation.updated_at,
     )
+
+
+async def _recent_messages_for(
+    session: AsyncSession, conversation_ids: list[UUID], per_conversation: int = 5
+) -> dict[UUID, list[MessageDTO]]:
+    """批量取每个会话最近 N 条消息（sequence 倒序截取后反转）。"""
+    if not conversation_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(Message)
+            .where(Message.conversation_id.in_(conversation_ids))
+            .order_by(Message.conversation_id.asc(), Message.sequence.desc())
+        )
+    ).scalars().all()
+    grouped: dict[UUID, list[MessageDTO]] = {}
+    for message in rows:
+        bucket = grouped.setdefault(message.conversation_id, [])
+        if len(bucket) < per_conversation:
+            bucket.append(_message_dto(message))
+    for conv_id in grouped:
+        grouped[conv_id].reverse()
+    return grouped
 
 
 def _conversation_dto(
@@ -259,9 +313,29 @@ class ConversationService:
             if has_more and page
             else None
         )
-        return [_list_item_dto(row) for row in page], PageMeta(
-            next_cursor=next_cursor, has_more=has_more
+
+        # Phase 4：真实 teacher_role 摘要 + 最近一条消息预览
+        role_ids = {row.teacher_role_id for row in page if row.teacher_role_id}
+        roles: dict[UUID, TeacherRole] = {}
+        if role_ids:
+            role_rows = (
+                await session.execute(
+                    select(TeacherRole).where(TeacherRole.role_id.in_(role_ids))
+                )
+            ).scalars().all()
+            roles = {role.role_id: role for role in role_rows}
+        recents = await _recent_messages_for(
+            session, [row.conversation_id for row in page], per_conversation=1
         )
+
+        items = []
+        for row in page:
+            preview_messages = recents.get(row.conversation_id, [])
+            preview = preview_messages[0].content[:80] if preview_messages else None
+            items.append(
+                _list_item_dto(row, role=roles.get(row.teacher_role_id), preview=preview)
+            )
+        return items, PageMeta(next_cursor=next_cursor, has_more=has_more)
 
     async def create_conversation(
         self,
@@ -332,8 +406,15 @@ class ConversationService:
         user_id: UUID,
         conversation_id: UUID,
         request: SendMessageRequest,
+        *,
+        idempotency_key: str | None = None,
+        replay_flag: dict | None = None,
     ) -> AsyncIterator[str]:
-        """Serialize turns in one conversation until its SSE stream finishes."""
+        """Serialize turns in one conversation until its SSE stream finishes.
+
+        Phase 5-A：携带 idempotency_key 且命中同一会话内的历史学生消息时，
+        返回可消费的 replay SSE（恢复原教师正文），不新增任何消息。
+        """
         lock_key = f"lock:conversation:{conversation_id}"
         redis_token = await acquire_lock(
             lock_key, settings.redis_lock_ttl_seconds
@@ -344,7 +425,12 @@ class ConversationService:
             await local_lock.acquire()
         try:
             stream = await self._send_message_locked(
-                session, user_id, conversation_id, request
+                session,
+                user_id,
+                conversation_id,
+                request,
+                idempotency_key=idempotency_key,
+                replay_flag=replay_flag,
             )
         except BaseException:
             if redis_token is not None:
@@ -371,6 +457,9 @@ class ConversationService:
         user_id: UUID,
         conversation_id: UUID,
         request: SendMessageRequest,
+        *,
+        idempotency_key: str | None = None,
+        replay_flag: dict | None = None,
     ) -> AsyncIterator[str]:
         """Persist the student turn, then return its AI-backed SSE generator.
 
@@ -379,9 +468,31 @@ class ConversationService:
         their normal HTTP status and error envelope.
         """
         profile = await self._get_profile(session, user_id)
-        conversation = await session.get(Conversation, conversation_id)
+        # Phase 5-A：对会话行 FOR UPDATE——max+1 序号分配在行锁内串行化
+        conversation = await session.get(Conversation, conversation_id, with_for_update=True)
         if conversation is None:
             raise _error(404, "CONVERSATION_NOT_FOUND", "conversation not found")
+
+        # 幂等重放：同会话+同 key 的历史学生消息存在则回放其教师回复
+        if idempotency_key:
+            prior_student = (
+                await session.execute(
+                    select(Message)
+                    .where(
+                        Message.conversation_id == conversation_id,
+                        Message.role == "STUDENT",
+                        Message.metadata_["idempotency_key"].as_string() == idempotency_key,
+                    )
+                    .order_by(Message.sequence.asc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if prior_student is not None:
+                if replay_flag is not None:
+                    replay_flag["replayed"] = True
+                return await self._replay_stream(
+                    session, conversation_id, prior_student, request_id=str(uuid4())
+                )
         if conversation.student_id != profile.student_id:
             raise _error(403, "FORBIDDEN", "conversation does not belong to student")
         if conversation.status == "DELETED":
@@ -391,9 +502,13 @@ class ConversationService:
                 "deleted conversation cannot receive messages",
             )
 
-        current_context = dict(conversation.current_page_context or {})
+        # Phase 2-A：screen_context 是客户端权威快照——提供时整体替换旧值，
+        # 保证「离开 Reader 后发送干净上下文」能真正清掉旧 book/chapter；
+        # 未提供时沿用会话已有上下文。选中文本作为瞬时叠加项。
         if request.screen_context is not None:
-            current_context.update(request.screen_context)
+            current_context = dict(request.screen_context)
+        else:
+            current_context = dict(conversation.current_page_context or {})
         if request.selected_text is not None:
             current_context["selected_text"] = request.selected_text
 
@@ -406,7 +521,7 @@ class ConversationService:
             role="STUDENT",
             type=request.type,
             content=request.content,
-            metadata_={},
+            metadata_=({"idempotency_key": idempotency_key} if idempotency_key else {}),
             sequence=student_sequence,
             created_at=now,
         )
@@ -415,6 +530,8 @@ class ConversationService:
         session.add(student_message)
         await session.commit()
         await session.refresh(student_message)
+        if replay_flag is not None:
+            replay_flag["replayed"] = False
 
         history_rows = (
             await session.execute(
@@ -510,6 +627,21 @@ class ConversationService:
                     f"tone：{role.tone}\n"
                     f"teaching_style：{role.teaching_style}"
                 )
+        # Phase 2-C：从 DB 聚合完整 TeacherContext（档案/偏好/记忆/画像/
+        # 最近学习与测验/当前阅读位置），失败不阻塞对话。
+        try:
+            teacher_context_block = await build_teacher_context(
+                session,
+                student_id=profile.student_id,
+                grade=profile.grade,
+                language=profile.language,
+                learning_goal=profile.learning_goal,
+                current_context=current_context,
+            )
+            teacher_context_block += "\n\n" + teacher_usage_note()
+        except Exception:  # pragma: no cover - context must not break chat
+            logger.warning("teacher context build failed", exc_info=True)
+            teacher_context_block = ""
         instruction_block = (
             "你是霜铃，一位耐心、清晰、不编造事实的中文 K12 数字教师。"
             "请根据学生的问题循序解释，鼓励学生自己思考；引用知识库或证据时必须注明来源。"
@@ -520,6 +652,7 @@ class ConversationService:
             for part in [
                 persona_block,
                 summary_context,
+                teacher_context_block,
                 reference_block,
                 f"【证据上下文】\n{evidence_context}" if evidence_context else "",
                 instruction_block,
@@ -569,13 +702,26 @@ class ConversationService:
                     event_id=teacher_message_id,
                 )
                 try:
+                    # Phase 2-B：从当前页面上下文取 book/chapter，使测验与
+                    # 阅读位置真实关联；上下文缺省时退化为无章节 AI 小测。
+                    ctx_book_id = _uuid_or_none(
+                        current_context.get("bookId") or current_context.get("book_id")
+                    )
+                    ctx_chapter_id = _uuid_or_none(
+                        current_context.get("chapterId")
+                        or current_context.get("chapter_id")
+                    )
                     quiz_session = await self.quiz_service.create_session(
                         session,
                         user_id,
                         CreateQuizSessionRequest(
                             conversation_id=conversation_id,
-                            question_count=1,
+                            book_id=ctx_book_id,
+                            chapter_id=ctx_chapter_id,
+                            quiz_kind="CHAPTER_QUIZ" if ctx_chapter_id else "AI_QUIZ",
+                            question_count=3,
                             difficulty="MEDIUM",
+                            allow_bank_fallback=False,
                         ),
                     )
                 except HTTPException as exc:
@@ -868,6 +1014,127 @@ class ConversationService:
 
         return stream()
 
+    async def _replay_stream(
+        self,
+        session: AsyncSession,
+        conversation_id: UUID,
+        prior_student: Message,
+        *,
+        request_id: str,
+    ):
+        """构造幂等重放 SSE：恢复原教师正文（及 quiz 工具帧），不再调用模型。"""
+        teacher_message = (
+            await session.execute(
+                select(Message)
+                .where(
+                    Message.conversation_id == conversation_id,
+                    Message.role == "TEACHER",
+                    Message.sequence > prior_student.sequence,
+                )
+                .order_by(Message.sequence.asc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+        async def stream() -> AsyncIterator[str]:
+            if teacher_message is None:
+                # 历史异常（学生消息后无教师回复）：以空回复收尾，仍可消费
+                yield _sse_frame(
+                    "message.start",
+                    {
+                        "message_id": str(prior_student.message_id),
+                        "conversation_id": str(conversation_id),
+                        "role": "TEACHER",
+                        "type": "TEXT",
+                        "sequence": prior_student.sequence + 1,
+                    },
+                    event_id=prior_student.message_id,
+                )
+                yield _sse_frame(
+                    "message.done",
+                    {"message_id": str(prior_student.message_id), "conversation_id": str(conversation_id)},
+                    event_id=prior_student.message_id,
+                )
+                return
+
+            teacher_id = teacher_message.message_id
+            metadata = teacher_message.metadata_ or {}
+            is_quiz = metadata.get("tool") == "quiz"
+            yield _sse_frame(
+                "message.start",
+                {
+                    "message_id": str(teacher_id),
+                    "conversation_id": str(conversation_id),
+                    "role": "TEACHER",
+                    "type": "TEXT",
+                    "sequence": teacher_message.sequence,
+                    "created_at": _isoformat_z(teacher_message.created_at),
+                    "request_id": request_id,
+                    "replay": True,
+                },
+                event_id=teacher_id,
+            )
+            if is_quiz:
+                tool_run_id = f"replay-{teacher_id}"
+                yield _sse_frame(
+                    "tool.start",
+                    {
+                        "tool_run_id": tool_run_id,
+                        "tool": "quiz",
+                        "state": "running",
+                        "message_id": str(teacher_id),
+                        "payload": {"quiz_session_id": None},
+                    },
+                    event_id=teacher_id,
+                )
+                yield _sse_frame(
+                    "tool.result",
+                    {
+                        "tool_run_id": tool_run_id,
+                        "tool": "quiz",
+                        "status": "success",
+                        "payload": {
+                            "quiz_session_id": metadata.get("quiz_session_id"),
+                            "skill_version": None,
+                        },
+                    },
+                    event_id=teacher_id,
+                )
+            content = teacher_message.content
+            for index in range(0, len(content), 16):
+                yield _sse_frame(
+                    "text.delta",
+                    {
+                        "message_id": str(teacher_id),
+                        "delta": content[index : index + 16],
+                        "index": index,
+                        "sequence": teacher_message.sequence,
+                    },
+                    event_id=teacher_id,
+                )
+            yield _sse_frame(
+                "text.done",
+                {
+                    "message_id": str(teacher_id),
+                    "content": content,
+                    "model_info": teacher_message.model_info or {},
+                    "usage": {"input_tokens": 0, "output_tokens": len(content)},
+                },
+                event_id=teacher_id,
+            )
+            yield _sse_frame(
+                "message.done",
+                {
+                    "message_id": str(teacher_id),
+                    "conversation_id": str(conversation_id),
+                    "sequence": teacher_message.sequence,
+                    "metadata": metadata,
+                },
+                event_id=teacher_id,
+            )
+
+        return stream()
+
     async def _provider_chunks(
         self,
         provider: AIProvider,
@@ -914,7 +1181,22 @@ class ConversationService:
         summary = (
             await session.execute(_latest_summary_query(conversation_id))
         ).scalar_one_or_none()
-        return _conversation_dto(conversation, summary)
+
+        # Phase 4：真实 teacher_role 摘要 + 最近 5 条消息
+        role = (
+            await session.get(TeacherRole, conversation.teacher_role_id)
+            if conversation.teacher_role_id
+            else None
+        )
+        item = _list_item_dto(conversation, role=role)
+        recent_map = await _recent_messages_for(session, [conversation_id], per_conversation=5)
+        return ConversationDTO(
+            **item.model_dump(),
+            student_id=conversation.student_id,
+            current_page_context=conversation.current_page_context or {},
+            recent_messages=[m.model_dump() for m in recent_map.get(conversation_id, [])],
+            conversation_summary=summary.summary if summary is not None else None,
+        )
 
     async def patch_conversation(
         self,

@@ -23,6 +23,7 @@ LearningEventType = Literal[
     "BOOK_STARTED",
     "BOOK_FINISHED",
     "VOICE_SESSION_STARTED",
+    "VOICE_SESSION_ENDED",
     "ROLE_SWITCHED",
     "TEXT_SELECTED",
 ]

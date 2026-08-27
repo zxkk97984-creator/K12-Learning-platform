@@ -16,6 +16,7 @@ vi.mock('../store/conversation-store', () => ({
 
 vi.mock('@/features/companion', () => ({
   useCompanionStore: { getState: () => ({ setOpen: mocks.setOpen, setAiState: mocks.setAiState }) },
+  useTeacherName: () => '霜铃',
 }))
 
 vi.mock('@/features/quiz', () => ({

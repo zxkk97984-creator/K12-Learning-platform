@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
-from uuid import UUID
+from pathlib import Path
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.infrastructure.database.models import (
     StudentPreference,
     StudentProfile,
@@ -21,6 +23,12 @@ from app.modules.identity.schemas import (
     TeacherRoleDisplayDTO,
 )
 from app.modules.identity.security import create_access_token, verify_password
+from app.modules.identity.storage import (
+    ALLOWED_IMAGE_TYPES,
+    AVATAR_STORAGE_ROOT,
+    avatar_storage_path,
+    MEDIA_TYPE_BY_SUFFIX,
+)
 
 
 def derive_stage(grade: int) -> str:
@@ -78,6 +86,12 @@ class IdentityService:
                 status_code=401,
                 detail={"code": "INVALID_CREDENTIALS", "message": "invalid username or password"},
             )
+        # Phase 5-A：禁用账号拒绝登录，不签发 token
+        if getattr(user, "status", "ACTIVE") == "DISABLED":
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "ACCOUNT_DISABLED", "message": "account is disabled"},
+            )
         user.last_login_at = datetime.now(timezone.utc)
         await session.commit()
         token, expires_at = create_access_token(user.user_id, user.user_type)
@@ -130,6 +144,53 @@ class IdentityService:
         await session.refresh(profile)
         return to_profile_dto(profile)
 
+    async def upload_avatar(
+        self,
+        session: AsyncSession,
+        user_id: UUID,
+        content_type: str,
+        data: bytes,
+    ) -> StudentProfileDTO:
+        ext = ALLOWED_IMAGE_TYPES.get(content_type)
+        if ext is None:
+            raise HTTPException(
+                status_code=415,
+                detail={"code": "UNSUPPORTED_MEDIA_TYPE", "message": "仅支持 jpg/png/webp 图片"},
+            )
+        if not data:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "EMPTY_FILE", "message": "头像文件为空"},
+            )
+        if len(data) > settings.avatar_upload_max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail={"code": "FILE_TOO_LARGE", "message": "头像不能超过 2MB"},
+            )
+        stored_name = f"{uuid4().hex}{ext}"
+        # Phase 4：统一存储抽象（local/s3 由配置决定）
+        from app.modules.identity.storage import save_avatar_bytes
+
+        await save_avatar_bytes(stored_name, data, content_type)
+        profile = await self.get_profile(session, user_id)
+        profile.avatar_url = f"/api/v1/files/avatars/{stored_name}"
+        await session.commit()
+        await session.refresh(profile)
+        return to_profile_dto(profile)
+
+    async def get_avatar_file(self, filename: str) -> tuple[bytes, str]:
+        from app.modules.identity.storage import load_avatar_bytes
+
+        try:
+            avatar_storage_path(filename)  # 复用穿越校验
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail="avatar not found") from error
+        try:
+            data, media_type = await load_avatar_bytes(filename)
+        except FileNotFoundError as error:
+            raise HTTPException(status_code=404, detail="avatar not found") from error
+        return data, media_type
+
     async def list_teacher_roles(
         self,
         session: AsyncSession,
@@ -152,7 +213,7 @@ class IdentityService:
         default = (
             await session.execute(
                 select(TeacherRole).where(
-                    TeacherRole.name == "shuangling",
+                    TeacherRole.role_id == UUID("00000000-0000-0000-0000-000000000001"),
                     TeacherRole.enabled.is_(True),
                 )
             )

@@ -200,13 +200,24 @@ def headers(token: str) -> dict[str, str]:
 def _clear_book_progress() -> None:
     async def run() -> None:
         async with async_session() as session:
-            await session.execute(delete(BookProgress).where(BookProgress.book_id == BOOK1_ID))
+            # 同时覆盖本模块使用的两本书：共享开发库中可能存在其他
+            # 测试模块遗留的进度行（Phase 3 结算语义变更后更需隔离）。
+            await session.execute(
+                delete(BookProgress).where(
+                    BookProgress.book_id.in_([BOOK1_ID, BOOK2_ID])
+                )
+            )
             await session.commit()
 
     asyncio.run(run())
 
 
 class TestLearningAPI:
+    @pytest.fixture(autouse=True)
+    def _pristine_progress(self) -> None:
+        """每个用例前恢复进度表干净状态；断言本身不变。"""
+        _clear_book_progress()
+
     def test_requires_auth(self, client: TestClient) -> None:
         assert client.get("/api/v1/me/progress").status_code == 401
 

@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 
-import { useCompanionStore } from '@/features/companion'
+import { useCompanionStore, useTeacherName } from '@/features/companion'
 import { useToastStore } from '@/features/feedback'
 import { useScreenContext } from '@/features/screen-context'
 import type { VoicePreference } from '@/entities/student/types'
-import { studentService } from '@/mocks/services'
+import { learningService } from '@/shared/api/learning-service'
+import {
+  buildQuestionAskedEvent,
+  buildVoiceSessionEvent,
+  createVoiceEndedGuard,
+  getCurrentLearningSessionId,
+} from '@/features/learning/events'
+import { studentService } from '@/shared/services'
 import { createVoiceClient, type VoiceClient, type VoiceState } from '@/shared/api/voice-client'
 
 import { useConversationStore } from '../store/conversation-store'
@@ -27,6 +34,7 @@ const VOICE_LABEL: Record<VoiceState, string | null> = {
 
 export function ChatComposer() {
   const [value, setValue] = useState('')
+  const teacherName = useTeacherName()
   const [voiceState, setVoiceState] = useState<VoiceState>('IDLE')
   const [recording, setRecording] = useState(false)
   const [voicePrefs, setVoicePrefs] = useState<VoicePreference>({
@@ -44,6 +52,8 @@ export function ChatComposer() {
 
   const captureRef = useRef<AudioCapture | null>(null)
   const voiceClientRef = useRef<VoiceClient | null>(null)
+  // 缺口 1d：语音结束事件恰好一次（stop 与卸载并发也不会双发）
+  const voiceEndedGuardRef = useRef(createVoiceEndedGuard())
 
   useEffect(() => {
     void studentService
@@ -52,8 +62,22 @@ export function ChatComposer() {
       .catch(() => undefined)
   }, [])
 
+  // Phase 2 缺口 1：语音连接保持期间页面切换（如 Reader → 首页）时，
+  // 把最新 ScreenContext 推给服务端，保证后续 utterance 不再携带旧章节。
+  useEffect(() => {
+    voiceClientRef.current?.sendScreenContext(
+      screenContext as unknown as Record<string, unknown>,
+    )
+  }, [screenContext])
+
   useEffect(() => {
     return () => {
+      const endedConversationId = voiceEndedGuardRef.current.consumeEnded()
+      if (endedConversationId) {
+        void learningService
+          .createEvent(buildVoiceSessionEvent('VOICE_SESSION_ENDED', endedConversationId))
+          .catch(() => undefined)
+      }
       voiceClientRef.current?.close()
       captureRef.current?.stop()
       captureRef.current = null
@@ -73,6 +97,9 @@ export function ChatComposer() {
       const conversationId = await ensureConversationId()
       const client = createVoiceClient({
         conversationId,
+        // Phase 2-A4：连接后立即上报当前页面上下文，服务端在下一轮
+        // utterance 时合并进 SendMessageRequest.screen_context。
+        initialScreenContext: screenContext as unknown as Record<string, unknown>,
         callbacks: {
           onState: applyVoiceState,
           onReply: () => void refresh(),
@@ -100,6 +127,11 @@ export function ChatComposer() {
       captureRef.current = capture
       setRecording(true)
       applyVoiceState('LISTENING')
+      // Phase 3 + 缺口 1d：语音会话开始 → 可追溯事件，并登记一次性结束守卫
+      voiceEndedGuardRef.current.markStarted(conversationId)
+      void learningService
+        .createEvent(buildVoiceSessionEvent('VOICE_SESSION_STARTED', conversationId))
+        .catch(() => undefined)
     } catch (error) {
       captureRef.current?.stop()
       captureRef.current = null
@@ -125,6 +157,13 @@ export function ChatComposer() {
     captureRef.current = null
     voiceClientRef.current?.sendAudioEnd()
     setRecording(false)
+    // 只在仍有活跃语音会话时发一次 ENDED；与卸载清理并发时由守卫去重
+    const endedConversationId = voiceEndedGuardRef.current.consumeEnded()
+    if (endedConversationId) {
+      void learningService
+        .createEvent(buildVoiceSessionEvent('VOICE_SESSION_ENDED', endedConversationId))
+        .catch(() => undefined)
+    }
   }
 
   const toggleVoice = () => {
@@ -132,9 +171,27 @@ export function ChatComposer() {
     else void startVoice()
   }
 
-  const submit = () => {
-    if (!value.trim()) return
-    void send(value, screenContext)
+  const submit = async () => {
+    const text = value.trim()
+    if (!text) return
+    // 缺口 1c：自由输入提问同样产生可追溯的 QUESTION_ASKED；
+    // 先确保真实会话，再携带 book/chapter/session 关联。
+    let conversationId: string | null = null
+    try {
+      conversationId = await ensureConversationId()
+    } catch {
+      conversationId = null
+    }
+    const questionEvent = buildQuestionAskedEvent({
+      screenContext,
+      conversationId,
+      sessionId: getCurrentLearningSessionId(),
+      source: 'composer',
+    })
+    if (questionEvent) {
+      void learningService.createEvent(questionEvent).catch(() => undefined)
+    }
+    send(text, screenContext)
     setValue('')
   }
 
@@ -186,7 +243,7 @@ export function ChatComposer() {
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={handleKeyDown}
           rows={1}
-          placeholder="问问霜铃，比如：那它为什么会出错？"
+          placeholder={`问问${teacherName}，比如：那它为什么会出错？`}
           aria-label="消息输入"
           className="min-h-[42px] max-h-[88px] flex-1 resize-none rounded-[10px] border border-border bg-bg px-3 py-2.5 text-[13px] text-fg outline-none focus:border-fg"
         />

@@ -5,8 +5,21 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 START_TS="$(date +%s)"
-TOTAL_STEPS=9
+TOTAL_STEPS=11
 CURRENT_STEP=0
+WORKER_PID=""
+WORKER_LOG="$(mktemp "${TMPDIR:-/tmp}/shuangling-worker.XXXXXX.log")"
+
+cleanup() {
+  local code=$?
+  if [[ -n "$WORKER_PID" ]] && kill -0 "$WORKER_PID" 2>/dev/null; then
+    kill "$WORKER_PID" 2>/dev/null || true
+    wait "$WORKER_PID" 2>/dev/null || true
+  fi
+  rm -f "$WORKER_LOG"
+  exit "$code"
+}
+trap cleanup EXIT
 
 banner() {
   CURRENT_STEP=$((CURRENT_STEP + 1))
@@ -85,6 +98,12 @@ ok "后端环境就绪"
 
 banner "数据库服务准备（Postgres）"
 ensure_postgres
+
+# Phase 5-B-I：启动 Redis，让限流走真实 Redis 而非进程内降级
+if ! docker compose ps redis 2>/dev/null | grep -q "running"; then
+  echo "    启动 Redis..."
+  (cd "$ROOT_DIR" && docker compose up -d redis >/dev/null)
+fi
 ok "Postgres 可用"
 
 banner "后端 migration（alembic upgrade head）"
@@ -93,11 +112,49 @@ if ! (cd "$BACKEND_DIR" && uv run alembic upgrade head); then
 fi
 ok "migration 通过"
 
+banner "内容初始化（validate_library --all → import_library --all）"
+if ! (cd "$BACKEND_DIR" && uv run python -m app.scripts.validate_library --all >/dev/null); then
+  die "validate_library --all 未通过，禁止导入内容"
+fi
+ok "validate_library --all 通过"
+if ! (cd "$BACKEND_DIR" && uv run python -m app.scripts.import_library --all >/dev/null); then
+  die "import_library --all 失败"
+fi
+ok "import_library --all 完成（幂等）"
+
+banner "启动后台 Worker（PostgreSQL 队列消费）"
+(
+  cd "$BACKEND_DIR"
+  exec env AI_PROVIDER=mock AI_MODEL=mock-model EMBEDDING_PROVIDER=mock VOICE_PROVIDER=mock \
+    uv run python -m app.jobs.worker
+) >"$WORKER_LOG" 2>&1 &
+WORKER_PID=$!
+worker_ready=1
+for _ in $(seq 1 10); do
+  if ! kill -0 "$WORKER_PID" 2>/dev/null; then
+    worker_ready=0
+    break
+  fi
+  sleep 0.5
+done
+if [[ "$worker_ready" != "1" ]]; then
+  echo "    Worker 日志尾部："
+  tail -40 "$WORKER_LOG" || true
+  die "Worker 进程启动即退出"
+fi
+ok "Worker 运行中（pid $WORKER_PID）"
+
 banner "后端 pytest"
 if ! (cd "$BACKEND_DIR" && uv run pytest -q); then
   die "pytest 失败"
 fi
 ok "pytest 通过"
+
+banner "停止后台 Worker"
+kill "$WORKER_PID" 2>/dev/null || true
+wait "$WORKER_PID" 2>/dev/null || true
+WORKER_PID=""
+ok "Worker 已停止"
 
 banner "前端依赖安装（frozen-lockfile）"
 if [[ -f "$FRONTEND_DIR/pnpm-lock.yaml" ]]; then

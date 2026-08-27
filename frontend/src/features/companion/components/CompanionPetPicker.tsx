@@ -8,14 +8,14 @@ interface CompanionPetPickerProps {
 
 export function CompanionPetPicker({ selectedPetId, onSelect }: CompanionPetPickerProps) {
   return (
-    <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3" role="group" aria-label="桌宠选择">
+    <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3" role="group" aria-label="AI 教师形象选择">
       {COMPANION_PETS.map((pet) => {
         const selected = pet.id === selectedPetId
         return (
           <button
             key={pet.id}
             type="button"
-            aria-label={`选择${pet.displayName}桌宠`}
+            aria-label={`选择${pet.displayName}形象`}
             aria-pressed={selected}
             title={pet.description}
             onClick={() => onSelect(pet.id)}

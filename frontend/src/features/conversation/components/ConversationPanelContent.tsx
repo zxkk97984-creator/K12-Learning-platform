@@ -1,50 +1,79 @@
-import { useEffect, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
 
-import { useCompanionStore } from '@/features/companion'
-import { useAuth } from '@/features/auth'
+import { useCompanionStore, useTeacherName } from '@/features/companion'
+import { useToastStore } from '@/features/feedback'
 import { useScreenContext } from '@/features/screen-context'
-import { studentService } from '@/mocks/services'
 
 import { ChatComposer } from './ChatComposer'
 import { MessageList } from './MessageList'
 import { QuickActions } from './QuickActions'
 import { useConversationStore } from '../store/conversation-store'
 
-function contextLabel(pathname: string): string {
-  if (pathname.startsWith('/learn/')) return 'AI 不是魔法 / 第3章 / 训练数据'
-  if (pathname === '/quizzes' || pathname.startsWith('/quizzes/')) return '测验记录'
-  if (pathname.startsWith('/profile')) return '学习画像 · 依据真实学习记录'
-  if (pathname === '/library' || pathname.startsWith('/books/')) return '书库'
-  if (pathname === '/settings') return '设置'
-  return '首页 · 最近学习记录'
+// Phase 2-A5：仅基于真实 ScreenContext 展示；无页面细节时给通用标签，
+// 不再使用「AI 不是魔法 / 第3章」等硬编码兜底文案。
+function contextLabel(pageType: string): string {
+  switch (pageType) {
+    case 'chapter_reader':
+      return '章节阅读中'
+    case 'book_detail':
+      return '书籍详情'
+    case 'library':
+      return '书库'
+    case 'quiz_history':
+      return '测验记录'
+    case 'profile':
+      return '学习画像 · 依据真实学习记录'
+    case 'settings':
+      return '设置'
+    default:
+      return '首页 · 最近学习记录'
+  }
 }
 
 export function ConversationPanelContent() {
-  const { currentUser } = useAuth()
   const open = useCompanionStore((state) => state.open)
   const load = useConversationStore((state) => state.load)
   const abortCurrent = useConversationStore((state) => state.abortCurrent)
-  const location = useLocation()
+  const history = useConversationStore((state) => state.history)
+  const conversationId = useConversationStore((state) => state.conversationId)
+  const loadHistory = useConversationStore((state) => state.loadHistory)
+  const switchConversation = useConversationStore((state) => state.switchConversation)
+  const startNewConversation = useConversationStore((state) => state.startNewConversation)
+  const setConversationStatus = useConversationStore(
+    (state) => state.setConversationStatus,
+  )
+  const showToast = useToastStore((state) => state.showToast)
   const { screenContext } = useScreenContext()
-  const [teacherName, setTeacherName] = useState('霜铃')
+  const teacherName = useTeacherName()
 
   useEffect(() => {
-    if (open) void load()
+    if (open) {
+      void load()
+      void loadHistory()
+    }
     return () => abortCurrent()
-  }, [open, load, abortCurrent])
+  }, [open, load, abortCurrent, loadHistory])
 
-  useEffect(() => {
-    void studentService
-      .getTeacherRoles()
-      .then((roles) => {
-        const current = roles.find(
-          (role) => role.role_id === currentUser?.current_teacher_role_id,
-        )
-        if (current) setTeacherName(current.name)
-      })
-      .catch(() => undefined)
-  }, [currentUser?.current_teacher_role_id])
+  // Phase 4：删除需要确认；归档直接执行（可从历史切回）
+  const handleDelete = async () => {
+    if (!conversationId) return
+    if (!window.confirm('确认删除这段对话？删除后不可再继续对话。')) return
+    await setConversationStatus(conversationId, 'DELETED')
+    showToast('对话已删除')
+  }
+
+  const handleArchive = async () => {
+    if (!conversationId) return
+    await setConversationStatus(conversationId, 'ARCHIVED')
+    showToast('对话已归档，可在历史中查看')
+  }
+
+  const referenceLabel =
+    screenContext.pageType === 'chapter_reader' && screenContext.chapterTitle
+      ? `${screenContext.chapterTitle}${
+          screenContext.visibleSection ? ` / ${screenContext.visibleSection}` : ''
+        }`
+      : contextLabel(screenContext.pageType)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -52,16 +81,61 @@ export function ConversationPanelContent() {
         <i className="h-1.5 w-1.5 rounded-full bg-accent" />
         <span>
           正在参考：
-          <strong className="text-fg">
-            {screenContext.pageType === 'chapter_reader' && screenContext.chapterTitle
-              ? `${screenContext.chapterTitle}${
-                  screenContext.visibleSection ? ` / ${screenContext.visibleSection}` : ''
-                }`
-              : contextLabel(location.pathname)}
-          </strong>
+          <strong className="text-fg">{referenceLabel}</strong>
         </span>
-        <span className="ml-auto shrink-0 font-mono text-[9px] text-muted">
-          教师：{teacherName}
+        <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          <select
+            aria-label="对话历史"
+            data-testid="conversation-history"
+            value={conversationId ?? ''}
+            onChange={(event) => {
+              if (event.target.value && event.target.value !== conversationId) {
+                void switchConversation(event.target.value)
+              }
+            }}
+            className="max-w-[110px] rounded border border-border bg-surface px-1 py-0.5 text-[9px] text-fg"
+          >
+            {!conversationId ? <option value="">选择会话</option> : null}
+            {history.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {(entry.status === 'ARCHIVED' ? '[归档] ' : '') +
+                  (entry.title || entry.last_message_preview || '未命名会话').slice(0, 14)}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            data-testid="conversation-new"
+            aria-label="新对话"
+            title="开启新对话（旧会话保留在历史）"
+            className="rounded border border-border px-1.5 py-0.5 text-[9px] text-muted hover:border-fg hover:text-fg"
+            onClick={() => void startNewConversation()}
+          >
+            新对话
+          </button>
+          {conversationId ? (
+            <>
+              <button
+                type="button"
+                data-testid="conversation-archive"
+                aria-label="归档当前对话"
+                className="rounded border border-border px-1.5 py-0.5 text-[9px] text-muted hover:border-fg hover:text-fg"
+                onClick={() => void handleArchive()}
+              >
+                归档
+              </button>
+              <button
+                type="button"
+                data-testid="conversation-delete"
+                aria-label="删除当前对话"
+                className="rounded border border-border px-1.5 py-0.5 text-[9px] text-muted hover:border-red-400 hover:text-red-400"
+                onClick={() => void handleDelete()}
+              >
+                删除
+              </button>
+            </>
+          ) : null}
+          <span className="font-mono text-[9px] text-muted">教师：{teacherName}</span>
         </span>
       </div>
       <MessageList />

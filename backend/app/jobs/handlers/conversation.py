@@ -83,4 +83,7 @@ async def handle_conversation_summary(
         existing.summary_version = int(existing.summary_version or 0) + 1
         existing.source_message_ids = source_message_ids
         existing.model_info = {"provider": "rule", "model": "conversation-summary-v1"}
+    # 该 handler 会被 Worker 与直接调用（测试/请求内）两种情况触发。
+    # 若省略此处 commit，直接调用方（未再提交）将无法读到刚写入的摘要；
+    # Worker 路径随后也 commit，二次 commit 为无害幂等。故保留内部 commit。
     await session.commit()

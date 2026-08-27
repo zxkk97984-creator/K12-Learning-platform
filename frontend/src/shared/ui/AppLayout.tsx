@@ -2,8 +2,10 @@ import { useEffect } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '@/features/auth'
-import { Companion } from '@/features/companion'
+import { Companion, useTeacherName } from '@/features/companion'
 import { ToastHost } from '@/features/feedback'
+import { ScreenContextRouteSync } from '@/features/screen-context'
+import { UserAvatar } from './UserAvatar'
 
 const NAV_ITEMS = [
   { to: '/home', label: '首页' },
@@ -16,6 +18,7 @@ const NAV_ITEMS = [
 export function AppLayout() {
   const { currentUser, authUser, logout } = useAuth()
   const navigate = useNavigate()
+  const teacherName = useTeacherName()
   const isAdmin = authUser?.user_type === 'ADMIN'
 
   // 学段适配恢复（对齐原型 localStorage['shuangling-age']；1-B html[data-age]）
@@ -33,10 +36,11 @@ export function AppLayout() {
 
   return (
     <div className="min-h-screen bg-bg font-body text-fg">
+      <ScreenContextRouteSync />
       <header className="sticky top-0 z-20 border-b border-border bg-bg/90 backdrop-blur">
         <div className="mx-auto flex min-h-[68px] max-w-[var(--content)] items-center gap-7 px-gutter">
           <NavLink to="/home" className="font-display text-lg leading-none">
-            霜铃
+            {teacherName}
           </NavLink>
           <nav className="flex flex-1 items-center gap-1.5" aria-label="主导航">
             {NAV_ITEMS.map((item) => (
@@ -74,9 +78,11 @@ export function AppLayout() {
           <div className="flex items-center gap-2.5">
             {currentUser || authUser ? (
               <>
-                <span className="grid h-[30px] w-[30px] place-items-center rounded-full bg-fg font-display text-sm text-surface">
-                  {(currentUser?.nickname ?? authUser?.username ?? '管').slice(0, 1)}
-                </span>
+                <UserAvatar
+                  nickname={currentUser?.nickname ?? authUser?.username}
+                  avatarUrl={currentUser?.avatar_url}
+                  size="sm"
+                />
                 <span className="text-sm text-fg">
                   {currentUser?.nickname ?? (isAdmin ? '管理员' : authUser?.username)}
                 </span>

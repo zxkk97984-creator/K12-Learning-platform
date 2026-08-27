@@ -3,6 +3,8 @@
 > 来源：`prototypes/shuangling-v3-prototype.html`（1797 行，单文件 SPA 原型）
 > 审计日期：2026-08-19（Phase 0 Task 0-B）
 > 用途：作为 Phase 1 React 化的页面/路由清单，以及契约建立（Task 0-C~0-G）的输入。本文只描述原型中真实存在的元素，不包含未实现内容。
+>
+> **实现状态（2026-08-27 核对）**：本文是**原型**（0-B）的地图，不代表当前 React 实现。实际 SPA 路由以 `frontend/src/app/router/index.tsx` 为准，已在原型基础上新增：`/books/:bookId`（书本详情）、`/profile/memories`（记忆管理）、`/settings`（设置）、`/admin` 系列（后台 5 页）、`/login`；阅读页路由为 `/learn/:bookId/:chapterId`。本文后续仅作原型→实现的映射参考，不再逐条同步 React 路由表。
 
 ## 1. 路由模型
 

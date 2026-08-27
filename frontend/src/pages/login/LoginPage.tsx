@@ -79,9 +79,11 @@ export default function LoginPage() {
         >
           {submitting ? '登录中…' : '登录'}
         </button>
-        <p className="mt-4 text-center font-mono text-[10px] text-muted">
-          演示账号：xiaoming / demo123（本地 seed）
-        </p>
+        {import.meta.env.VITE_SHOW_DEMO_CREDENTIALS === 'true' ? (
+          <p className="mt-4 text-center font-mono text-[10px] text-muted" data-testid="demo-credentials">
+            演示账号：xiaoming / demo123（本地 seed）
+          </p>
+        ) : null}
       </form>
     </main>
   )

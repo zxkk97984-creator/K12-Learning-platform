@@ -151,7 +151,7 @@ Phase（执行总控 §8：Phase 0~12）
 | R-47 | page-map profile（画像/偏好/情节/对话分区展示） | StudentMemory、Conversation | GET /me/memories、GET /conversations | student_memories、conversations | Phase 7 |
 | R-48 | page-map profile（level-tag + md-ask「问霜铃」） | ProfileInsight、MemoryEvidence | GET /me/insights/{id}、GET /me/evidence/{id} | profile_insights、memory_evidence | Phase 7 |
 | R-49 | 0-B 全流程（home→reader→quiz→quizzes→profile） | 全部核心实体 | 主链路端点（GET /books、POST messages、POST /quiz-sessions、GET /quiz-sessions、GET /me/insights） | 主链路表 | Phase 1（前端全 Mock 跑通） |
-| R-50 | 0-B 全部原型（MVP 体验边界） | 27 实体 | 0-D 66 端点 | 27 + idempotency_keys | Phase 0（定义范围）/ Phase 12（质量门禁） |
+| R-50 | 0-B 全部原型（MVP 体验边界） | 28 实体 | 0-D 69 路由（含 1 WS） | 27 + idempotency_keys + background_jobs + reading_settlements | Phase 0（定义范围）/ Phase 12（质量门禁） |
 | R-51 | page-map companion-sprite + ui-behavior §2.13 spritesheet | TeacherRole（sprite_manifest） | GET /teacher-roles（骨架） | teacher_roles | Phase 1（渲染策略）/ Phase 11（角色管理） |
 | R-52 | 原型无知识库页面（0-D §12 骨架） | KnowledgeResource、KnowledgeChunk、KnowledgePoint | GET /knowledge/resources、POST /knowledge/search、POST /admin/knowledge/resources | knowledge_resources、knowledge_chunks、knowledge_points | Phase 8（RAG）/ Phase 10（管理上传） |
 
@@ -196,39 +196,43 @@ Phase（执行总控 §8：Phase 0~12）
 
 ### 4.2 API → Domain（无孤儿端点）
 
+> 端点数以 `backend/app/main.py` 注册的业务 router 及其 `@router` 装饰器为事实源（2026-08-27 核对）：Identity 10、Content 5、Learning 7、Conversation 7、Memory 8、Knowledge 4、Quiz 8、Recommendation 2、Admin 17 = **68 HTTP**，另有 1 个 Voice WebSocket。
+
 | API 模块（0-D） | 端点数 | 映射实体 |
 | --- | --- | --- |
-| Identity / Auth | 4 | User、StudentProfile、Admin |
+| Identity / Auth | 8 | User、StudentProfile、Admin |
 | Students | 2 | StudentPreference |
 | Content | 5 | Book、Chapter、ContentBlock、KnowledgePoint |
-| Learning | 6 | LearningSession、LearningEvent、BookProgress |
+| Learning | 7 | LearningSession、LearningEvent、BookProgress、ReadingSettlement |
 | Conversations | 7 | Conversation、Message、ConversationSummary、TeacherRole |
 | Assessment | 8 | QuizSession、QuizQuestion、QuizAnswer、QuizInteraction |
-| Memory | 7 | StudentMemory、ProfileInsight、MemoryEvidence、StudentEpisode |
+| Memory | 8 | StudentMemory、ProfileInsight、MemoryEvidence、StudentEpisode、MemoryCandidate |
 | Knowledge | 4 | KnowledgeResource、KnowledgeChunk、KnowledgePoint |
-| Personalization | 4 | Recommendation |
-| Admin | 19 | Admin、Book、Chapter、ContentBlock、KnowledgePoint、KnowledgeResource、TeacherRole |
+| Personalization | 2 | Recommendation |
+| Admin | 17 | Admin、Book、Chapter、ContentBlock、KnowledgePoint、KnowledgeResource、TeacherRole |
 
-**结论**：66 个端点全部可映射回 domain-model 实体，无孤儿端点；`GET /teacher-roles`（骨架）映射 TeacherRole，不视为孤儿。
+**结论**：68 个 HTTP 端点全部可映射回 domain-model 实体，无孤儿端点；`GET /teacher-roles`（骨架）映射 TeacherRole，不视为孤儿。
 
-### 4.3 DB → Domain（27 ↔ 27）
+### 4.3 DB → Domain
 
-- 27 张实体表与 27 个实体一一对应，逐表核对结论直接引用 0-E §7 自查表（无遗漏、无多余业务表）。
-- 额外 1 张 `idempotency_keys` 基础设施表（非 Domain），由 0-D §1.7 幂等约定与 R-50 覆盖。
+- 27 张实体表与 27 个核心实体一一对应（仅 `MemoryCandidate` 记为纯 Pipeline 支撑实体）。
+- 额外 3 张基础设施/支撑表：`idempotency_keys`（0-D §1.7 幂等约定与 R-50 覆盖）、`background_jobs`（Phase 1-1 Worker PostgreSQL 队列，R-53 覆盖）、`reading_settlements`（Phase 3 学习时长结算台账，R-09 覆盖）。
 
 ### 4.4 孤儿报告
 
-**有需求、原型缺失（原型覆盖缺口，非实现孤儿）**：
+**原型覆盖缺口（原型缺失，但实现已补齐）**：
 
-| 需求 | 缺口 | 建议 |
+> 以下需求在 0-B 原型中无对应页面，但**已在本工作区实现**（2026-08-27 核对）。原型缺口不再构成实现阻塞。
+
+| 需求 | 原缺口 | 已落地实现 |
 | --- | --- | --- |
-| R-03 / R-45 | 管理员端无原型页面 | Phase 10 按 0-D §14 骨架新建；当前以骨架文档承接 |
-| R-34 | 书本详情页无独立原型 | Phase 1 按需求 §44 + 0-D GET /books/{id} 新建页面 |
-| R-40 | 设置页无独立原型（user-menu 只承载学段/演示） | Phase 1 补 Settings 页或与 Hermes 确认合并承载 |
-| R-44 | 对话历史页无原型 | Phase 4 按 0-D GET /conversations 新建 |
-| R-52 | 知识库管理无原型 | Phase 8/10 按 0-D §12/§14 骨架实现 |
+| R-03 / R-45 | 管理员端无原型页面 | `/admin` 5 页（dashboard/books/knowledge/styles/chapters），路由见 `frontend/src/app/router/index.tsx` |
+| R-34 | 书本详情页无独立原型 | `/books/:bookId` BookDetailPage（封面/简介/章节/开始学习） |
+| R-40 | 设置页无独立原型 | `/settings` SettingsPage（账号/AI 教师/学习/语音/隐私） |
+| R-44 | 对话历史页无原型 | 对话历史 UI（切换/新建/归档/删除/清空） |
+| R-52 | 知识库管理无原型 | `/admin/knowledge` AdminKnowledge（上传/状态/重处理） |
 
-**有实现、无需求（孤儿实现）**：无。27 实体、66 端点、27+1 表均有需求或基础设施说明支撑。
+**有实现、无需求（孤儿实现）**：无。27 实体、68 HTTP 端点（+1 WS）、27+3 表均有需求或基础设施说明支撑。
 
 ---
 

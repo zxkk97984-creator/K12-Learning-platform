@@ -263,6 +263,7 @@ export class ApiConversationService implements ConversationService {
     inputOrContent: SendMessageInput | string,
     screenContextOrCallbacks?: ScreenContext | SendMessageCallbacks,
     explicitCallbacks?: SendMessageCallbacks,
+    idempotencyKey?: string,
   ): Promise<void> {
     const input: SendMessageInput =
       typeof inputOrContent === 'string'
@@ -284,9 +285,14 @@ export class ApiConversationService implements ConversationService {
     const body: Record<string, unknown> = { content: input.content, type: 'TEXT' }
     if (input.screen_context) body.screen_context = apiScreenContext(input.screen_context)
 
+    // Phase 5-A 整改 4：每次发送生成 Idempotency-Key；重试由调用方复用同一 key
     const options: FetchSSEOptions = {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey ?? newIdempotencyKey(),
+      },
       signal: callbacks?.signal,
       onError: (error) => {
         callbacks?.onError?.(error instanceof Error ? error : new Error(String(error)))

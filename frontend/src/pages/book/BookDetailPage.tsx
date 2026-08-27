@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import type { Book, BookProgress, Chapter, KnowledgePoint } from '@/entities/book/types'
-import { contentService } from '@/mocks/services'
+import { contentService } from '@/shared/services'
 
 import {
   BookCover,

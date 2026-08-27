@@ -3,7 +3,7 @@ import type { RefObject } from 'react'
 import { useCompanionDock } from '../hooks/useCompanionDock'
 import { DOCK_HEIGHT, DOCK_WIDTH } from '../lib/geometry'
 import { getCompanionPet } from '../lib/sprite'
-import { useCompanionStore } from '../store/companion-store'
+import { useCompanionStore, useTeacherName } from '../store/companion-store'
 import { CompanionSprite } from './CompanionSprite'
 import { spriteFrames, stateChipLabels } from '../types'
 
@@ -18,6 +18,7 @@ export function CompanionDock({ dockRef }: CompanionDockProps) {
   const suggest = useCompanionStore((state) => state.suggest)
   const selectedPetId = useCompanionStore((state) => state.selectedPetId)
   const selectedPet = getCompanionPet(selectedPetId)
+  const teacherName = useTeacherName()
 
   const {
     position,
@@ -49,7 +50,7 @@ export function CompanionDock({ dockRef }: CompanionDockProps) {
         <button
           type="button"
           className="relative grid h-full w-full place-items-end justify-items-center border-0 bg-transparent p-0"
-          aria-label="打开霜铃 AI 教师"
+          aria-label={`打开${teacherName} AI 教师`}
           aria-expanded={open}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}

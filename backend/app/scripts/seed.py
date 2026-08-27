@@ -1,8 +1,10 @@
-"""幂等演示种子：创建小明显示学生（仅本地演示）。
+"""幂等演示种子：演示账号 + 默认教师风格 + E2E 演示记忆（仅本地演示）。
 
 用法：uv run python -m app.scripts.seed
 密码默认 demo123，可用环境变量 SEED_PASSWORD 覆盖（仅本地演示）。
-teacher_roles 表 Phase 11 才建，本脚本不种角色。
+本脚本只负责：admin/xiaoming 演示账号、两个默认教师风格、xiaoming 的 E2E
+演示记忆。正式书库与知识库内容一律走 validate_library → import_library，
+禁止把旧占位内容种子作为初始化路径。
 """
 
 import asyncio
@@ -106,14 +108,16 @@ async def seed() -> None:
             profile = profile_result.scalar_one()
             default_role = (
                 await session.execute(
-                    select(TeacherRole).where(TeacherRole.name == "shuangling")
+                    select(TeacherRole).where(
+                        TeacherRole.role_id == UUID("00000000-0000-0000-0000-000000000001")
+                    )
                 )
             ).scalar_one_or_none()
             if default_role is None:
                 default_role = TeacherRole(
                     role_id=UUID("00000000-0000-0000-0000-000000000001"),
-                    name="shuangling",
-                    description="默认 AI 教师",
+                    name="温暖鼓励",
+                    description="以鼓励和引导为主的教学风格",
                     persona={
                         "base_persona": "温暖耐心的 K12 数字教师",
                         "character_persona": "霜铃",
@@ -138,14 +142,16 @@ async def seed() -> None:
                 session.add(default_role)
             strict_mentor = (
                 await session.execute(
-                    select(TeacherRole).where(TeacherRole.name == "strict-mentor")
+                    select(TeacherRole).where(
+                        TeacherRole.role_id == UUID("00000000-0000-0000-0000-000000000002")
+                    )
                 )
             ).scalar_one_or_none()
             if strict_mentor is None:
                 strict_mentor = TeacherRole(
                     role_id=UUID("00000000-0000-0000-0000-000000000002"),
-                    name="strict-mentor",
-                    description="严谨导师",
+                    name="严谨清晰",
+                    description="以逻辑和证据为主的教学风格",
                     persona={
                         "base_persona": "严谨理性的 K12 导师",
                         "character_persona": "严谨导师",
