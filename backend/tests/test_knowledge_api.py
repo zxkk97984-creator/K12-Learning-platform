@@ -50,13 +50,12 @@ def _ensure_user(username: str, password: str, user_type: str) -> None:
                 await session.execute(select(User).where(User.username == username))
             ).scalar_one_or_none()
             if user is None:
-                session.add(
-                    User(
-                        username=username,
-                        password_hash=hash_password(password),
-                        user_type=user_type,
-                    )
+                user = User(
+                    username=username,
+                    password_hash=hash_password(password),
+                    user_type=user_type,
                 )
+                session.add(user)
                 await session.flush()
             # Phase 5-A：require_admin 收严后，ADMIN 必须存在启用的 admins 行
             if user_type == "ADMIN":

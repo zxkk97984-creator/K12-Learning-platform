@@ -28,6 +28,20 @@ trap cleanup EXIT
 
 # Phase 5-B-I：E2E 前确保 postgres + redis 可用（不启动 minio/worker 镜像）
 ensure_deps() {
+  # 云端 CI：DATABASE_URL 由 workflow env 指向 GitHub service container 提供的
+  # localhost:5432/6379。此时不应再 docker compose up（会和 service container
+  # 抢 5432 导致 "port is already allocated"），只做连通探测即可。
+  if [[ -n "${DATABASE_URL:-}" ]]; then
+    for _ in $(seq 1 30); do
+      if (exec 3<>/dev/tcp/127.0.0.1/5432) 2>/dev/null && \
+         (exec 3<>/dev/tcp/127.0.0.1/6379) 2>/dev/null; then
+        return 0
+      fi
+      sleep 1
+    done
+    echo "[ci-e2e] WARN: 云端 service container (5432/6379) 未被探测到，继续"
+    return 0
+  fi
   if command -v docker >/dev/null 2>&1; then
     if ! docker compose ps postgres 2>/dev/null | grep -q "running"; then
       (cd "$ROOT_DIR" && docker compose up -d postgres >/dev/null)
