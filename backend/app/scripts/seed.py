@@ -17,6 +17,7 @@ from sqlalchemy import select
 from app.infrastructure.database.engine import engine
 from app.infrastructure.database.models import (
     Admin,
+    MemoryEvidence,
     StudentMemory,
     StudentPreference,
     StudentProfile,
@@ -184,20 +185,41 @@ async def seed() -> None:
             )
             e2e_memory = memory_result.scalar_one_or_none()
             if e2e_memory is None:
-                session.add(
-                    StudentMemory(
-                        student_id=profile.student_id,
-                        memory_type="PREFERENCE",
-                        content=E2E_MEMORY_CONTENT,
-                        tags=["演示"],
-                        confidence="MEDIUM",
-                        status="ACTIVE",
-                    )
+                e2e_memory = StudentMemory(
+                    student_id=profile.student_id,
+                    memory_type="PREFERENCE",
+                    content=E2E_MEMORY_CONTENT,
+                    tags=["演示"],
+                    confidence="MEDIUM",
+                    status="ACTIVE",
                 )
+                session.add(e2e_memory)
+                await session.flush()
                 print("seed: 已补 E2E 演示记忆")
             elif e2e_memory.status != "ACTIVE":
                 e2e_memory.status = "ACTIVE"
                 print("seed: 已恢复 E2E 演示记忆为 ACTIVE")
+            # 记忆页「为什么？」按钮仅在 evidence_ids 非空时显示。E2E 记忆须
+            # 关联一条 evidence（否则 memory-flow.spec 点击「为什么？」超时）。
+            # 全新空库下没有历史事件可聚合，故此处显式补一条 evidence。
+            if not e2e_memory.evidence_ids:
+                from datetime import datetime, timezone
+
+                evidence = MemoryEvidence(
+                    student_id=profile.student_id,
+                    source_type="CONVERSATION",
+                    event_ids=[],
+                    payload={"summary": "演示记忆：学生喜欢通过真实例子理解概念"},
+                    count=1,
+                    first_occurred_at=datetime.now(timezone.utc),
+                    last_occurred_at=datetime.now(timezone.utc),
+                    derived_at=datetime.now(timezone.utc),
+                    rule_version="seed-v1",
+                )
+                session.add(evidence)
+                await session.flush()
+                e2e_memory.evidence_ids = [str(evidence.evidence_id)]
+                print("seed: 已为 E2E 演示记忆补 evidence")
             await session.commit()
     finally:
         # 释放连接池，避免跨事件循环复用 asyncpg 连接（asyncio.run / TestClient 场景）
