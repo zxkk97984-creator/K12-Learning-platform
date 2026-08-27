@@ -54,7 +54,7 @@ jobs:
           uv run python -m app.scripts.import_library --all
       - name: Pytest
         run: pytest -q
-      - name: Start background worker (smoke: boot + poll against Postgres)
+      - name: "Start background worker (smoke: boot + poll against Postgres)"
         run: |
           uv run python -m app.jobs.worker > /tmp/worker.log 2>&1 &
           echo $! > /tmp/worker.pid
