@@ -136,7 +136,7 @@ ReaderPage 写 ScreenContext {bookId, chapterId, chapterTitle, visibleSection, s
 | 后端 | ~70%（71 HTTP + 1 WS，分层纪律好） |
 | 数据层 | **~85%（最好的一环：三方对账几乎零漂移）** |
 | AI 能力 | **~35–40%（最大短板）** |
-| **CodeLab** | **闭环已验证可用**（Phase 1）：真实 Docker 沙箱 + 确定性判题 + AI 评价。未接入记忆/推荐/学习事件 |
+| **CodeLab** | **闭环在 mock Provider 下已验证可用**（Phase 1）：真实 Docker 沙箱 + 确定性判题（F/R）+ A/Q 两个 LLM 维度的接线。⚠️ **真实 LLM Provider 的评分质量与 Prompt 配合尚待有效 Key 验收**，不得表述为「已完全验证」（见 `docs/17-codelab.md` §9）。未接入记忆/推荐/学习事件 |
 | 测试 | ~45% |
 | 部署 | **~10%** |
 | 安全 | ~65% |

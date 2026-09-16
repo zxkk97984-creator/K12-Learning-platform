@@ -244,9 +244,22 @@ AI_MAX_RETRIES=3
 
 ## 9. 已知问题
 
-1. **真实 LLM 未验证**：当前 `backend/.env` 里的 DeepSeek API Key 已失效
+1. **真实 LLM Provider 尚未验收**：当前 `backend/.env` 里的 DeepSeek API Key 已失效
    （实测返回 `Authentication Fails`），因此真实模型路径**未跑通**。
-   完整链路已用 `AI_PROVIDER=mock` 端到端验证（含真实 Docker 判题）。
+
+   > mock Provider + 真实 Docker 判题链路**已验证**；
+   > 真实 LLM Provider 的**评分质量与 Prompt 配合尚待有效 Key 验收**。
+
+   拆开说清楚「已验证」与「未验证」的边界，避免误读：
+
+   - **已验证**：`AI_PROVIDER=mock` 下的完整调用链（提交 → 沙箱判题 → F/R 落分 →
+     LLM 维度接线 → 总分与 `correctness_status` 落库 → 前端呈现），
+     判题走**真实 Docker 隔离**；F/R 的确定性打分、沙箱安全边界均有自动化测试覆盖。
+   - **未验证**：A（算法）、Q（代码质量）两个 LLM 维度的**实际打分质量**，
+     以及 rubric prompt 与真实模型的**配合效果**——都需要有效 Key 才能验收。
+   - 附带提到：401 已被正确识别为不可重试错误（未出现重试风暴），
+     但**错误处理可用 ≠ 评分质量已验证**。
+   - **因此不得把 CodeLab 描述为「已完全验证」。**
 2. **摘要/记忆等既有问题不受影响也不受益**：CodeLab 未接入它们。
 3. **Worker 依赖为零**：评审是同步的（移出事件循环），刻意不依赖霜铃目前不稳的 Worker 启动链路。
    代价是与请求生命周期绑定；将来任务量上来时应改为 `background_jobs`（`code_reviews.status` 状态机已为此预留）。
