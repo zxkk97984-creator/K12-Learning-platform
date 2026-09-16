@@ -19,5 +19,10 @@ def get_ai_provider() -> AIProvider:
             model=settings.ai_model,
             max_tokens=settings.ai_max_tokens,
             thinking_mode=settings.ai_thinking_mode,
+            # 注意：不要动 timeout_seconds——它约束的是既有的流式对话路径（30s
+            # 是既有行为）。结构化 JSON 调用（CodeLab 评分）慢得多，走独立的
+            # json_timeout_seconds 与 max_retries。
+            json_timeout_seconds=settings.ai_json_timeout_seconds,
+            max_retries=settings.ai_max_retries,
         )
     raise ValueError(f"unsupported AI provider: {settings.ai_provider}")
