@@ -17,6 +17,8 @@ const QuizDetailPage = lazy(() => import('@/pages/quizzes/QuizDetailPage'))
 const ProfilePage = lazy(() => import('@/pages/profile/ProfilePage'))
 const MemoriesPage = lazy(() => import('@/pages/profile/MemoriesPage'))
 const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'))
+const CodeLabListPage = lazy(() => import('@/pages/codelab/CodeLabListPage'))
+const CodeLabPage = lazy(() => import('@/pages/codelab/CodeLabPage'))
 const AdminLayout = lazy(() => import('@/pages/admin').then((m) => ({ default: m.AdminLayout })))
 const AdminDashboard = lazy(() => import('@/pages/admin').then((m) => ({ default: m.AdminDashboard })))
 const AdminBooks = lazy(() => import('@/pages/admin').then((m) => ({ default: m.AdminBooks })))
@@ -104,6 +106,8 @@ export const router = createBrowserRouter([
       { path: '/profile', element: withSuspense(<ProfilePage />) },
       { path: '/profile/memories', element: withSuspense(<MemoriesPage />) },
       { path: '/settings', element: withSuspense(<SettingsPage />) },
+      { path: '/codelab', element: withSuspense(<CodeLabListPage />) },
+      { path: '/codelab/:taskId', element: withSuspense(<CodeLabPage />) },
       {
         path: '/admin',
         element: (

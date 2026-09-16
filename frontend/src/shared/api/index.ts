@@ -21,5 +21,18 @@ export { ApiStudentService } from './api-student-service'
 export { ApiConversationService } from './api-conversation-service'
 export { ApiMemoryService } from './api-memory-service'
 export { ApiRecommendationService } from './api-recommendation'
+export { ApiCodeLabService } from './api-codelab-service'
+export type {
+  CodeLabService,
+  CodeReview,
+  CodeRun,
+  CodeTask,
+  CodeTaskListItem,
+  CodeOutput,
+  DimensionItem,
+  StudentFeedback,
+  DeterministicGroup,
+  CorrectnessStatus,
+} from './codelab-service'
 export { fetchSSE, parseSSEFrame } from './sse'
 export { ApiError, apiRequest } from './http'

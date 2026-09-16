@@ -12,6 +12,9 @@ const NAV_ITEMS = [
   { to: '/home', label: '首页' },
   { to: '/library', label: '学习' },
   { to: '/quizzes', label: '练习' },
+  // CodeLab：在线编程。仅加入桌面导航；移动端底部导航保持四项
+  // （T17 验收与 mobile-learning/account-switch 的 E2E 明确断言四项）。
+  { to: '/codelab', label: '编程' },
   { to: '/profile', label: '成长' },
 ] as const
 

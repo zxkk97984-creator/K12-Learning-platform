@@ -10,7 +10,9 @@ import { ApiConversationService } from '@/shared/api/api-conversation-service'
 import { ApiMemoryService } from '@/shared/api/api-memory-service'
 import { ApiQuizService } from '@/shared/api/api-quiz-service'
 import { ApiRecommendationService } from '@/shared/api/api-recommendation'
+import { ApiCodeLabService } from '@/shared/api/api-codelab-service'
 import type { RecommendationService } from '@/shared/api/recommendation-service'
+import type { CodeLabService } from '@/shared/api/codelab-service'
 
 
 /**
@@ -24,3 +26,5 @@ export const conversationService: ConversationService = new ApiConversationServi
 export const quizService: QuizService = new ApiQuizService()
 export const memoryService: MemoryService = new ApiMemoryService()
 export const recommendationService: RecommendationService = new ApiRecommendationService()
+// CodeLab：在线编程教学工具（在线编程 + AI 编程评价）
+export const codeLabService: CodeLabService = new ApiCodeLabService()
