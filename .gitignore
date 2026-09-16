@@ -55,3 +55,6 @@ backend/storage/
 
 # ---- Runtime pid files ----
 .server.pid
+
+# ---- Local safety backups (DB dump / patch / tar) ----
+.backup/
