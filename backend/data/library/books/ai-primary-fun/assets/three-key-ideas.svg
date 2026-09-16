@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" font-family="'PingFang SC','Noto Sans CJK SC','Microsoft YaHei',sans-serif">
+  <title>认识 AI 的三句话</title>
+  <desc>三张卡片讲清 AI 是什么：第一张画代码方块说明 AI 是人写的，第二张画很多例子说明它靠例子学本领，第三张画工具箱说明它是帮手不是魔法师。</desc>
+
+  <!-- 背景 -->
+  <rect x="0" y="0" width="900" height="520" rx="16" fill="#fef9f1"/>
+
+  <text x="450" y="50" text-anchor="middle" font-size="28" font-weight="bold" fill="#7c2d12">记住 AI 的三句话</text>
+  <text x="450" y="84" text-anchor="middle" font-size="18" fill="#9a3412">AI 是人写的 · 靠例子学的 · 替人干活的</text>
+
+  <!-- ============ 第一张 ============ -->
+  <g>
+    <rect x="30" y="120" width="260" height="360" rx="16" fill="#fff" stroke="#fbbf24" stroke-width="3"/>
+    <circle cx="160" cy="186" r="34" fill="#fde68a"/>
+    <text x="160" y="196" text-anchor="middle" font-size="34" fill="#b45309">@</text>
+    <text x="160" y="256" text-anchor="middle" font-size="22" font-weight="bold" fill="#7c2d12">人写的</text>
+
+    <rect x="60" y="286" width="200" height="34" rx="8" fill="#fef3c7"/>
+    <text x="160" y="310" text-anchor="middle" font-size="18" fill="#57400c">代码：</text>
+    <rect x="60" y="330" width="200" height="34" rx="8" fill="#fef3c7"/>
+    <text x="160" y="354" text-anchor="middle" font-size="18" fill="#57400c">它是一段段程序</text>
+    <text x="160" y="416" text-anchor="middle" font-size="17" fill="#78350f">是程序，不是住在</text>
+    <text x="160" y="444" text-anchor="middle" font-size="17" fill="#78350f">神秘地方的魔法</text>
+    <text x="160" y="482" text-anchor="middle" font-size="17" fill="#b45309">没有眼睛没有心</text>
+  </g>
+
+  <!-- ============ 第二张 ============ -->
+  <g>
+    <rect x="320" y="120" width="260" height="360" rx="16" fill="#fff" stroke="#38bdf8" stroke-width="3"/>
+    <circle cx="450" cy="186" r="34" fill="#bae6fd"/>
+    <text x="450" y="198" text-anchor="middle" font-size="32" fill="#0369a1">👀</text>
+    <text x="450" y="256" text-anchor="middle" font-size="22" font-weight="bold" fill="#075985">靠例子学</text>
+
+    <!-- 例子卡片 -->
+    <rect x="345" y="284" width="72" height="44" rx="8" fill="#e0f2fe"/>
+    <text x="381" y="311" text-anchor="middle" font-size="15" fill="#075985">猫片</text>
+    <rect x="425" y="284" width="72" height="44" rx="8" fill="#e0f2fe"/>
+    <text x="461" y="311" text-anchor="middle" font-size="15" fill="#075985">狗片</text>
+    <rect x="505" y="284" width="50" height="44" rx="8" fill="#e0f2fe"/>
+    <text x="530" y="311" text-anchor="middle" font-size="15" fill="#075985">…</text>
+    <text x="450" y="360" text-anchor="middle" font-size="18" fill="#075985">看得多了</text>
+    <text x="450" y="388" text-anchor="middle" font-size="18" fill="#075985">就找到特点</text>
+    <text x="450" y="430" text-anchor="middle" font-size="17" fill="#0369a1">例子没见过的</text>
+    <text x="450" y="458" text-anchor="middle" font-size="17" fill="#0369a1">就会发懵</text>
+    <text x="450" y="482" text-anchor="middle" font-size="17" fill="#0284c7">需要很多很多例子</text>
+  </g>
+
+  <!-- ============ 第三张 ============ -->
+  <g>
+    <rect x="610" y="120" width="260" height="360" rx="16" fill="#fff" stroke="#a78bfa" stroke-width="3"/>
+    <circle cx="740" cy="186" r="34" fill="#ddd6fe"/>
+    <text x="740" y="196" text-anchor="middle" font-size="32" fill="#5b21b6">🔧</text>
+    <text x="740" y="256" text-anchor="middle" font-size="22" font-weight="bold" fill="#4c1d95">是帮手</text>
+
+    <rect x="650" y="286" width="180" height="40" rx="10" fill="#ede9fe"/>
+    <text x="740" y="312" text-anchor="middle" font-size="18" fill="#4c1d95">不是魔法师</text>
+    <text x="740" y="356" text-anchor="middle" font-size="18" fill="#5b21b6">本领大 但不全能</text>
+    <text x="740" y="384" text-anchor="middle" font-size="18" fill="#5b21b6">需要人指挥</text>
+    <text x="740" y="430" text-anchor="middle" font-size="17" fill="#6d28d9">像剪刀：用对了</text>
+    <text x="740" y="458" text-anchor="middle" font-size="17" fill="#6d28d9">做手工，乱挥伤手</text>
+    <text x="740" y="482" text-anchor="middle" font-size="17" fill="#7c3aed">学会正确使用</text>
+  </g>
+</svg>

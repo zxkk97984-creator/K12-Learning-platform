@@ -56,6 +56,8 @@ export default function ProfilePage() {
   const [episodes, setEpisodes] = useState<StudentEpisode[]>([])
   const [memories, setMemories] = useState<StudentMemory[]>([])
   const [loading, setLoading] = useState(true)
+  // T09：整页失败标志（prefs 等任一关键接口失败都不应让页面持续骨架）。
+  const [loadError, setLoadError] = useState(false)
   const [view, setView] = useState<ProfileView>('student')
   const [docMode, setDocMode] = useState<DocMode>('preview')
   const [mdDraft, setMdDraft] = useState('')
@@ -74,22 +76,24 @@ export default function ProfilePage() {
   >([])
 
   const load = useCallback(async () => {
-    try {
-      const [preference, insightList, historyList, memoryList, episodeList] = await Promise.all([
-        studentService.getPreferences(),
-        memoryService.getInsights(),
-        memoryService.getInsights({ status: 'SUPERSEDED' }),
-        memoryService.getMemories(),
-        memoryService.getEpisodes(),
-      ])
-      setPrefs(preference)
-      setInsights(insightList)
-      setHistoryInsights(historyList)
-      setMemories(memoryList)
-      setEpisodes(episodeList)
-      // Phase 4：导出数据源 + 学习目标草稿初始化（来自 DB）
+    setLoading(true)
+    setLoadError(false)
+    // T09：各区块独立请求/失败，互相不影响；任一失败不拖垮整页为骨架。
+    const results = await Promise.allSettled([
+      studentService.getPreferences(),
+      memoryService.getInsights(),
+      memoryService.getInsights({ status: 'SUPERSEDED' }),
+      memoryService.getMemories(),
+      memoryService.getEpisodes(),
+    ])
+    const [prefR, insightR, historyR, memoryR, episodeR] = results
+    if (prefR.status === 'fulfilled') setPrefs(prefR.value)
+    if (insightR.status === 'fulfilled') setInsights(insightR.value)
+    if (historyR.status === 'fulfilled') setHistoryInsights(historyR.value)
+    if (memoryR.status === 'fulfilled') {
+      setMemories(memoryR.value)
       setExportMemories(
-        memoryList.map((item) => ({
+        memoryR.value.map((item) => ({
           memory_id: item.memory_id,
           memory_type: item.memory_type,
           content: item.content,
@@ -97,11 +101,11 @@ export default function ProfilePage() {
           status: item.status,
         })),
       )
-    } catch {
-      // 后端不可用时降级为空态
-    } finally {
-      setLoading(false)
     }
+    if (episodeR.status === 'fulfilled') setEpisodes(episodeR.value)
+    // prefs 失败是整页可恢复能力的关键：标记 loadError，显示错误而非持续骨架。
+    if (prefR.status === 'rejected') setLoadError(true)
+    setLoading(false)
   }, [])
 
   // 整改 3：profile 变化（首次加载或保存返回）时同步草稿；
@@ -223,20 +227,36 @@ export default function ProfilePage() {
             去登录 →
           </Link>
         </p>
-      ) : loading || !prefs ? (
+      ) : loading ? (
         <ProfileSkeleton />
       ) : (
         <div className="mt-6 grid grid-cols-[minmax(0,1fr)_280px] items-start gap-4 max-md:grid-cols-1">
           <div className="grid gap-4">
+            {loadError || !prefs ? (
+              // T09：prefs 失败不持续骨架；显示行内错误+重试，其余区块仍可用。
+              <div className="rounded-[14px] border border-border bg-surface p-4" role="alert">
+                <p className="text-sm text-fg">学习偏好暂时无法读取</p>
+                <p className="mt-1 text-sm text-muted">你仍可查看记忆与最近变化。</p>
+                <button
+                  type="button"
+                  className="mt-2 rounded-[10px] border border-border bg-surface px-4 py-2 text-sm text-fg hover:border-fg"
+                  onClick={() => void load()}
+                >
+                  重试
+                </button>
+              </div>
+            ) : null}
             {view === 'student' ? (
               <>
-                <ProfileOverviewCard prefs={prefs} overview={insights.find((item) => item.dimension === 'explanation_preference')} />
+                {prefs ? (
+                  <ProfileOverviewCard prefs={prefs} overview={insights.find((item) => item.dimension === 'explanation_preference')} />
+                ) : null}
                 <InsightListCard insights={insights} teacherName={teacherName} loadEvidence={loadEvidence} />
                 <ChangeCard change={insights.find((item) => item.dimension === 'questioning_habit' && item.insight_type === 'CHANGE')} />
                 <HistoryCard historyInsights={historyInsights} />
                 <EpisodeListCard episodes={episodes} loadDetail={loadEpisodeDetail} />
               </>
-            ) : (
+            ) : prefs ? (
               <ArchiveDocCard
                 profile={profile ?? currentUser}
                 prefs={prefs}
@@ -256,18 +276,11 @@ export default function ProfilePage() {
                 onSave={() => void saveDoc()}
                 onExport={exportProfile}
               />
+            ) : (
+              <div className="rounded-[14px] border border-border bg-surface p-4" role="alert">
+                <p className="text-sm text-fg">AI 档案需要先加载学习偏好。</p>
+              </div>
             )}
-          </div>
-
-          <div className="mt-4">
-            <button
-              type="button"
-              data-testid="open-memories"
-              className="rounded-[10px] border border-border bg-surface px-3 py-2 text-xs text-fg hover:border-fg"
-              onClick={() => navigate('/profile/memories')}
-            >
-              管理我的记忆 →
-            </button>
           </div>
 
           <ProfileSidebar
@@ -276,6 +289,7 @@ export default function ProfilePage() {
             onChanged={() => void load()}
             onAskWhy={() => triggerIntent('profile-question')}
             onOpenArchive={openArchive}
+            onManageMemories={() => navigate('/profile/memories')}
           />
         </div>
       )}

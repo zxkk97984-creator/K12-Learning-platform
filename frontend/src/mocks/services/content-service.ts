@@ -1,4 +1,4 @@
-import type { ContentService, ContentListParams } from '@/shared/api/content-service'
+import type { BookPageParams, ContentService, ContentListParams } from '@/shared/api/content-service'
 import type { Book, ChapterDetail } from '@/entities/book/types'
 import type { Stage } from '@/entities/student/types'
 
@@ -17,11 +17,29 @@ function stageOfBook(book: Book): Stage {
   return 'JUNIOR'
 }
 
+/** Mock 分页：模拟后端游标分页（limit=12 一页 + 总数）。 */
+function paginate(list: Book[], limit: number, cursor?: string) {
+  const offset = cursor ? Number(cursor) : 0
+  const windowed = list.slice(offset, offset + limit)
+  const nextCursor = offset + limit < list.length ? String(offset + limit) : null
+  return {
+    items: windowed,
+    meta: { next_cursor: nextCursor, has_more: nextCursor !== null, total: list.length },
+  }
+}
+
 export class MockContentService implements ContentService {
   async getBooks(params?: ContentListParams) {
+    const page = await this.getBooksPage(params)
+    return page.items
+  }
+
+  async getBooksPage(params?: BookPageParams) {
     const stage = params?.stage
     const topic = params?.topic
     const search = params?.search?.trim().toLowerCase()
+    const limit = params?.limit ?? 12
+    const cursor = params?.cursor
     let list = mockBooks
     if (stage) list = list.filter((book) => stageOfBook(book) === stage)
     if (topic) list = list.filter((book) => book.tags.includes(topic))
@@ -30,7 +48,7 @@ export class MockContentService implements ContentService {
         `${book.title} ${book.keywords} ${book.tags.join(' ')}`.toLowerCase().includes(search),
       )
     }
-    return delay(list, 200)
+    return delay(paginate(list, limit, cursor), 200)
   }
 
   async getBook(bookId: string) {

@@ -16,6 +16,7 @@ from app.infrastructure.metrics_registry import metrics_registry
 from app.infrastructure.rate_limit import rate_limiter
 from app.infrastructure.observability import setup_access_logging
 from app.modules.admin.router import router as admin_router
+from app.modules.content.assets import router as library_assets_router
 from app.modules.content.router import router as content_router
 from app.modules.conversation.router import router as conversation_router
 from app.modules.identity.router import router as identity_router
@@ -96,6 +97,7 @@ async def request_observability_middleware(request: Request, call_next):
 app.include_router(identity_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(content_router, prefix="/api/v1")
+app.include_router(library_assets_router, prefix="/api/v1")
 app.include_router(knowledge_router, prefix="/api/v1")
 app.include_router(learning_router, prefix="/api/v1")
 app.include_router(conversation_router, prefix="/api/v1")

@@ -99,7 +99,7 @@ export function ArchiveDocCard({
       </div>
 
       {docMode === 'preview' ? (
-        <div className="px-6 py-4 font-mono text-xs leading-relaxed text-fg">
+        <div className="px-6 py-4 font-mono text-xs leading-relaxed text-fg wrap-anywhere">
           <span className="block text-muted opacity-55">---</span>
           {frontmatter.map(([key, value]) => (
             <span key={key} className="block">

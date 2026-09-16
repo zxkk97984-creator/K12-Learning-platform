@@ -6,13 +6,13 @@ import { Companion, useTeacherName } from '@/features/companion'
 import { ToastHost } from '@/features/feedback'
 import { ScreenContextRouteSync } from '@/features/screen-context'
 import { UserAvatar } from './UserAvatar'
+import { BottomNav } from './BottomNav'
 
 const NAV_ITEMS = [
   { to: '/home', label: '首页' },
   { to: '/library', label: '学习' },
-  { to: '/quizzes', label: '测验' },
+  { to: '/quizzes', label: '练习' },
   { to: '/profile', label: '成长' },
-  { to: '/settings', label: '设置' },
 ] as const
 
 export function AppLayout() {
@@ -42,14 +42,17 @@ export function AppLayout() {
           <NavLink to="/home" className="font-display text-lg leading-none">
             {teacherName}
           </NavLink>
-          <nav className="flex flex-1 items-center gap-1.5" aria-label="主导航">
+          <nav
+            className="hidden flex-1 items-center gap-1.5 md:flex"
+            aria-label="主导航"
+          >
             {NAV_ITEMS.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
                   [
-                    'min-h-[44px] rounded-[10px] px-3.5 py-2.5 text-sm transition-colors',
+                    'min-h-[44px] rounded-[10px] px-3 py-2 text-sm transition-colors',
                     isActive
                       ? 'border border-border bg-surface text-fg shadow-sm'
                       : 'text-muted hover:bg-fg-soft hover:text-fg',
@@ -64,7 +67,7 @@ export function AppLayout() {
                 to="/admin"
                 className={({ isActive }) =>
                   [
-                    'min-h-[44px] rounded-[10px] px-3.5 py-2.5 text-sm transition-colors',
+                    'min-h-[44px] rounded-[10px] px-3 py-2 text-sm transition-colors',
                     isActive
                       ? 'border border-border bg-surface text-fg shadow-sm'
                       : 'text-muted hover:bg-fg-soft hover:text-fg',
@@ -83,9 +86,16 @@ export function AppLayout() {
                   avatarUrl={currentUser?.avatar_url}
                   size="sm"
                 />
-                <span className="text-sm text-fg">
+                <span className="hidden text-sm text-fg md:inline">
                   {currentUser?.nickname ?? (isAdmin ? '管理员' : authUser?.username)}
                 </span>
+                <Link
+                  to="/settings"
+                  aria-label="设置"
+                  className="grid h-10 w-10 place-items-center rounded-[10px] text-muted hover:bg-fg-soft hover:text-fg"
+                >
+                  ⚙
+                </Link>
                 <button
                   type="button"
                   aria-label="退出登录"
@@ -106,9 +116,10 @@ export function AppLayout() {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-[var(--content)] px-gutter">
+      <main className="mx-auto max-w-[var(--content)] px-gutter pb-20 md:pb-10">
         <Outlet />
       </main>
+      <BottomNav />
       <Companion />
       <ToastHost />
     </div>

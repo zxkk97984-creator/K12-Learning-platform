@@ -46,6 +46,7 @@ class OpenAICompatibleProvider(AIProvider):
         self.max_tokens = max_tokens
         self.thinking_mode = thinking_mode
         self.timeout_seconds = timeout_seconds
+        self.last_usage: dict[str, Any] | None = None
 
     async def stream_chat(
         self,
@@ -91,6 +92,9 @@ class OpenAICompatibleProvider(AIProvider):
                 )
             response.raise_for_status()
             data = response.json()
+        # T20 §20b：采集 provider 实际 usage（OpenAI-compatible 通常返回 usage）。
+        # 拿不到时置空，由调用方标注 estimated，绝不把字符数冒充为 token。
+        self.last_usage = data.get("usage")
         try:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:

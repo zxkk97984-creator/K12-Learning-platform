@@ -119,6 +119,22 @@ async def ensure_knowledge_points(session, kps: list[dict]) -> tuple[dict[str, K
     return rows, created
 
 
+def _fig_content(content: dict, book_slug: str) -> dict:
+    """T10：给 FIGURE 块补 src（真实静态 URL）、alt、caption，保留旧两段兼容。
+
+    引用 `assets/<file>` 的图会生成公开 URL；无引用则仅保留 alt/caption，
+    前端明确显示"暂无图解"，不伪造 src。
+    """
+    if "asset" in content:
+        asset = content["asset"]
+        filename = asset.split("/")[-1]
+        content["src"] = f"/api/v1/library-assets/{book_slug}/{filename}"
+    content["alt"] = content.get("aria_label", "")
+    content.pop("asset", None)
+    content.pop("aria_label", None)
+    return content
+
+
 def load_book_files(slug: str) -> tuple[dict, list[tuple[int, list[dict], list[list[str]]]]]:
     book_dir = LIB_ROOT / "books" / slug
     book = json.loads((book_dir / "book.json").read_text(encoding="utf-8"))
@@ -131,10 +147,13 @@ def load_book_files(slug: str) -> tuple[dict, list[tuple[int, list[dict], list[l
         contents = []
         kp_lists = []
         for block in blocks:
+            content = build_content(block)
+            if block["type"] == "FIG":
+                content = _fig_content(content, slug)
             contents.append(
                 {
                     "block_type": TYPE_TO_DB[block["type"]],
-                    "content": build_content(block),
+                    "content": content,
                     "section_key": block["section_key"],
                 }
             )

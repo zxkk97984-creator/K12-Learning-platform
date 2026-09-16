@@ -2,13 +2,31 @@ import { useEffect, useState } from 'react'
 
 import type { AdminStats } from '@/entities/admin/types'
 import { adminService } from '@/shared/api/admin-service'
+import { ApiError } from '@/shared/api/http'
 
 export function AdminDashboard() {
   const [stats, setStats] = useState<AdminStats | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
-    void adminService.getStats().then(setStats).catch(() => setStats(null))
-  }, [])
+    let active = true
+    setError(null)
+    void adminService
+      .getStats()
+      .then((value) => {
+        if (active) setStats(value)
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setStats(null)
+          setError(err instanceof ApiError ? err.message : '统计加载失败')
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [attempt])
 
   const cards = stats
     ? [
@@ -22,6 +40,22 @@ export function AdminDashboard() {
         ['学生数', stats.students_total],
       ]
     : []
+
+  if (error) {
+    return (
+      <div className="max-w-3xl rounded-[14px] border border-border bg-surface p-5" role="alert">
+        <strong className="text-fg">统计加载失败</strong>
+        <p className="mt-1 text-sm text-muted">{error}</p>
+        <button
+          type="button"
+          className="mt-3 rounded-[10px] bg-accent px-4 py-2 text-sm text-surface hover:bg-accent/85"
+          onClick={() => setAttempt((value) => value + 1)}
+        >
+          重新加载
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="grid max-w-3xl gap-3 sm:grid-cols-2">

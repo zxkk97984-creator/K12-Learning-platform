@@ -86,10 +86,15 @@ def _ensure_env() -> None:
                             difficulty="EASY",
                             estimated_minutes=20,
                             tags=["测试P3"],
-                            status="DRAFT",
+                            status="PUBLISHED",
                             published_at=datetime.now(timezone.utc),
                         )
                     )
+                else:
+                    # 修复可能残留的历史 DRAFT 状态，保证出题可见性（T03）。
+                    existing = await s.get(Book, book_id)
+                    existing.status = "PUBLISHED"
+                    existing.published_at = existing.published_at or datetime.now(timezone.utc)
             for ch_id, book_id, order in [
                 (CH1_ID, BOOK_ID, 1),
                 (CH2_ID, BOOK_ID, 2),

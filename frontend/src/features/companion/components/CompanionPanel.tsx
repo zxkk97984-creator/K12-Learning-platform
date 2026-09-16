@@ -23,7 +23,6 @@ export function CompanionPanel({ dockRef }: CompanionPanelProps) {
   const setOpen = useCompanionStore((state) => state.setOpen)
   const setAiState = useCompanionStore((state) => state.setAiState)
   const [rect, setRect] = useState<PanelRect | null>(null)
-
   useEffect(() => {
     if (!open || !dockRef.current) return
     const update = () => {
@@ -35,14 +34,35 @@ export function CompanionPanel({ dockRef }: CompanionPanelProps) {
     return () => window.removeEventListener('resize', update)
   }, [open, position, dockRef])
 
+  // Esc 关闭（T18 验收②），并回焦。
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+        setAiState('idle')
+        ;(dockRef.current?.querySelector('[data-companion-toggle]') as HTMLElement | null)?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [open, setAiState])
+
   if (!open || !rect) return null
+
+  const isMobile = window.innerWidth <= 720
+  const dockStyle = isMobile
+    ? { paddingBottom: 'env(safe-area-inset-bottom)' }
+    : undefined
 
   return (
     <aside
       className="fixed z-35 flex flex-col overflow-hidden rounded-[18px] border border-fg bg-surface shadow-soft"
-      style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
+      style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height, ...dockStyle }}
       aria-label={`${teacherName}对话面板`}
       data-open="true"
+      role="dialog"
+      aria-modal="false"
     >
       <div className="flex min-h-[67px] items-center justify-between border-b border-border px-4">
         <div className="flex min-w-0 items-center gap-2">
@@ -57,7 +77,7 @@ export function CompanionPanel({ dockRef }: CompanionPanelProps) {
           </div>
           <div className="min-w-0">
             <strong className="font-display text-sm">{teacherName}</strong>
-            <span className="ml-2 text-[10px] text-muted">对话面板骨架 · 1-F 填充聊天内容</span>
+            <span className="ml-2 text-[10px] text-muted">正在陪你学习</span>
           </div>
         </div>
         <button
@@ -67,6 +87,7 @@ export function CompanionPanel({ dockRef }: CompanionPanelProps) {
           onClick={() => {
             setOpen(false)
             setAiState('idle')
+            ;(dockRef.current?.querySelector('[data-companion-toggle]') as HTMLElement | null)?.focus()
           }}
         >
           ✕

@@ -49,6 +49,8 @@ class ChapterDTO(BaseModel):
     summary: str | None
     estimated_minutes: int
     status: BookStatus
+    # T13：当前学生是否已在 chapter_completions 完成本章（仅学生目录接口填充）。
+    is_completed: bool = False
 
 
 class ContentBlockDTO(BaseModel):
@@ -84,6 +86,8 @@ class ChapterDetailDTO(BaseModel):
 class BookPageMeta(BaseModel):
     next_cursor: str | None
     has_more: bool
+    # 可选的全库匹配总数（不计当前页长度）；未请求统计时为 None，避免以页长冒充总数。
+    total: int | None = None
 
 
 class BookPageDTO(BaseModel):

@@ -123,7 +123,7 @@ export default function MemoriesPage() {
       <p className="mt-2 max-w-[52ch] text-sm text-muted">
         {teacherName}对你的每条理解都来自真实学习记录。你可以确认、质疑、修改或忘记。
       </p>
-      <p className="mt-2 text-xs text-muted">记忆由学习记录与 Memory Skill 生成，当前不支持手动添加。</p>
+      <p className="mt-2 text-xs text-muted">记忆由你的学习记录生成，当前不支持手动添加。</p>
 
       <div className="mt-6 flex max-w-2xl flex-wrap gap-1 rounded-[10px] bg-fg-soft p-1">
         {FILTERS.map(([filter, label]) => (

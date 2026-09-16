@@ -67,6 +67,32 @@ describe('apiRequest（0-D 信封解析）', () => {
     } as unknown as Response)
     await expect(apiRequest<void>('/auth/logout', { method: 'POST' })).resolves.toBeUndefined()
   })
+
+  it('错误时携带 requestId 与 retryAfterMs（来自响应头）', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: { get: (key: string) => (key === 'x-request-id' ? 'req-123' : key === 'retry-after' ? '2' : null) },
+      json: async () => ({ error: { code: 'TOO_MANY_REQUESTS', message: '慢点' } }),
+    } as unknown as Response)
+    const error = (await apiRequest('/me').catch((err: unknown) => err)) as ApiError
+    expect(error.requestId).toBe('req-123')
+    expect(error.retryAfterMs).toBe(2000)
+  })
+
+  it('转发 AbortSignal 至 fetch（路由/切换后可取消）', async () => {
+    const controller = new AbortController()
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({ data: null }),
+    } as unknown as Response)
+    await apiRequest('/me', { signal: controller.signal })
+    const [url, init] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toBe('/api/v1/me')
+    expect(init?.signal).toBe(controller.signal)
+  })
 })
 
 describe('auth token 存取', () => {

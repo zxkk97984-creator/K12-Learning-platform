@@ -10,12 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.database.models import (
     Book,
     BookProgress,
+    Chapter,
+    LearningEvent,
     QuizAnswer,
     QuizSession,
     Recommendation,
     StudentMemory,
     StudentProfile,
 )
+from app.modules.recommendation.schemas import LearningNextActionDTO
 
 
 RecommendationType = Literal[
@@ -401,6 +404,204 @@ class RecommendationService:
             completed_progress_signals,
             book_candidates,
             interest_signals,
+        )
+
+    async def learning_next(self, session: AsyncSession, user_id: UUID) -> LearningNextActionDTO:
+        """§6.1 统一下一步行动：按顺序取第一条有效行动。"""
+        student_id = await self._student_id(session, user_id)
+        profile = (
+            await session.execute(
+                select(StudentProfile).where(StudentProfile.student_id == student_id)
+            )
+        ).scalar_one()
+
+        # 1) 进行中的练习 → 继续
+        active_quiz = (
+            await session.execute(
+                select(QuizSession)
+                .where(
+                    QuizSession.student_id == student_id,
+                    QuizSession.status == "ACTIVE",
+                )
+                .order_by(QuizSession.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if active_quiz is not None:
+            return LearningNextActionDTO(
+                type="CONTINUE_QUIZ",
+                label=f"继续《{active_quiz.title}》",
+                book_id=active_quiz.book_id,
+                chapter_id=active_quiz.chapter_id,
+                quiz_session_id=active_quiz.quiz_session_id,
+                reason="上次有一场练习还没做完，接着把它完成最顺畅。",
+                evidence_ids=[str(active_quiz.quiz_session_id)],
+            )
+
+        # 2) 最近完成测验含错题且未复习 → 回顾错题
+        recent_quizzes = (
+            await session.execute(
+                select(QuizSession)
+                .where(
+                    QuizSession.student_id == student_id,
+                    QuizSession.status == "COMPLETED",
+                )
+                .order_by(QuizSession.created_at.desc())
+                .limit(10)
+            )
+        ).scalars().all()
+        reviewed_quiz_ids = set(
+            (
+                await session.execute(
+                    select(LearningEvent.quiz_session_id).where(
+                        LearningEvent.student_id == student_id,
+                        LearningEvent.event_type == "QUIZ_REVIEW_COMPLETED",
+                        LearningEvent.quiz_session_id.is_not(None),
+                    )
+                )
+            ).scalars().all()
+        )
+        for quiz in recent_quizzes:
+            if quiz.quiz_session_id in reviewed_quiz_ids:
+                continue
+            wrong_count = (
+                await session.execute(
+                    select(func.count(QuizAnswer.answer_id)).where(
+                        QuizAnswer.quiz_session_id == quiz.quiz_session_id,
+                        QuizAnswer.is_final.is_(True),
+                        QuizAnswer.is_correct.is_(False),
+                    )
+                )
+            ).scalar_one()
+            if wrong_count > 0:
+                return LearningNextActionDTO(
+                    type="REVIEW_QUIZ",
+                    label=f"回顾《{quiz.title}》的错题",
+                    book_id=quiz.book_id,
+                    chapter_id=quiz.chapter_id,
+                    quiz_session_id=quiz.quiz_session_id,
+                    reason=f"这次测验有 {wrong_count} 道做错，复习一下会记得更牢。",
+                    evidence_ids=[str(quiz.quiz_session_id)],
+                )
+
+        # 3) 最近已完成章节且还有下一章 → 下一章
+        last_completion = (
+            await session.execute(
+                select(Chapter.chapter_id, Chapter.book_id, Chapter.chapter_order)
+                .join(LearningEvent, LearningEvent.chapter_id == Chapter.chapter_id)
+                .where(
+                    Chapter.status == "PUBLISHED",
+                    LearningEvent.student_id == student_id,
+                    LearningEvent.event_type.in_(("CHAPTER_FINISHED",)),
+                )
+                .order_by(LearningEvent.occurred_at.desc())
+                .limit(1)
+            )
+        ).first()
+        if last_completion is not None:
+            book = await session.get(Book, last_completion.book_id)
+            if book is not None and book.status == "PUBLISHED":
+                next_chapter = (
+                    await session.execute(
+                        select(Chapter)
+                        .where(
+                            Chapter.book_id == last_completion.book_id,
+                            Chapter.status == "PUBLISHED",
+                            Chapter.chapter_order > last_completion.chapter_order,
+                        )
+                        .order_by(Chapter.chapter_order.asc())
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                if next_chapter is not None:
+                    return LearningNextActionDTO(
+                        type="NEXT_CHAPTER",
+                        label=f"学下一章：{next_chapter.title}",
+                        book_id=next_chapter.book_id,
+                        chapter_id=next_chapter.chapter_id,
+                        reason=f"你已经读完上一章，接着学《{next_chapter.title}》衔接自然。",
+                        evidence_ids=[str(next_chapter.chapter_id)],
+                    )
+
+        # 4) 有阅读位置 → 继续阅读
+        progress_book = (
+            await session.execute(
+                select(BookProgress, Book)
+                .join(Book, Book.book_id == BookProgress.book_id)
+                .where(
+                    BookProgress.student_id == student_id,
+                    BookProgress.status == "READING",
+                    Book.status == "PUBLISHED",
+                )
+                .order_by(BookProgress.last_read_at.desc())
+                .limit(1)
+            )
+        ).first()
+        if progress_book is not None:
+            progress, book = progress_book
+            return LearningNextActionDTO(
+                type="CONTINUE_READING",
+                label=f"继续读《{book.title}》",
+                book_id=book.book_id,
+                chapter_id=progress.chapter_id,
+                reason=f"上次读到这本书的 {progress.position_percent}%，继续往下读。",
+                evidence_ids=[str(progress.progress_id)],
+            )
+
+        # 5) 按年级匹配已发布课程 → 开始第一章
+        if profile.grade is not None:
+            matches = (
+                await session.execute(
+                    select(Book)
+                    .where(
+                        Book.status == "PUBLISHED",
+                        Book.grade_min <= profile.grade,
+                        Book.grade_max >= profile.grade,
+                    )
+                    .order_by(Book.created_at.asc())
+                )
+            ).scalars().all()
+            for book in matches:
+                first_chapter = (
+                    await session.execute(
+                        select(Chapter)
+                        .where(
+                            Chapter.book_id == book.book_id,
+                            Chapter.status == "PUBLISHED",
+                        )
+                        .order_by(Chapter.chapter_order.asc())
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                if first_chapter is not None:
+                    return LearningNextActionDTO(
+                        type="START_BOOK",
+                        label=f"从《{book.title}》开始",
+                        book_id=book.book_id,
+                        chapter_id=first_chapter.chapter_id,
+                        reason=f"这本书匹配你当前年级，从第一章开始最合适。",
+                        evidence_ids=[str(first_chapter.chapter_id)],
+                    )
+
+        # 兜底：任何合法下一步（课程已归档/空数据时也算合法行动）。
+        any_book = (
+            await session.execute(
+                select(Book).where(Book.status == "PUBLISHED").order_by(Book.created_at.asc())
+            )
+        ).scalars().first()
+        if any_book is not None:
+            return LearningNextActionDTO(
+                type="START_BOOK",
+                label=f"开始读《{any_book.title}》",
+                book_id=any_book.book_id,
+                reason="先挑一本适合的书开始学习。",
+                evidence_ids=[],
+            )
+        return LearningNextActionDTO(
+            type="START_BOOK",
+            label="逛逛书库挑一本",
+            reason="还没有适合的课程，先去书库看看。",
+            evidence_ids=[],
         )
 
     async def generate_for_student(

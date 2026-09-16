@@ -38,7 +38,7 @@ export function CompanionDock({ dockRef }: CompanionDockProps) {
   return (
     <div
       ref={dockRef}
-      className="fixed z-40 touch-none select-none"
+      className="pointer-events-none fixed z-40 touch-none select-none"
       style={{ left: position.x, top: position.y, width: DOCK_WIDTH, height: DOCK_HEIGHT }}
       data-open={open}
       data-suggest={suggest}
@@ -49,7 +49,11 @@ export function CompanionDock({ dockRef }: CompanionDockProps) {
       >
         <button
           type="button"
-          className="relative grid h-full w-full place-items-end justify-items-center border-0 bg-transparent p-0"
+          data-companion-toggle
+          // T25：dock 是常驻浮动层，尺寸固定 140×168；把可点击命中区收窄到精灵本体，
+          // 让透明边距对底层页面内容"透传"，避免盖住设置页等处的"保存设置"主按钮。
+          // 容器用 pointer-events-none，仅按钮恢复 auto（拖拽仍走按钮指针事件）。
+          className="pointer-events-auto relative grid h-auto w-auto min-h-[64px] min-w-[96px] place-items-end justify-items-center border-0 bg-transparent p-0"
           aria-label={`打开${teacherName} AI 教师`}
           aria-expanded={open}
           onPointerDown={handlePointerDown}

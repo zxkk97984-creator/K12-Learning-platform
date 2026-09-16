@@ -41,7 +41,7 @@ export const mockMessages: Message[] = [
     conversation_id: 'conv-1',
     role: 'TEACHER',
     type: 'TOOL_STATUS',
-    content: 'Quiz Skill 已创建 · 正式测验已记录',
+    content: '测验已创建 · 正式测验已记录',
     metadata: { tool_state: 'done' },
     sequence: 4,
     model_info: { provider: 'mock', model: 'mock-model' },

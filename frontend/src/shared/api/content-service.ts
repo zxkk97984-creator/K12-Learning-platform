@@ -6,6 +6,7 @@ import type {
   KnowledgePoint,
 } from '@/entities/book/types'
 import type { Stage } from '@/entities/student/types'
+import type { CursorMeta } from './http'
 
 export interface ContentListParams {
   stage?: Stage
@@ -13,8 +14,19 @@ export interface ContentListParams {
   search?: string
 }
 
+export interface BookPageParams extends ContentListParams {
+  cursor?: string
+  limit?: number
+}
+
+export interface BookPage {
+  items: Book[]
+  meta: CursorMeta
+}
+
 export interface ContentService {
   getBooks(params?: ContentListParams): Promise<Book[]>
+  getBooksPage(params?: BookPageParams): Promise<BookPage>
   getBook(bookId: string): Promise<Book>
   getChapters(bookId: string): Promise<Chapter[]>
   getChapter(chapterId: string): Promise<ChapterDetail>

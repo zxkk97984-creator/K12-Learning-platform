@@ -32,30 +32,26 @@ def _ensure_content() -> None:
         async with async_session() as session:
             book = await session.get(Book, BOOK_ID)
             if book is None:
-                session.add(
-                    Book(
-                        book_id=BOOK_ID,
-                        title="测验测试书",
-                        grade_min=7,
-                        grade_max=9,
-                        difficulty="MEDIUM",
-                        estimated_minutes=60,
-                        status="PUBLISHED",
-                        published_at=datetime.now(timezone.utc),
-                    )
-                )
+                book = Book(book_id=BOOK_ID)
+                session.add(book)
+            # 自愈：隔离库跨套件重复运行会残留旧状态，必须重新断言归属与可见性。
+            book.title = "测验测试书"
+            book.grade_min = 7
+            book.grade_max = 9
+            book.difficulty = "MEDIUM"
+            book.estimated_minutes = 60
+            book.status = "PUBLISHED"
+            if book.published_at is None:
+                book.published_at = datetime.now(timezone.utc)
             chapter = await session.get(Chapter, CHAPTER_ID)
             if chapter is None:
-                session.add(
-                    Chapter(
-                        chapter_id=CHAPTER_ID,
-                        book_id=BOOK_ID,
-                        title="训练数据测验章",
-                        chapter_order=1,
-                        estimated_minutes=15,
-                        status="PUBLISHED",
-                    )
-                )
+                chapter = Chapter(chapter_id=CHAPTER_ID)
+                session.add(chapter)
+            chapter.book_id = BOOK_ID
+            chapter.title = "训练数据测验章"
+            chapter.chapter_order = 1
+            chapter.estimated_minutes = 15
+            chapter.status = "PUBLISHED"
             await session.commit()
 
     asyncio.run(run())

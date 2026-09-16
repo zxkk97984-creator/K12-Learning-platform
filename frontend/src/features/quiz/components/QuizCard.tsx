@@ -46,6 +46,27 @@ function answerFor(
   }
 }
 
+/** 把键映射为选项文本（多选逐个映射成文本，避免显示一串代号；T18 §5.6）。 */
+function keyText(question: QuizQuestion, key: string): string {
+  return question.options.find((option) => option.key === key)?.text ?? key
+}
+
+function answerLabel(question: QuizQuestion, selectedKeys: string[], textValue: string): string {
+  if (question.question_type === 'FILL_BLANK') return textValue.trim() || '—'
+  if (selectedKeys.length === 0) return '—'
+  return selectedKeys.map((key) => keyText(question, key)).join('；')
+}
+
+function correctLabel(question: QuizQuestion): string {
+  const correct = question.correct_answer
+  const keys: string[] = []
+  if (Array.isArray(correct?.keys)) keys.push(...correct.keys.map(String))
+  else if (correct?.key !== undefined && correct.key !== null) keys.push(String(correct.key))
+  else if (correct?.value !== undefined && correct.value !== null) keys.push(String(correct.value))
+  if (keys.length === 0) return '—'
+  return keys.map((key) => keyText(question, key)).join('；')
+}
+
 /** 对话内交互式测验卡：多题逐题推进、四种题型、服务端判分（Phase 2-B）。 */
 export function QuizCard({ sessionId }: QuizCardProps) {
   const [session, setSession] = useState<QuizSession | null>(null)
@@ -328,6 +349,16 @@ export function QuizCard({ sessionId }: QuizCardProps) {
                 ? '这道题的尝试次数用完了'
                 : `✗ 这次不对（第 ${feedback.attemptNo} 次尝试），再想想`}
           </p>
+          {feedback.isFinal && question ? (
+            <p className="mt-1 space-x-2">
+              <span>
+                你的答案：<strong className="text-fg">{answerLabel(question, selectedKeys, textValue)}</strong>
+              </span>
+              <span>
+                正确答案：<strong className="text-fg">{correctLabel(question)}</strong>
+              </span>
+            </p>
+          ) : null}
           {feedback.explanation ? <p className="mt-1">解析:{feedback.explanation}</p> : null}
         </div>
       ) : null}

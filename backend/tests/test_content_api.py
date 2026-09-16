@@ -266,10 +266,13 @@ class TestContentAPI:
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "KNOWLEDGE_POINT_NOT_FOUND"
 
-    def test_grade_filter(self, client: TestClient, token: str) -> None:
+    def test_grade_filter_intersection(self, client: TestClient, token: str) -> None:
+        # T04：年级采用区间相交（book.min ≤ requested.max 且 book.max ≥ requested.min）。
+        # `grade_min=10` 表示"覆盖到 10 年级及以上"的书，即 book.grade_max >= 10。
         response = client.get("/api/v1/books?grade_min=10", headers=headers(token))
         assert response.status_code == 200
-        assert all(book["grade_min"] >= 10 for book in response.json()["data"])
+        for book in response.json()["data"]:
+            assert book["grade_max"] >= 10
 
     def test_list_books_rejects_invalid_cursor(self, client: TestClient, token: str) -> None:
         response = client.get(
@@ -277,3 +280,111 @@ class TestContentAPI:
         )
         assert response.status_code == 422
         assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+class TestBookPagination:
+    """T04 分页与筛选后端契约（独立 25 本夹具，不依赖语料顺序）。"""
+
+    # 25 本独立书（grade 1..12），title 前缀统一为 PGN 以隔离。
+    BASE = UUID("d4000000-0000-0000-0000-000000000000")
+
+    @pytest.fixture(scope="class")
+    def books_row(self, client: TestClient) -> None:
+        async def run() -> None:
+            async with async_session() as session:
+                for i in range(25):
+                    bid = UUID(int=self.BASE.int + i)
+                    book = await session.get(Book, bid)
+                    if book is None:
+                        book = Book(book_id=bid)
+                        session.add(book)
+                    g = 1 + (i % 12)
+                    book.title = f"分页测试书{i:02d}"
+                    if i == 24:
+                        # 只有第 25 本才含独特词。
+                        book.title = f"分页测试书{i:02d}独有关键词绿松石"
+                    book.description = "分页契约测试"
+                    book.grade_min = g
+                    book.grade_max = min(12, g + 1)
+                    book.difficulty = "MEDIUM"
+                    book.estimated_minutes = 10
+                    book.status = "PUBLISHED"
+                    if book.published_at is None:
+                        book.published_at = datetime.now(timezone.utc)
+                await session.commit()
+
+        asyncio.run(run())
+
+    def _headers(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_first_page_20_second_page_5_no_dup_or_missing(
+        self, client: TestClient, token: str, books_row: None
+    ) -> None:
+        p1 = client.get("/api/v1/books?limit=20", headers=self._headers(token))
+        assert p1.status_code == 200
+        data1 = p1.json()["data"]
+        meta1 = p1.json()["meta"]
+        assert len(data1) == 20
+        assert meta1["has_more"] is True
+        assert meta1["next_cursor"]
+
+        p2 = client.get(
+            f"/api/v1/books?limit=20&cursor={meta1['next_cursor']}",
+            headers=self._headers(token),
+        )
+        assert p2.status_code == 200
+        data2 = p2.json()["data"]
+        meta2 = p2.json()["meta"]
+        assert len(data2) > 0
+        ids1 = {b["book_id"] for b in data1}
+        ids2 = {b["book_id"] for b in data2}
+        assert ids1.isdisjoint(ids2), "两页不应有重复书"
+
+    def test_search_hits_only_25th_book(
+        self, client: TestClient, token: str, books_row: None
+    ) -> None:
+        resp = client.get(
+            "/api/v1/books?search=独有关键词绿松石&limit=100",
+            headers=self._headers(token),
+        )
+        assert resp.status_code == 200
+        items = resp.json()["data"]
+        assert all("绿松石" in b["title"] for b in items)
+        assert any(b["title"].startswith("分页测试书24") for b in items)
+
+    def test_grade_interval_intersection_hits_cross_stage_book(
+        self, client: TestClient, token: str, books_row: None
+    ) -> None:
+        # grade_min=10 → book.grade_max >= 10（相交），命中跨学段书。
+        resp = client.get("/api/v1/books?grade_min=10", headers=self._headers(token))
+        assert resp.status_code == 200
+        got = resp.json()["data"]
+        assert all(b["grade_max"] >= 10 for b in got)
+        # grade_max=6 → book.grade_min <= 6
+        resp2 = client.get("/api/v1/books?grade_max=6", headers=self._headers(token))
+        assert resp2.status_code == 200
+        assert all(b["grade_min"] <= 6 for b in resp2.json()["data"])
+
+    def test_search_and_grade_queries_do_not_share_cache(
+        self, client: TestClient, token: str, books_row: None
+    ) -> None:
+        r_search = client.get(
+            "/api/v1/books?search=独有关键词&limit=100", headers=self._headers(token)
+        )
+        r_plain = client.get("/api/v1/books?limit=100", headers=self._headers(token))
+        assert r_search.status_code == 200 and r_plain.status_code == 200
+        search_ids = {b["book_id"] for b in r_search.json()["data"]}
+        plain_ids = {b["book_id"] for b in r_plain.json()["data"]}
+        assert search_ids != plain_ids, "搜索与无搜索查询不得返回相同结果（缓存不得串用）"
+
+    def test_first_page_total_is_library_wide_not_page_length(
+        self, client: TestClient, token: str, books_row: None
+    ) -> None:
+        # with_total 应返回全库匹配总数，不得以当前页长度冒充总数。
+        r = client.get("/api/v1/books?limit=20&with_total=true", headers=self._headers(token))
+        assert r.status_code == 200
+        meta = r.json()["meta"]
+        assert meta["total"] is not None
+        assert meta["total"] >= 20, "total 应不少于单页长度"
+        assert meta["total"] != len(r.json()["data"]), "total 不得等于当前页长度"

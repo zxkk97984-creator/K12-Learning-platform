@@ -86,17 +86,28 @@ export const adminService = {
   },
 
   async getKnowledgeResources(): Promise<AdminKnowledgeResource[]> {
-    const [ready, failed] = await Promise.all([
-      apiRequest<AdminKnowledgeResource[] | { items: AdminKnowledgeResource[] }>(
-        '/knowledge/resources?status=READY&limit=100',
+    // 拉取全部状态（含处理中），使 UPLOADED→READY 无需手刷即可看到（T21 轮询）。
+    const statuses = ['READY', 'FAILED', 'UPLOADED', 'PARSING', 'CHUNKING', 'INDEXING']
+    const results = await Promise.all(
+      statuses.map((status) =>
+        apiRequest<AdminKnowledgeResource[] | { items: AdminKnowledgeResource[] }>(
+          `/knowledge/resources?status=${status}&limit=100`,
+        ),
       ),
-      apiRequest<AdminKnowledgeResource[] | { items: AdminKnowledgeResource[] }>(
-        '/knowledge/resources?status=FAILED&limit=100',
-      ),
-    ])
+    )
     const normalize = (payload: AdminKnowledgeResource[] | { items: AdminKnowledgeResource[] }) =>
       Array.isArray(payload) ? payload : payload.items
-    return [...normalize(ready), ...normalize(failed)]
+    const seen = new Set<string>()
+    const merged: AdminKnowledgeResource[] = []
+    for (const payload of results) {
+      for (const item of normalize(payload)) {
+        if (!seen.has(item.resource_id)) {
+          seen.add(item.resource_id)
+          merged.push(item)
+        }
+      }
+    }
+    return merged
   },
 
   async uploadKnowledgeResource(input: UploadKnowledgeInput): Promise<AdminKnowledgeResource> {

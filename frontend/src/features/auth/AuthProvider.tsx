@@ -9,10 +9,11 @@ import {
 } from 'react'
 
 import type { AuthUser, StudentProfile } from '@/entities/student/types'
-import { clearToken, getToken } from '@/shared/api/auth'
+import { getToken } from '@/shared/api/auth'
 import { ApiError, UNAUTHORIZED_EVENT } from '@/shared/api/http'
 import { adminService } from '@/shared/api/admin-service'
 import { studentService } from '@/shared/services'
+import { resetUserState } from './reset-user-state'
 
 interface AuthContextValue {
   token: string | null
@@ -111,7 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const clearAuthState = useCallback(() => {
-    clearToken()
+    // T06：统一切换清理——清 token、对话 store、用户 query 缓存，避免跨账号残留。
+    resetUserState()
     setTokenState(null)
     setAuthUser(null)
     setCurrentUser(null)
@@ -146,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Phase 5-A：全局 401 → 统一清除登录态，受保护路由自动回登录页
   useEffect(() => {
     const handler = () => {
-      clearToken()
+      resetUserState()
       setTokenState(null)
       setAuthUser(null)
       setCurrentUser(null)

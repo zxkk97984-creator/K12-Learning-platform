@@ -163,6 +163,23 @@ describe('ApiContentService', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/knowledge-points/kp-1')
   })
 
+  it('getBooksPage 保留信封：返回 items 与 meta(游标/总数)', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(200, {
+        data: [bookDto],
+        meta: { next_cursor: 'abc', has_more: true, total: 25 },
+      }),
+    )
+
+    const page = await service.getBooksPage({ cursor: 'prev', limit: 12 })
+    expect(page.items).toHaveLength(1)
+    expect(page.items[0]).toMatchObject({ book_id: 'book-1' })
+    expect(page.meta).toEqual({ next_cursor: 'abc', has_more: true, total: 25 })
+    expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(
+      '/api/v1/books?cursor=prev&limit=12',
+    )
+  })
+
   it('getProgress 与 getBookProgress 接入 Learning API', async () => {
     const progress = {
       progress_id: 'progress-1',

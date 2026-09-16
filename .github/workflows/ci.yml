@@ -61,6 +61,63 @@ jobs:
           sleep 5
           kill -0 "$(cat /tmp/worker.pid)" || { cat /tmp/worker.log; exit 1; }
           echo "Worker is alive and polling the queue"
+      # T25a：Worker 验证"至少一个任务到终态"，而不只是进程存活。
+      # 入队一个 memory_consolidation 任务，轮询 background_jobs 直至 success/failed。
+      - name: "Worker smoke: enqueue a job and assert it reaches a terminal status"
+        run: |
+          uv run python - <<'PY'
+          import asyncio, sys, uuid
+          from sqlalchemy import select
+          from app.infrastructure.database.models import (
+              BackgroundJob, StudentProfile, User,
+          )
+          from app.infrastructure.database.session import async_session
+          from app.jobs import queue
+          from app.modules.identity.security import hash_password
+
+          # CI 专用隔离账号（服务容器 DB 每次全新，无真实学生数据）。
+          STUDENT_USERNAME = "ci-worker-smoke"
+
+          async def ensure_student(session) -> "StudentProfile":
+              user = (await session.execute(
+                  select(User).where(User.username == STUDENT_USERNAME)
+              )).scalar_one_or_none()
+              if user is None:
+                  user = User(
+                      username=STUDENT_USERNAME,
+                      password_hash=hash_password("ci-only-smoke-password"),
+                      user_type="STUDENT",
+                  )
+                  session.add(user)
+                  await session.flush()
+              profile = (await session.execute(
+                  select(StudentProfile).where(StudentProfile.user_id == user.user_id)
+              )).scalar_one_or_none()
+              if profile is None:
+                  profile = StudentProfile(user_id=user.user_id, nickname="CI Smoke", grade=8, language="zh-CN")
+                  session.add(profile)
+                  await session.flush()
+              return profile
+
+          async def main():
+              async with async_session() as session:
+                  profile = await ensure_student(session)
+                  job = await queue.enqueue(
+                      session, "memory_consolidation", {"student_id": str(profile.student_id)}
+                  )
+                  await session.commit()
+                  for _ in range(30):
+                      row = (await session.execute(
+                          select(BackgroundJob).where(BackgroundJob.job_id == job.job_id)
+                      )).scalar_one_or_none()
+                      if row and row.status in ("success", "failed"):
+                          print(f"JOB TERMINAL: {row.job_type} -> {row.status}")
+                          return
+                      await asyncio.sleep(1)
+                  print("FAIL: job did not reach a terminal status within 30s")
+                  sys.exit(1)
+          asyncio.run(main())
+          PY
       - name: Stop background worker
         if: always()
         run: |
@@ -148,3 +205,23 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: Run E2E (script starts backend + worker + seed + content init + cleans up)
         run: bash scripts/ci-e2e.sh
+      # T25a：E2E 失败时保留 trace/screenshot 及后端/worker 日志，便于定位。
+      - name: Upload Playwright trace/screenshot + backend/worker logs on failure
+        if: ${{ failure() || cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-artifacts
+          path: |
+            frontend/test-results/**/*.zip
+            frontend/test-results/**/*.png
+            frontend/playwright-report/**/*.html
+          if-no-files-found: ignore
+      - name: Upload backend/worker logs on failure
+        if: ${{ failure() || cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-logs
+          path: |
+            /tmp/shuangling-backend.*.log
+            /tmp/shuangling-worker.*.log
+          if-no-files-found: ignore

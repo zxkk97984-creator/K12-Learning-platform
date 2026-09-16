@@ -10,7 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.infrastructure.cache.redis import cache_get, cache_set
-from app.infrastructure.database.models import Book, Chapter, ContentBlock, KnowledgePoint
+from app.infrastructure.database.models import (
+    Book,
+    Chapter,
+    ChapterCompletion,
+    ContentBlock,
+    KnowledgePoint,
+)
 from app.modules.content.schemas import (
     BookDTO,
     BookPageDTO,
@@ -49,6 +55,7 @@ def _books_cache_key(
     grade_max: int | None,
     tag: str | None,
     status: str,
+    search: str | None,
 ) -> str:
     """Namespace every filter so one cached page cannot satisfy another query."""
     fingerprint = json.dumps(
@@ -58,6 +65,7 @@ def _books_cache_key(
             "grade_min": grade_min,
             "status": status,
             "tag": tag,
+            "search": search,
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -80,7 +88,19 @@ class ContentService:
         grade_max: int | None,
         tag: str | None,
         status: str,
+        search: str | None = None,
+        with_total: bool = False,
     ) -> BookPageDTO:
+        if status != "PUBLISHED":
+            # T02：学生 list 强制 PUBLISHED；DRAFT/ARCHIVED 一律拒绝。此守卫在服务层执行，
+            # 使缓存命中路径（cache_get 返回后）同样不会绕过可见性。
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "INVALID_CONTENT_STATUS",
+                    "message": "student content list only exposes PUBLISHED items",
+                },
+            )
         cache_key = _books_cache_key(
             cursor=cursor,
             limit=limit,
@@ -88,6 +108,7 @@ class ContentService:
             grade_max=grade_max,
             tag=tag,
             status=status,
+            search=search,
         )
         cached = await cache_get(cache_key)
         if cached is not None:
@@ -99,11 +120,20 @@ class ContentService:
 
         query = select(Book).where(Book.status == status)
         if grade_min is not None:
-            query = query.where(Book.grade_min >= grade_min)
+            # T04：年级区间相交（book.min ≤ requested.max 且 book.max ≥ requested.min）
+            query = query.where(Book.grade_max >= grade_min)
         if grade_max is not None:
-            query = query.where(Book.grade_max <= grade_max)
+            query = query.where(Book.grade_min <= grade_max)
         if tag:
             query = query.where(Book.tags.contains([tag]))
+        if search:
+            # 后端全库过滤后分页，不先拉全量再本地搜。
+            term = f"%{search}%"
+            query = query.where(
+                Book.title.ilike(term)
+                | Book.description.ilike(term)
+                | Book.author.ilike(term)
+            )
         if cursor is not None:
             cursor_created_at, cursor_book_id = _decode_cursor(cursor)
             query = query.where(
@@ -114,11 +144,34 @@ class ContentService:
         has_more = len(rows) > limit
         books = rows[:limit]
 
+        total: int | None = None
+        if with_total and not cursor:
+            total_stmt = (
+                select(func.count(Book.book_id)).where(Book.status == status)
+            )
+            if grade_min is not None:
+                total_stmt = total_stmt.where(Book.grade_max >= grade_min)
+            if grade_max is not None:
+                total_stmt = total_stmt.where(Book.grade_min <= grade_max)
+            if tag:
+                total_stmt = total_stmt.where(Book.tags.contains([tag]))
+            if search:
+                term = f"%{search}%"
+                total_stmt = total_stmt.where(
+                    Book.title.ilike(term)
+                    | Book.description.ilike(term)
+                    | Book.author.ilike(term)
+                )
+            total = (await session.execute(total_stmt)).scalar_one()
+
         counts: dict[UUID, int] = {}
         if books:
             count_rows = await session.execute(
                 select(Chapter.book_id, func.count(Chapter.chapter_id))
-                .where(Chapter.book_id.in_([book.book_id for book in books]))
+                .where(
+                    Chapter.book_id.in_([book.book_id for book in books]),
+                    Chapter.status == "PUBLISHED",
+                )
                 .group_by(Chapter.book_id)
             )
             counts = dict(count_rows.all())
@@ -149,7 +202,7 @@ class ContentService:
         )
         page = BookPageDTO(
             items=items,
-            meta=BookPageMeta(next_cursor=next_cursor, has_more=has_more),
+            meta=BookPageMeta(next_cursor=next_cursor, has_more=has_more, total=total),
         )
         await cache_set(
             cache_key,
@@ -167,7 +220,9 @@ class ContentService:
             )
         count = (
             await session.execute(
-                select(func.count(Chapter.chapter_id)).where(Chapter.book_id == book_id)
+                select(func.count(Chapter.chapter_id)).where(
+                    Chapter.book_id == book_id, Chapter.status == "PUBLISHED"
+                )
             )
         ).scalar_one()
         return BookDTO(
@@ -189,7 +244,9 @@ class ContentService:
             chapter_count=count,
         )
 
-    async def list_chapters(self, session: AsyncSession, book_id: UUID) -> list[ChapterDTO]:
+    async def list_chapters(
+        self, session: AsyncSession, book_id: UUID, student_id: UUID | None = None
+    ) -> list[ChapterDTO]:
         book = await session.get(Book, book_id)
         if book is None or book.status != "PUBLISHED":
             raise HTTPException(
@@ -199,17 +256,36 @@ class ContentService:
         rows = (
             await session.execute(
                 select(Chapter)
-                .where(Chapter.book_id == book_id)
+                .where(Chapter.book_id == book_id, Chapter.status == "PUBLISHED")
                 .order_by(Chapter.chapter_order.asc())
             )
         ).scalars().all()
-        return [ChapterDTO.model_validate(chapter) for chapter in rows]
+        # T13：当前学生的章节完成事实填充 is_completed（诚实目录）。
+        completed: set[UUID] = set()
+        if student_id is not None:
+            completed_rows = await session.execute(
+                select(ChapterCompletion.chapter_id).where(
+                    ChapterCompletion.student_id == student_id,
+                    ChapterCompletion.chapter_id.in_([r.chapter_id for r in rows]),
+                )
+            )
+            completed = {row[0] for row in completed_rows.all()}
+        chapters = [ChapterDTO.model_validate(chapter) for chapter in rows]
+        for chapter in chapters:
+            chapter.is_completed = chapter.chapter_id in completed
+        return chapters
 
     async def get_chapter_detail(
-        self, session: AsyncSession, chapter_id: UUID
+        self, session: AsyncSession, chapter_id: UUID, student_id: UUID | None = None
     ) -> ChapterDetailDTO:
         chapter = await session.get(Chapter, chapter_id)
-        if chapter is None:
+        if chapter is None or chapter.status != "PUBLISHED":
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "CHAPTER_NOT_FOUND", "message": "chapter not found"},
+            )
+        book = await session.get(Book, chapter.book_id)
+        if book is None or book.status != "PUBLISHED":
             raise HTTPException(
                 status_code=404,
                 detail={"code": "CHAPTER_NOT_FOUND", "message": "chapter not found"},
@@ -247,8 +323,19 @@ class ContentService:
                 )
             ).scalars().all()
             knowledge_points = [KnowledgePointDTO.model_validate(kp) for kp in rows]
+        chapter_dto = ChapterDTO.model_validate(chapter)
+        if student_id is not None:
+            done = (
+                await session.execute(
+                    select(ChapterCompletion.completion_id).where(
+                        ChapterCompletion.student_id == student_id,
+                        ChapterCompletion.chapter_id == chapter_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            chapter_dto.is_completed = done is not None
         return ChapterDetailDTO(
-            chapter=ChapterDTO.model_validate(chapter),
+            chapter=chapter_dto,
             content_blocks=[ContentBlockDTO.model_validate(block) for block in blocks],
             knowledge_points=knowledge_points,
         )
@@ -257,7 +344,7 @@ class ContentService:
         self, session: AsyncSession, knowledge_point_id: UUID
     ) -> KnowledgePointDTO:
         point = await session.get(KnowledgePoint, knowledge_point_id)
-        if point is None:
+        if point is None or point.status != "ACTIVE":
             raise HTTPException(
                 status_code=404,
                 detail={

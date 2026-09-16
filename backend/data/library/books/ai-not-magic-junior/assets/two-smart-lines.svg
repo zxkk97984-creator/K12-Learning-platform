@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" font-family="'PingFang SC','Noto Sans CJK SC','Microsoft YaHei',sans-serif">
+  <title>两种让计算机变聪明的路线</title>
+  <desc>对比两条路线：左边是程序员手写规则让机器执行，右边是程序从海量标注例子中自己找规律，训练出模型并学会泛化。</desc>
+
+  <!-- 背景 -->
+  <rect x="0" y="0" width="900" height="520" rx="16" fill="#fbfcfe"/>
+
+  <text x="450" y="46" text-anchor="middle" font-size="26" font-weight="bold" fill="#1f2a44">两种聪明生产线</text>
+
+  <!-- ============ 左栏：规则程序 ============ -->
+  <g>
+    <rect x="30" y="70" width="400" height="420" rx="14" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="2"/>
+    <rect x="30" y="70" width="400" height="52" rx="14" fill="#8b5cf6"/>
+    <rect x="30" y="108" width="400" height="14" fill="#8b5cf6"/>
+    <text x="230" y="104" text-anchor="middle" font-size="23" font-weight="bold" fill="#ffffff">路线一：人写规则</text>
+
+    <!-- 规则框 -->
+    <rect x="60" y="150" width="340" height="110" rx="10" fill="#ffffff" stroke="#c4b5fd" stroke-width="2"/>
+    <text x="230" y="184" text-anchor="middle" font-size="18" fill="#1f2a44">如果邮件含「中奖」二字</text>
+    <text x="230" y="212" text-anchor="middle" font-size="18" fill="#1f2a44">就归入垃圾箱</text>
+    <text x="230" y="242" text-anchor="middle" font-size="15" fill="#ffffff">·</text>
+
+    <!-- 程序员 -->
+    <circle cx="230" cy="306" r="26" fill="#a78bfa" stroke="#7c3aed" stroke-width="2"/>
+    <circle cx="230" cy="300" r="9" fill="#ffffff"/>
+    <path d="M214,324 a16,16 0 0 1 32,0" fill="#ffffff"/>
+    <text x="230" y="360" text-anchor="middle" font-size="16" fill="#6d28d9">程序员写死</text>
+
+    <!-- 机器 -->
+    <rect x="140" y="378" width="180" height="52" rx="10" fill="#7c3aed"/>
+    <text x="230" y="409" text-anchor="middle" font-size="19" font-weight="bold" fill="#ffffff">执行规则</text>
+
+    <text x="230" y="470" text-anchor="middle" font-size="15" fill="#64748b">清楚可解释 · 换说法就失灵</text>
+  </g>
+
+  <!-- ============ 右栏：学习程序 ============ -->
+  <g>
+    <rect x="470" y="70" width="400" height="420" rx="14" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+    <rect x="470" y="70" width="400" height="52" rx="14" fill="#10b981"/>
+    <rect x="470" y="108" width="400" height="14" fill="#10b981"/>
+    <text x="670" y="104" text-anchor="middle" font-size="23" font-weight="bold" fill="#ffffff">路线二：从例子学规律</text>
+
+    <!-- 例子卡片 -->
+    <rect x="500" y="150" width="96" height="66" rx="10" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+    <text x="548" y="180" text-anchor="middle" font-size="15" fill="#065f46">例子</text>
+    <text x="548" y="202" text-anchor="middle" font-size="14" fill="#64748b">含标签</text>
+
+    <rect x="604" y="150" width="96" height="66" rx="10" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+    <text x="652" y="180" text-anchor="middle" font-size="15" fill="#065f46">例子</text>
+    <text x="652" y="202" text-anchor="middle" font-size="14" fill="#64748b">含标签</text>
+
+    <rect x="708" y="150" width="96" height="66" rx="10" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+    <text x="756" y="180" text-anchor="middle" font-size="15" fill="#065f46">例子</text>
+    <text x="756" y="202" text-anchor="middle" font-size="14" fill="#64748b">含标签</text>
+
+    <!-- 箭头到训练 -->
+    <path d="M596,216 Q670,246 744,216" stroke="#10b981" stroke-width="3" fill="none"/>
+    <polygon points="742,204 752,222 734,220" fill="#10b981"/>
+    <text x="670" y="258" text-anchor="middle" font-size="16" fill="#047857">海量标注例子</text>
+
+    <!-- 训练循环 -->
+    <rect x="540" y="275" width="260" height="56" rx="12" fill="#ffffff" stroke="#a7f3d0" stroke-width="2"/>
+    <text x="670" y="308" text-anchor="middle" font-size="18" fill="#065f46">猜测 → 对照 → 调整</text>
+    <text x="670" y="312" text-anchor="middle" font-size="18" fill="#065f46"></text>
+
+    <!-- 模型 -->
+    <rect x="586" y="352" width="168" height="56" rx="12" fill="#059669"/>
+    <text x="670" y="381" text-anchor="middle" font-size="20" font-weight="bold" fill="#ffffff">训练出模型</text>
+    <text x="670" y="392" text-anchor="middle" font-size="20" font-weight="bold" fill="#ffffff"></text>
+
+    <!-- 泛化 -->
+    <text x="670" y="446" text-anchor="middle" font-size="16" fill="#334155">没见过的数据也会判断：真学会</text>
+    <text x="670" y="472" text-anchor="middle" font-size="15" fill="#64748b">重复上万次 · 越调越准</text>
+  </g>
+</svg>

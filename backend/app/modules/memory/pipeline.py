@@ -308,26 +308,21 @@ class MemoryPipeline:
 
         if total_count >= 2:
             memory_content = llm_content or _memory_content(source_type, facts)
-            existing_memory = (
+            # T24：用户否认/遗忘的记忆（DISPUTED/REMOVED/SUPERSEDED）不得被后台任务
+            # 无条件复活。按内容对全部状态做去重：若已存在同内容记忆（无论状态），
+            # 仅当它仍是 ACTIVE 时累加证据；否则跳过，绝不新建 ACTIVE 行复活被否认内容。
+            existing_any = (
                 await session.execute(
                     select(StudentMemory)
                     .where(
                         StudentMemory.student_id == student_id,
-                        StudentMemory.status == "ACTIVE",
                         StudentMemory.memory_type == candidate_type,
                         StudentMemory.content == memory_content,
                     )
                     .order_by(StudentMemory.updated_at.desc())
                 )
             ).scalars().first()
-            if existing_memory is not None:
-                existing_memory.evidence_ids = sorted(
-                    set(existing_memory.evidence_ids or [])
-                    | {str(evidence.evidence_id)}
-                )
-                existing_memory.confidence = confidence
-                existing_memory.origin_candidate_id = candidate.candidate_id
-            else:
+            if existing_any is None:
                 session.add(
                     StudentMemory(
                         memory_id=uuid4(),
@@ -342,6 +337,14 @@ class MemoryPipeline:
                         user_confirmed=False,
                     )
                 )
+            elif existing_any.status == "ACTIVE":
+                existing_any.evidence_ids = sorted(
+                    set(existing_any.evidence_ids or [])
+                    | {str(evidence.evidence_id)}
+                )
+                existing_any.confidence = confidence
+                existing_any.origin_candidate_id = candidate.candidate_id
+            # else：同内容记忆已是 DISPUTED/REMOVED/SUPERSEDED —— 跳过，不复活。
 
         existing_episode_event_ids: set[str] = set()
         episodes = (

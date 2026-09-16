@@ -1,0 +1,90 @@
+{
+  "slug": "ai-primary-fun",
+  "chapter": 1,
+  "review_status": "DRAFT",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "grade_min": 3,
+  "grade_max": 6,
+  "knowledge_points": ["ai-as-helper"],
+  "questions": [
+    {
+      "stable_key": "ai-primary-fun-ch01-q01",
+      "type": "SINGLE_CHOICE",
+      "stem": "AI 到底是什么？下面哪种说法最准确？",
+      "options": [
+        {"key": "A", "text": "AI 是人写出来的一段段电脑程序"},
+        {"key": "B", "text": "AI 是住在神秘盒子里的魔法精灵"},
+        {"key": "C", "text": "AI 是会走路会说话的机器人"},
+        {"key": "D", "text": "AI 是长着眼睛和心的超级生物"}
+      ],
+      "correct_answer": {"key": "A"},
+      "explanation": "AI 是「人工智能」的缩写，是人写出来的电脑程序，藏在手机、音箱和很多软件里。它不是电影里的机器人，也不是住在神秘地方的魔法。",
+      "knowledge_point": "ai-as-helper",
+      "source_block": "认识新朋友",
+      "difficulty": "EASY",
+      "grade_min": 3,
+      "grade_max": 6,
+      "learning_objective": "能够说出「AI 是人写的」这一核心事实",
+      "distractor_rationale": "B、C、D 都是小朋友从动画片里得来的印象：以为 AI 是神秘魔法、是拐走的机器人、是有心会感受的生物。本章特意把这些误解一个个纠正，这就是最容易踩的坑。"
+    },
+    {
+      "stable_key": "ai-primary-fun-ch01-q02",
+      "type": "SINGLE_CHOICE",
+      "stem": "想教会 AI 认猫，最好的方法是什么？",
+      "options": [
+        {"key": "A", "text": "给它看成千上万张猫的照片，看得多了它就能找到共同特点"},
+        {"key": "B", "text": "给它念一句「猫就是猫」的口诀"},
+        {"key": "C", "text": "给它装上一双真正会看的眼睛"},
+        {"key": "D", "text": "把它的程序里写死「看见毛茸茸就是猫」这句话"}
+      ],
+      "correct_answer": {"key": "A"},
+      "explanation": "AI 靠看电影学会本领。教它认猫就把大量猫的照片给它看，看得多了，它就发现猫的共同特点：尖耳朵、长胡须、毛茸茸，跟你认字的过程很像。",
+      "knowledge_point": "ai-as-helper",
+      "source_block": "会学习，但学得不一样",
+      "difficulty": "EASY",
+      "grade_min": 3,
+      "grade_max": 6,
+      "learning_objective": "能够说出 AI 靠看大量例子学会本领",
+      "distractor_rationale": "B 把学习当成背口诀，不理解「靠例子找规律」；C 是动画式想象，AI 没有真眼睛；D 是把 AI 误当成人写死的规则程序——本章强调 AI 靠例子学，而不是人给它写死规则。"
+    },
+    {
+      "stable_key": "ai-primary-fun-ch01-q03",
+      "type": "TRUE_FALSE",
+      "stem": "AI 很聪明、什么都会，所以它不需要人指挥，自己想做什么就做什么。",
+      "options": [
+        {"key": "A", "text": "正确"},
+        {"key": "B", "text": "错误"}
+      ],
+      "correct_answer": {"key": "B"},
+      "explanation": "AI 是帮手不是魔法师。它本领大，但一切由人指挥，也不会自己想做什么。本章用「手电筒自己不会决定照哪里，光再亮也要人来拿」来打比方。",
+      "knowledge_point": "ai-as-helper",
+      "source_block": "认识新朋友",
+      "difficulty": "EASY",
+      "grade_min": 3,
+      "grade_max": 6,
+      "learning_objective": "能够说出 AI 是受指挥的帮手而非有自我意愿的主体",
+      "distractor_rationale": "这是动画片常给的错觉——机器有了自我、想干嘛就干嘛。本题正面拆穿「AI 有自主坏主意」的误解，强调它是需要人指挥的工具。"
+    },
+    {
+      "stable_key": "ai-primary-fun-ch01-q04",
+      "type": "MULTIPLE_CHOICE",
+      "stem": "关于 AI，下面哪些说法是对的？（选两项）",
+      "options": [
+        {"key": "A", "text": "它见过的例子不常见到的东西，它就容易认错"},
+        {"key": "B", "text": "它知道自己正在做什么、心里会开心或难过"},
+        {"key": "C", "text": "它需要很多很多例子，例子越多越认得准"},
+        {"key": "D", "text": "它一定比任何大人都懂得多、永远不会出错"}
+      ],
+      "correct_answer": {"keys": ["A", "C"]},
+      "explanation": "AI 靠例子学：例子越多越典型它认得越准，例子之外的（没见过的）就容易发懵。它没有眼睛没有心，不知道自己做什么，也会出错。",
+      "knowledge_point": "ai-as-helper",
+      "source_block": "会学习，但学得不一样",
+      "difficulty": "MEDIUM",
+      "grade_min": 3,
+      "grade_max": 6,
+      "learning_objective": "能够说出 AI 的本领与局限（例子之外会发懵）",
+      "distractor_rationale": "B 是「AI 有感情有自我」的误解；D 是「AI 万能」的迷信，本章用「没见过就发懵」和「它会猜蜥蜴」的例子说明 AI 并非万能、也会出错，这是儿童最需要建立的两个正确观念。"
+    }
+  ]
+}

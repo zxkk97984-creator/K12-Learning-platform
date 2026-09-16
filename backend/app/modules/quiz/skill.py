@@ -5,17 +5,24 @@ import logging
 from typing import Any
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.factory import get_ai_provider
 from app.config import settings
-from app.infrastructure.database.models import QuizQuestion, QuizSession
+from app.infrastructure.database.models import QuizQuestion, QuizSession, StudentProfile
 from app.modules.quiz.chapter_source import (
     ChapterSourceData,
     generate_chapter_questions,
     load_chapter_source,
 )
-from app.modules.quiz.quiz_bank import QUIZ_BANK, QuizBankQuestion, select_questions
+from app.modules.quiz.quiz_bank import (
+    ReviewedQuestionItem,
+    select_reviewed_questions,
+    QUIZ_BANK,
+    QuizBankQuestion,
+    select_questions,
+)
 
 
 SKILL_VERSION = "quiz-v2"
@@ -144,6 +151,21 @@ class QuizSkill:
                 )
 
         bank_questions = select_questions(context.difficulty, context.question_count)
+        # T22b：章节测验优先选当前章、适配年级的 APPROVED 审校题；不足则走原有来源（如实标注）。
+        reviewed_items: list[ReviewedQuestionItem] = []
+        if context.chapter_id is not None:
+            grade: int | None = None
+            profile_row = (
+                await session.execute(
+                    select(StudentProfile.grade).where(
+                        StudentProfile.student_id == context.student_id
+                    )
+                )
+            ).scalar_one_or_none()
+            grade = profile_row
+            reviewed_items = await select_reviewed_questions(
+                session, context.chapter_id, grade, context.question_count
+            )
         llm_items = (
             None
             if bank_fallback_reason
@@ -151,8 +173,16 @@ class QuizSkill:
         )
         session_model_info = self.model_info
         generation_kind = "bank_fallback" if bank_fallback_reason else "bank"
-        if llm_items is not None:
-            source_items: list[Any] = llm_items
+        if reviewed_items:
+            source_items: list[Any] = reviewed_items
+            session_model_info = {
+                "provider": "reviewed",
+                "model": "reviewed-question-v1",
+                "review_status": "APPROVED",
+            }
+            generation_kind = "reviewed"
+        elif llm_items is not None:
+            source_items = llm_items
             session_model_info = {
                 "provider": "openai_compatible",
                 "model": settings.ai_model,
@@ -197,6 +227,17 @@ class QuizSkill:
                 }
                 if bank_fallback_reason:
                     source_context["fallback_reason"] = bank_fallback_reason
+            elif generation_kind == "reviewed":
+                source_context = {
+                    "generation": "reviewed",
+                    "source": "reviewed_question",
+                    "stable_key": item.stable_key,
+                    "review_status": item.review_status,
+                    "book_id": str(context.book_id) if context.book_id is not None else None,
+                    "chapter_id": (
+                        str(context.chapter_id) if context.chapter_id is not None else None
+                    ),
+                }
             else:
                 source_context = {
                     "generation": generation_kind,

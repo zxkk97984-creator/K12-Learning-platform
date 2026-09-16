@@ -76,7 +76,7 @@ test('桌宠使用真实精灵图、支持拖动动画并可持久切换', async
   await expect(sprite).toHaveAttribute('data-sprite-state', 'idle')
 
   await dock.click()
-  await expect(page.getByRole('complementary', { name: '霜铃对话面板' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: '霜铃对话面板' })).toBeVisible()
   await expect(page.getByRole('img', { name: '霜铃待机中' })).toHaveCount(2)
 
   await page.goto('/settings')

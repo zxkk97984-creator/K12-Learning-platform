@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-import { useCompanionStore, useTeacherName } from '@/features/companion'
+import { useCompanionStore } from '@/features/companion'
 import { useToastStore } from '@/features/feedback'
 import { useScreenContext } from '@/features/screen-context'
 
@@ -44,7 +44,6 @@ export function ConversationPanelContent() {
   )
   const showToast = useToastStore((state) => state.showToast)
   const { screenContext } = useScreenContext()
-  const teacherName = useTeacherName()
 
   useEffect(() => {
     if (open) {
@@ -93,7 +92,7 @@ export function ConversationPanelContent() {
                 void switchConversation(event.target.value)
               }
             }}
-            className="max-w-[110px] rounded border border-border bg-surface px-1 py-0.5 text-[9px] text-fg"
+            className="max-w-[110px] rounded border border-border bg-surface px-1 py-0.5 text-[10px] text-fg"
           >
             {!conversationId ? <option value="">选择会话</option> : null}
             {history.map((entry) => (
@@ -103,39 +102,47 @@ export function ConversationPanelContent() {
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            data-testid="conversation-new"
-            aria-label="新对话"
-            title="开启新对话（旧会话保留在历史）"
-            className="rounded border border-border px-1.5 py-0.5 text-[9px] text-muted hover:border-fg hover:text-fg"
-            onClick={() => void startNewConversation()}
-          >
-            新对话
-          </button>
-          {conversationId ? (
-            <>
+          <details className="relative">
+            <summary
+              aria-label="会话操作"
+              className="cursor-pointer list-none rounded border border-border px-1.5 py-0.5 text-[10px] text-muted hover:border-fg hover:text-fg"
+            >
+              操作 ▾
+            </summary>
+            <div className="absolute right-0 z-10 mt-1 flex flex-col rounded-lg border border-border bg-surface shadow-soft">
               <button
                 type="button"
-                data-testid="conversation-archive"
-                aria-label="归档当前对话"
-                className="rounded border border-border px-1.5 py-0.5 text-[9px] text-muted hover:border-fg hover:text-fg"
-                onClick={() => void handleArchive()}
+                data-testid="conversation-new"
+                aria-label="新对话"
+                className="px-3 py-1.5 text-left text-[10px] text-fg hover:bg-fg-soft"
+                onClick={() => void startNewConversation()}
               >
-                归档
+                新对话
               </button>
-              <button
-                type="button"
-                data-testid="conversation-delete"
-                aria-label="删除当前对话"
-                className="rounded border border-border px-1.5 py-0.5 text-[9px] text-muted hover:border-red-400 hover:text-red-400"
-                onClick={() => void handleDelete()}
-              >
-                删除
-              </button>
-            </>
-          ) : null}
-          <span className="font-mono text-[9px] text-muted">教师：{teacherName}</span>
+              {conversationId ? (
+                <>
+                  <button
+                    type="button"
+                    data-testid="conversation-archive"
+                    aria-label="归档当前对话"
+                    className="px-3 py-1.5 text-left text-[10px] text-fg hover:bg-fg-soft"
+                    onClick={() => void handleArchive()}
+                  >
+                    归档
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="conversation-delete"
+                    aria-label="删除当前对话"
+                    className="px-3 py-1.5 text-left text-[10px] text-fg hover:bg-red-400 hover:text-red-400"
+                    onClick={() => void handleDelete()}
+                  >
+                    删除
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </details>
         </span>
       </div>
       <MessageList />

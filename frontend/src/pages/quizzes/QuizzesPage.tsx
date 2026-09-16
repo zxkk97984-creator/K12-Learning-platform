@@ -29,31 +29,46 @@ export default function QuizzesPage() {
   const [sources, setSources] = useState<Record<string, { bookTitle: string; chapterTitle: string }>>({})
   const [filter, setFilter] = useState<QuizFilter>('全部')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
+    setLoading(true)
+    setError(false)
     void (async () => {
+      let list: QuizSession[]
       try {
-        const list = await quizService.getQuizSessions(paramsForFilter(filter))
-        if (cancelled) return
-        setSessions(list)
-        const entries = await Promise.all(
-          list.map(async (session) => [
-            session.quiz_session_id,
-            await quizSource(session.book_id, session.chapter_id),
-          ]),
-        )
-        if (!cancelled) setSources(Object.fromEntries(entries))
+        list = await quizService.getQuizSessions(paramsForFilter(filter))
       } catch {
-        if (!cancelled) setSessions([])
+        if (!cancelled) {
+          setSessions([])
+          setError(true)
+        }
+        return
       } finally {
         if (!cancelled) setLoading(false)
       }
+      if (cancelled) return
+      setSessions(list)
+      // 来源按 book/chapter 去重查询；单个来源失败不抹掉整份列表（T15）。
+      const entries = await Promise.all(
+        list.map(async (session) => [
+          session.quiz_session_id,
+          await quizSource(session.book_id, session.chapter_id).catch(() => ({
+            bookTitle: '—',
+            chapterTitle: '—',
+          })),
+        ]),
+      )
+      if (!cancelled) setSources(Object.fromEntries(entries))
     })()
     return () => {
       cancelled = true
     }
-  }, [filter])
+  }, [filter, attempt])
+
+  const retry = () => setAttempt((value) => value + 1)
 
   const filtered = sessions
 
@@ -84,7 +99,19 @@ export default function QuizzesPage() {
       </div>
 
       <div className="mt-5 border-t border-fg">
-        {loading ? (
+        {error ? (
+          <div className="mt-4 rounded-[12px] border border-dashed border-border p-8 text-center">
+            <h3 className="font-display text-xl text-fg">加载测验记录失败</h3>
+            <p className="mt-2 text-[13px] text-muted">网络似乎开小差了，可以重试。</p>
+            <button
+              type="button"
+              className="mt-4 rounded-[10px] bg-accent px-4 py-2 text-xs text-surface hover:bg-accent/85"
+              onClick={retry}
+            >
+              重新加载
+            </button>
+          </div>
+        ) : loading ? (
           <p className="py-8 text-center text-sm text-muted">正在加载测验记录…</p>
         ) : filtered.length === 0 ? (
           <div className="mt-4 rounded-[12px] border border-dashed border-border p-8 text-center">

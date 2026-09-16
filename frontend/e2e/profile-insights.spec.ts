@@ -28,4 +28,33 @@ test('画像页加载真实 insights、展开证据与情节详情', async ({ pa
   await expect(page.getByRole('heading', { name: '学习情节' })).toBeVisible()
   await page.getByRole('button', { name: '详情' }).first().click()
   await expect(page.getByText(/关联事件：\d+ 条/)).toBeVisible()
+
+  // 回归：双栏布局下右栏记忆长文本不得把页面撑出横向滚动。
+  const assertNoHorizontalOverflow = async () => {
+    const metrics = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }))
+    expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth)
+  }
+
+  const assertSidebarFits = async () => {
+    const sidebar = await page.evaluate(() => {
+      const aside = document.querySelector('aside')
+      const memoryText = document.querySelector('aside p.text-xs.text-fg')
+      return {
+        asideWidth: aside ? Math.round(aside.getBoundingClientRect().width) : 0,
+        memoryScrollWidth: memoryText ? memoryText.scrollWidth : 0,
+        memoryClientWidth: memoryText ? memoryText.clientWidth : 0,
+      }
+    })
+    expect(sidebar.asideWidth).toBeLessThanOrEqual(280)
+    expect(sidebar.memoryScrollWidth).toBeLessThanOrEqual(sidebar.memoryClientWidth + 1)
+  }
+
+  await assertNoHorizontalOverflow()
+  await assertSidebarFits()
+  await page.setViewportSize({ width: 820, height: 1180 })
+  await assertNoHorizontalOverflow()
+  await assertSidebarFits()
 })

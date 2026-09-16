@@ -29,6 +29,9 @@ class CreateQuizSessionRequest(BaseModel):
     difficulty: QuizDifficulty = "MEDIUM"
     # 直连 API 创建时允许在章节缺内容时审计回退题库（默认旧行为）。
     allow_bank_fallback: bool = True
+    # T16 相似练习来源："再练一道"从来源测验/题目派生新测验（可空，服务端校验归属）。
+    source_quiz_session_id: UUID | None = None
+    source_question_id: UUID | None = None
 
 
 class QuizSessionListItemDTO(BaseModel):
@@ -40,6 +43,9 @@ class QuizSessionListItemDTO(BaseModel):
     status: QuizStatus
     book_id: UUID | None
     chapter_id: UUID | None
+    # T16 相似练习来源（可空；旧行 NULL）。
+    source_quiz_session_id: UUID | None
+    source_question_id: UUID | None
     result_summary: dict[str, Any] | None
     ai_feedback: str | None
     skill_version: str

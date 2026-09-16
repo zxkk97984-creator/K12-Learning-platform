@@ -1,0 +1,90 @@
+{
+  "slug": "ai-not-magic-junior",
+  "chapter": 1,
+  "review_status": "DRAFT",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "grade_min": 7,
+  "grade_max": 9,
+  "knowledge_points": ["model-training"],
+  "questions": [
+    {
+      "stable_key": "ai-not-magic-junior-ch01-q01",
+      "type": "SINGLE_CHOICE",
+      "stem": "「模型训练」的核心循环是下面哪一组动作？",
+      "options": [
+        {"key": "A", "text": "想清楚 → 写下来 → 背下来"},
+        {"key": "B", "text": "猜测 → 对照 → 调整，重复成百上千次"},
+        {"key": "C", "text": "收集 → 存储 → 展示"},
+        {"key": "D", "text": "提问 → 回答 → 结束"}
+      ],
+      "correct_answer": {"key": "B"},
+      "explanation": "本章把训练现场拆成「猜测—对照—调整」的循环：先猜一次答案，对照标准答案看差多少，再朝更准的方向微调参数，循环几万甚至几百万次，准确率像爬坡一样稳步上升。",
+      "knowledge_point": "model-training",
+      "source_block": "训练现场：猜测、对照、调整",
+      "difficulty": "EASY",
+      "grade_min": 7,
+      "grade_max": 9,
+      "learning_objective": "能够用自己的话讲清模型训练「猜测—对照—调整」的循环",
+      "distractor_rationale": "A 是学生熟悉的学习形态（背记），容易套到机器上；C 是数据管道而非训练；D 是普通对话流程，都不包含「对照误差并收敛」这层核心。"
+    },
+    {
+      "stable_key": "ai-not-magic-junior-ch01-q02",
+      "type": "SINGLE_CHOICE",
+      "stem": "一段垃圾邮件识别规则把「中奖」二字作为判断依据，但骗子把文案改成「中獎」加上表情后规则就失灵了。这个现象最能说明规则程序的哪一点？",
+      "options": [
+        {"key": "A", "text": "规则很清楚、可以解释给任何人听"},
+        {"key": "B", "text": "规则一旦定好就无法修改"},
+        {"key": "C", "text": "规则只认死写法，换个说法就容易失灵"},
+        {"key": "D", "text": "规则程序一定比学习程序更准确"}
+      ],
+      "correct_answer": {"key": "C"},
+      "explanation": "规则程序的缺点是骗术稍微换个说法就失灵，因为它只匹配写死的条件，缺乏从例子中概括的能力。这正是本章用「垃圾邮件规则」例子要说明的局限。",
+      "knowledge_point": "model-training",
+      "source_block": "两种让计算机变聪明的路",
+      "difficulty": "MEDIUM",
+      "grade_min": 7,
+      "grade_max": 9,
+      "learning_objective": "能够区分规则程序与学习程序各自的优缺点",
+      "distractor_rationale": "A 是规则程序真实优点，但问的是「失灵现象说明什么」，A 答非所问；B 把「难以穷尽」夸大成「无法修改」；D 是绝对化断言，与文意相反——这种场景恰恰是学习程序更擅长。"
+    },
+    {
+      "stable_key": "ai-not-magic-junior-ch01-q03",
+      "type": "TRUE_FALSE",
+      "stem": "一个模型在训练时见过的例题上答得很好，就说明它真正学会了规律。",
+      "options": [
+        {"key": "A", "text": "正确"},
+        {"key": "B", "text": "错误"}
+      ],
+      "correct_answer": {"key": "B"},
+      "explanation": "只在原题上答得好可能是死记硬背。要判断是否真学会，必须用模型从没见过的数据测试——换新题还能答对，才叫泛化能力，这是区分「背题」和「真学会」的关键标尺。",
+      "knowledge_point": "model-training",
+      "source_block": "训练现场：猜测、对照、调整",
+      "difficulty": "MEDIUM",
+      "grade_min": 7,
+      "grade_max": 9,
+      "learning_objective": "能够理解泛化能力是区分背题与真学会的标尺",
+      "distractor_rationale": "学生极易把「训练成绩好」直接等同「学会了」。这里故意用「背题」vs「换题仍会」做辨析，帮学生建立用训练之外的数据检验学习的意识。"
+    },
+    {
+      "stable_key": "ai-not-magic-junior-ch01-q04",
+      "type": "SINGLE_CHOICE",
+      "stem": "用上周的旧照片测试人脸相册，它认得很准；但用今天刚拍的、角度完全不同的新照片再测，它就认错了。从「泛化能力」的角度看，这说明什么？",
+      "options": [
+        {"key": "A", "text": "模型可能只是在旧照片上「背题」，还没学会泛化"},
+        {"key": "B", "text": "模型已经完美学会规律，新照片出错是运气问题"},
+        {"key": "C", "text": "新照片拍得不好，与模型能力无关"},
+        {"key": "D", "text": "这说明应该永远只用训练过的照片测试"}
+      ],
+      "correct_answer": {"key": "A"},
+      "explanation": "本章强调判断泛化要用「从没见过的数据」。旧照片成绩好、新照片出错，正是「背题但不泛化」的典型信号。书中「用新建照片测两次都准才算真学会」讲的就是这个。",
+      "knowledge_point": "model-training",
+      "source_block": "训练现场：猜测、对照、调整",
+      "difficulty": "HARD",
+      "grade_min": 7,
+      "grade_max": 9,
+      "learning_objective": "能够运用泛化能力的概念分析现实中的模型表现",
+      "distractor_rationale": "B、D 是「成绩好=学会了」的错误延伸；C 把责任推给输入，忽视模型本身的泛化缺陷。只有 A 把新旧数据的差距与泛化概念正确对应。"
+    }
+  ]
+}

@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/shared/services', () => ({
   contentService: {
-    getBooks: vi.fn(),
+    getBooksPage: vi.fn(),
     getProgress: vi.fn(),
   },
   recommendationService: mocks.recommendationService,
@@ -68,7 +68,10 @@ describe('LibraryPage book detail entry points', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(contentService.getBooks).mockResolvedValue(books)
+    vi.mocked(contentService.getBooksPage).mockResolvedValue({
+      items: books,
+      meta: { next_cursor: null, has_more: false, total: books.length },
+    })
     vi.mocked(contentService.getProgress).mockResolvedValue([])
   })
 
@@ -170,5 +173,61 @@ describe('LibraryPage book detail entry points', () => {
     await screen.findByRole('heading', { name: '全部书籍' })
     // 无推荐时，任何位置都不应出现静态「为什么推荐？」按钮
     expect(screen.queryAllByText('为什么推荐？')).toHaveLength(0)
+  })
+})
+
+describe('LibraryPage 分页、错误与后端搜索', () => {
+  beforeEach(() => {
+    mocks.recommendationService.getRecommendations.mockResolvedValue([])
+    vi.clearAllMocks()
+    vi.mocked(contentService.getProgress).mockResolvedValue([])
+  })
+
+  afterEach(() => cleanup())
+
+  it('负载更多：追加下一页并保留前页，游标由 meta 提供', async () => {
+    vi.mocked(contentService.getBooksPage)
+      .mockResolvedValueOnce({
+        items: [books[0]],
+        meta: { next_cursor: 'cursor-2', has_more: true, total: 2 },
+      })
+      .mockResolvedValueOnce({
+        items: [books[1]],
+        meta: { next_cursor: null, has_more: false, total: 2 },
+      })
+
+    renderPage()
+    expect(await screen.findByRole('button', { name: books[0].title })).toBeTruthy()
+    const loadMore = await screen.findByRole('button', { name: /加载更多/ })
+    fireEvent.click(loadMore)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: books[1].title })).toBeTruthy(),
+    )
+    expect(contentService.getBooksPage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: 'cursor-2' }),
+    )
+  })
+
+  it('加载失败显示错误与重试，不声称没有书', async () => {
+    vi.mocked(contentService.getBooksPage).mockRejectedValueOnce(new Error('network down'))
+    renderPage()
+    expect(await screen.findByRole('heading', { name: '暂时无法加载书库' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
+  })
+
+  it('搜索输入防抖后调用后端（非本地过滤）', async () => {
+    vi.mocked(contentService.getBooksPage).mockResolvedValue({
+      items: [books[0]],
+      meta: { next_cursor: null, has_more: false, total: 1 },
+    })
+    renderPage()
+    await screen.findByRole('button', { name: books[0].title })
+
+    fireEvent.change(screen.getByLabelText('搜索书库'), { target: { value: '训练' } })
+    await waitFor(() =>
+      expect(contentService.getBooksPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: '训练' }),
+      ),
+    )
   })
 })

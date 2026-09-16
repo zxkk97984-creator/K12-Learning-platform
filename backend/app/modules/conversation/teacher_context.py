@@ -30,6 +30,11 @@ from app.infrastructure.database.models import (
     StudentPreference,
 )
 
+_REVIEW_NOT_FOUND = "无法定位要讲解的题目"
+_REVIEW_NOT_YOURS = "这不是你的测验，无法讲解"
+_REVIEW_NO_QUESTION = "还不知道要讲哪一道题（请选择一道题后再问）"
+_REVIEW_QUESTION_MISMATCH = "所选题目不属于这次测验，无法讲解"
+
 logger = logging.getLogger(__name__)
 
 MEMORY_LIMIT = 5
@@ -68,6 +73,132 @@ def _fmt_time(value: datetime | None) -> str:
     if value is None:
         return _NOT_AVAILABLE
     return value.astimezone(timezone.utc).strftime("%m-%d %H:%M")
+
+
+def _render_options(options: list) -> str:
+    """把选择题选项渲染为 'A.…  B.…'；非列表/空则 '—'。"""
+    if not isinstance(options, list) or not options:
+        return "—"
+    rendered: list[str] = []
+    for index, option in enumerate(options):
+        if isinstance(option, dict):
+            label = option.get("label") or option.get("key") or option.get("text")
+            text = option.get("text") or option.get("content") or label
+            prefix = label if label else _letter(index)
+            rendered.append(f"{prefix}. {text}" if prefix else str(text))
+        else:
+            rendered.append(f"{_letter(index)}. {option}")
+    return "  ".join(rendered)
+
+
+def _letter(index: int) -> str:
+    return chr(ord("A") + index) if 0 <= index < 26 else str(index + 1)
+
+
+def _answer_text(question: QuizQuestion) -> str:
+    """按题型把 correct_answer 渲染成简要文本（服务端权威，非客户端）。"""
+    answer = question.correct_answer
+    if isinstance(answer, dict):
+        text = answer.get("text") or answer.get("value") or answer.get("label")
+        if text:
+            return str(text)
+        for key in ("key", "answer", "content", "correct"):
+            if answer.get(key) is not None:
+                return str(answer[key])
+        return "—"
+    if isinstance(answer, list):
+        return "、".join(str(item) for item in answer)
+    return "—" if answer is None else str(answer)
+
+
+def _submitted_answer_text(answer: dict | list | None) -> str:
+    """把 submitted_answer 渲染成简要文本（key/text/value 优先）。"""
+    if answer is None:
+        return _NOT_AVAILABLE
+    if isinstance(answer, dict):
+        for key in ("text", "value", "label", "key", "content"):
+            if answer.get(key) is not None:
+                return str(answer[key])
+        return str(answer)
+    if isinstance(answer, list):
+        return "、".join(str(item) for item in answer)
+    return str(answer)
+
+
+async def _build_review_section(
+    session: AsyncSession,
+    *,
+    student_id: UUID,
+    current_context: dict[str, Any],
+) -> str | None:
+    """§4.3 错题讲解上下文：只信服务端快照，不信客户端正确答案/学生归属。
+
+    - 有 quizSessionId 而无 questionId → 明确「还不知道要讲哪一题」；
+    - 测验不存在 → 明确「无法定位」；测验不属于该生 → 明确「不是你的测验」；
+    - 题目不属于该测验 → 明确「题目不属于这次测验」；
+    - 命中：输出题干、选项、学生最终作答、服务端正确答案与解析。
+    """
+    quiz_id_raw = current_context.get("quizSessionId") or current_context.get("quiz_session_id")
+    if not quiz_id_raw:
+        return None
+    try:
+        quiz_id = UUID(str(quiz_id_raw))
+    except (ValueError, TypeError):
+        return _REVIEW_NOT_FOUND
+
+    quiz = await session.get(QuizSession, quiz_id)
+    if quiz is None:
+        return f"【正在讲解的题目】\n- {_REVIEW_NOT_FOUND}"
+    if quiz.student_id != student_id:
+        return f"【正在讲解的题目】\n- {_REVIEW_NOT_YOURS}"
+
+    question_id_raw = current_context.get("questionId") or current_context.get("question_id")
+    if not question_id_raw:
+        return (
+            "【正在讲解的题目】\n"
+            f"- {_REVIEW_NO_QUESTION}\n"
+            f"- 当前测验：《{quiz.title}》（{len(quiz.questions_snapshot or [])} 题）"
+        )
+    try:
+        question_id = UUID(str(question_id_raw))
+    except (ValueError, TypeError):
+        return f"【正在讲解的题目】\n- {_REVIEW_NOT_FOUND}"
+
+    question = await session.get(QuizQuestion, question_id)
+    if question is None or question.quiz_session_id != quiz_id:
+        return f"【正在讲解的题目】\n- {_REVIEW_QUESTION_MISMATCH}"
+
+    # 学生最终作答（服务端 record，非客户端传入）。
+    final_answer = (
+        await session.execute(
+            select(QuizAnswer)
+            .where(
+                QuizAnswer.quiz_session_id == quiz_id,
+                QuizAnswer.question_id == question_id,
+                QuizAnswer.is_final.is_(True),
+            )
+            .order_by(QuizAnswer.attempt_no.desc())
+            .limit(1)
+        )
+    ).scalars().first()
+
+    answer_lines: list[str] = []
+    if final_answer is not None:
+        given_text = _submitted_answer_text(final_answer.submitted_answer)
+        correct_flag = "正确" if final_answer.is_correct else "错误"
+        answer_lines.append(f"- 学生作答：{given_text}（第 {final_answer.attempt_no} 次，{correct_flag}）")
+    else:
+        answer_lines.append(f"- 学生作答：{_NOT_AVAILABLE}")
+
+    return (
+        "【正在讲解的题目】\n"
+        f"- 测验：《{quiz.title}》\n"
+        f"- 题干：{question.stem}\n"
+        f"- 选项：{_render_options(question.options or [])}\n"
+        + "\n".join(answer_lines)
+        + f"\n- 正确答案（服务端）：{_answer_text(question)}\n"
+        + f"- 解析：{question.explanation or _NOT_AVAILABLE}"
+    )
 
 
 async def build_teacher_context(
@@ -288,6 +419,12 @@ async def build_teacher_context(
         "- 学生选中文本：" + (str(selected_text)[:120] if selected_text else _NOT_AVAILABLE)
     )
     sections.append("【当前阅读位置】\n" + "\n".join(reading_lines))
+
+    review_section = await _build_review_section(
+        session, student_id=student_id, current_context=current_context
+    )
+    if review_section is not None:
+        sections.append(review_section)
 
     context_block = "\n\n".join(sections)
     logger.info(

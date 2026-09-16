@@ -12,6 +12,9 @@ export interface ScreenContext {
   selectedText?: string
   knowledgePoints?: string[]
   actions?: string[]
+  /** §4.3 正在讲解的测验/题目（错题讲解上下文）。 */
+  quizSessionId?: string
+  questionId?: string
 }
 
 /** 由路由推导页面类型；路由切换清理上下文时使用。 */

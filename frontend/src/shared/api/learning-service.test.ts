@@ -246,4 +246,43 @@ describe('ApiLearningService', () => {
     expect(error).toBeInstanceOf(ApiError)
     expect(error).toMatchObject({ status: 401, code: 'UNAUTHENTICATED' })
   })
+
+  it('markChapterCompleted puts the chapter completion and parses the result', async () => {
+    const completion = {
+      chapter_id: 'chapter-4',
+      book_id: 'book-2',
+      completed_at: '2026-09-07T08:00:00Z',
+      source: 'EXPLICIT',
+      book_completed: true,
+      completed_chapters: 3,
+      published_chapters: 3,
+    }
+    const fetchMock = vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse(200, { data: completion, meta: {} }),
+    )
+
+    await service.markChapterCompleted('chapter-4')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/me/chapters/chapter-4/completion',
+      expect.objectContaining({ method: 'PUT' }),
+    )
+  })
+
+  it('markChapterCompleted resolves the full completion DTO', async () => {
+    const completion = {
+      chapter_id: 'chapter-4',
+      book_id: 'book-2',
+      completed_at: '2026-09-07T08:00:00Z',
+      source: 'EXPLICIT',
+      book_completed: false,
+      completed_chapters: 1,
+      published_chapters: 3,
+    }
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse(200, { data: completion, meta: {} }),
+    )
+
+    await expect(service.markChapterCompleted('chapter-4')).resolves.toEqual(completion)
+  })
 })

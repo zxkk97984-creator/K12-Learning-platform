@@ -165,8 +165,40 @@ describe('ApiConversationService', () => {
     )
   })
 
-  it('把 SSE error 事件交给 onError，并把 HTTP 401 转成 ApiError', async () => {
-    const source = [
+  it('把 quizSessionId/questionId 序列化为 quiz_session_id/question_id', async () => {
+    const source = 'event: message.done\ndata: {"message_id":"teacher-2","conversation_id":"conversation-1","sequence":2}\n\n'
+    vi.mocked(fetch).mockResolvedValueOnce(streamResponse(source))
+
+    await service.sendMessage(
+      'conversation-1',
+      '讲解这道题',
+      {
+        route: '/quizzes/quiz-9',
+        pageType: 'quiz_history',
+        quizSessionId: 'quiz-9',
+        questionId: 'question-17',
+      },
+      { onDone: () => undefined },
+    )
+
+    expect(vi.mocked(fetch).mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          content: '讲解这道题',
+          type: 'TEXT',
+          screen_context: {
+            route: '/quizzes/quiz-9',
+            page_type: 'quiz_history',
+            quiz_session_id: 'quiz-9',
+            question_id: 'question-17',
+          },
+        }),
+      }),
+    )
+  })
+
+  it('把 SSE error 事件交给 onError，并把 HTTP 401 转成 ApiError', async () => {    const source = [
       'event: error\n',
       'data: {"request_id":"request-1","code":"AI_PROVIDER_ERROR","message":"provider unavailable","fatal":true}\n\n',
     ].join('')

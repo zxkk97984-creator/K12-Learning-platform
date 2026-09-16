@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import type { Message } from '@/entities/conversation/types'
 import { currentTeacherName, useCompanionStore } from '@/features/companion'
 import { conversationService } from '@/shared/services'
+import { getToken } from '@/shared/api/auth'
 import type { SendMessageCallbacks, StreamErrorEvent } from '@/shared/api/conversation-service'
 import type { ScreenContext } from '@/features/screen-context/types'
 
@@ -20,22 +21,42 @@ export interface ConversationHistoryEntry {
   updated_at: string
 }
 
-const ACTIVE_CONVERSATION_KEY = 'shuangling-active-conversation'
+const ACTIVE_CONVERSATION_KEY_PREFIX = 'shuangling-active-conversation:'
+
+// 旧版无用户隔离的全局键：切换账号时只清理，不迁移给新用户。
+const LEGACY_ACTIVE_CONVERSATION_KEY = 'shuangling-active-conversation'
+
+function activeConversationKey(userId: string | null): string {
+  return userId ? `${ACTIVE_CONVERSATION_KEY_PREFIX}${userId}` : LEGACY_ACTIVE_CONVERSATION_KEY
+}
+
+function currentUserId(): string | null {
+  // 从 JWT payload 读取 sub；无 token 或解析失败返回 null。
+  try {
+    const token = getToken()
+    if (!token) return null
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return typeof payload.sub === 'string' ? payload.sub : null
+  } catch {
+    return null
+  }
+}
 
 /** 环境安全的持久化（node 测试环境无 window/localStorage 时静默跳过）。 */
 function persistActiveConversation(id: string): void {
   if (typeof window === 'undefined') return
-  window.localStorage.setItem(ACTIVE_CONVERSATION_KEY, id)
+  window.localStorage.setItem(activeConversationKey(currentUserId()), id)
 }
 
 function readActiveConversation(): string | null {
   if (typeof window === 'undefined') return null
-  return window.localStorage.getItem(ACTIVE_CONVERSATION_KEY)
+  return window.localStorage.getItem(activeConversationKey(currentUserId()))
 }
 
 function clearActiveConversation(): void {
   if (typeof window === 'undefined') return
-  window.localStorage.removeItem(ACTIVE_CONVERSATION_KEY)
+  window.localStorage.removeItem(activeConversationKey(currentUserId()))
+  window.localStorage.removeItem(LEGACY_ACTIVE_CONVERSATION_KEY)
 }
 
 type ConversationHistoryEntrySource = {
@@ -67,7 +88,7 @@ function toChatMessage(message: Message): ChatMessage {
       role: 'ai',
       kind: 'quiz',
       content: message.content,
-      meta: 'Quiz Skill 已创建 · 正式测验已记录',
+      meta: '测验已创建 · 正式测验已记录',
       quiz: { sessionId: message.metadata.quiz_session_id },
     }
   }
@@ -103,6 +124,20 @@ let streamTimer: number | undefined
 let loadPromise: Promise<void> | null = null
 let activeAbortController: AbortController | undefined
 
+// ---- 会话世代（T06 账号切换隔离）----
+// 每次 reset/账号切换递增；异步操作在 await 前后校验，世代变了则丢弃结果，
+// 避免 A 用户在 B 登录后返回后台回填 A 的消息。loadPromise 也按世代失效。
+let sessionEpoch = 0
+
+function currentEpoch(): number {
+  return sessionEpoch
+}
+
+function bumpEpoch(): number {
+  sessionEpoch += 1
+  return sessionEpoch
+}
+
 const INTENT_PROMPTS: Record<ConversationIntent, string> = {
   explain: '解释当前内容',
   summary: '总结本页',
@@ -129,6 +164,7 @@ const INTENT_PROMPTS: Record<ConversationIntent, string> = {
   'give-hint': '给我一点提示',
   'another-way': '换一种讲法',
   'why-wrong': '为什么出错？',
+  'explain-question': '讲解这道题',
   'quiz-requestion': '再出一道类似的题',
   'quiz-detail': '解释这份测验记录',
 }
@@ -152,6 +188,8 @@ interface ConversationStore {
   messages: ChatMessage[]
   conversationId: string | null
   loaded: boolean
+  /** 记录 loaded 所属的会话世代：账号切换后世代变化，避免旧 loaded 短路。 */
+  loadedEpoch: number
   /** 最后一次随消息发送的真实 ScreenContext（重试时复用；Phase 2-A2）。 */
   lastScreenContext: ScreenContext | null
   /** 最后一次发送的幂等键：重试必须复用，防止重复消息（Phase 5-A）。 */
@@ -182,19 +220,23 @@ interface ConversationStore {
   appendAiText: (content: string, meta: string) => void
   /** 内部：逐字流式输出（22ms/字），组件不直接调用 */
   pushStreaming: (text: string, meta: string) => void
+  /** T06：账号切换/登出/401 时清空会话状态并递增世代，中止在途请求。 */
+  reset: () => void
 }
 
 export const useConversationStore = create<ConversationStore>()((set, get) => ({
   messages: [],
   conversationId: null,
   loaded: false,
+  loadedEpoch: 0,
   lastScreenContext: null,
   history: [],
   historyLoaded: false,
   lastIdempotencyKey: null,
 
   async load() {
-    if (get().loaded) return
+    const epoch = currentEpoch()
+    if (get().loaded && epoch === get().loadedEpoch) return
     if (loadPromise) return loadPromise
     loadPromise = (async () => {
       try {
@@ -217,8 +259,10 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
             storedId = null
           }
         }
+        // 世代失效：等待期间账号已切换，丢弃结果。
+        if (epoch !== currentEpoch()) return
         if (!conversation) {
-          set({ loaded: true })
+          set({ loaded: true, loadedEpoch: epoch })
           return
         }
         persistActiveConversation(conversation.conversation_id)
@@ -226,14 +270,18 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
           conversation.conversation_id,
           { sort: 'asc' },
         )
+        if (epoch !== currentEpoch()) return
         set({
           conversationId: conversation.conversation_id,
           messages: toChatMessages(serviceMessages),
           loaded: true,
+          loadedEpoch: epoch,
         })
       } catch {
+        if (epoch !== currentEpoch()) return
         set({
           loaded: true,
+          loadedEpoch: epoch,
           messages: [
             {
               id: nextId(),
@@ -266,11 +314,13 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   async refresh() {
     const conversationId = get().conversationId
     if (!conversationId) return
+    const epoch = currentEpoch()
     try {
       const serviceMessages = await conversationService.getMessages(conversationId, {
         sort: 'asc',
       })
-      set({ messages: toChatMessages(serviceMessages), loaded: true })
+      if (epoch !== currentEpoch()) return
+      set({ messages: toChatMessages(serviceMessages), loaded: true, loadedEpoch: epoch })
     } catch {
       // 语音 final 后的历史刷新失败不阻塞状态机。
     }
@@ -281,6 +331,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     if (!text) return
     await get().load()
     const conversationId = await get().ensureConversationId()
+    const sendEpoch = currentEpoch()
     // 记录最后一次真实上下文与幂等键，供「重试」复用（Phase 2-A2 / 5-A）
     if (screenContext) set({ lastScreenContext: screenContext })
     const idempotencyKey = idempotencyKeyOverride ?? crypto.randomUUID()
@@ -310,7 +361,9 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     let assistantContent = ''
     let errorShown = false
 
+    const stale = () => sendEpoch !== currentEpoch()
     const removePendingMessages = () => {
+      if (stale()) return
       set((state) => ({
         messages: state.messages.filter(
           (message) =>
@@ -320,7 +373,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       }))
     }
     const showError = (error: StreamErrorEvent | Error) => {
-      if (errorShown) return
+      if (stale() || errorShown) return
       errorShown = true
       set((state) => ({
         messages: [
@@ -341,6 +394,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       useCompanionStore.getState().setAiState('idle')
     }
     const upsertAssistant = (id: string, patch: Partial<ChatMessage>) => {
+      if (stale()) return
       set((state) => {
         const exists = state.messages.some((message) => message.id === id)
         if (!exists) {
@@ -392,6 +446,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
           upsertAssistant(assistantId, { content: assistantContent, streaming: true })
         },
         onToolStart: (event) => {
+          if (stale()) return
           if (event.tool === 'quiz') {
             set((state) => ({
               messages: [
@@ -421,6 +476,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
           }))
         },
         onToolResult: (event) => {
+          if (stale()) return
           if (event.tool === 'quiz') {
             const payload = isRecord(event.payload) ? event.payload : {}
             const sessionId =
@@ -433,8 +489,8 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
                       kind: event.status === 'success' ? 'quiz' : 'tool',
                       content:
                         event.status === 'success'
-                          ? 'Quiz Skill 已创建 · 正式测验已记录'
-                          : 'Quiz Skill 生成失败，请稍后再试',
+                          ? '测验已创建 · 正式测验已记录'
+                          : '测验生成失败，请稍后再试',
                       quiz: sessionId ? { sessionId } : null,
                     }
                   : message,
@@ -457,6 +513,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
           }))
         },
         onDone: (event) => {
+          if (stale()) return
           assistantId ??= event.message_id
           if (assistantContent.trim()) {
             upsertAssistant(assistantId, { content: assistantContent, streaming: false })
@@ -607,5 +664,29 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
         useCompanionStore.getState().setAiState('speaking')
       }
     }, 22)
+  },
+
+  reset: () => {
+    // T06：账号切换/登出/401 统一清理。中止在途流、递增世代使旧异步 set 失效，
+    // 清空消息/历史/loaded/幂等键/屏幕上下文，并清理当前用户作用域的 active-conversation。
+    activeAbortController?.abort()
+    activeAbortController = undefined
+    if (streamTimer !== undefined) window.clearInterval(streamTimer)
+    streamTimer = undefined
+    loadPromise = null
+    const epoch = bumpEpoch()
+    void epoch
+    clearActiveConversation()
+    useCompanionStore.getState().setAiState('idle')
+    set({
+      messages: [],
+      conversationId: null,
+      loaded: false,
+      loadedEpoch: 0,
+      lastScreenContext: null,
+      lastIdempotencyKey: null,
+      history: [],
+      historyLoaded: false,
+    })
   },
 }))

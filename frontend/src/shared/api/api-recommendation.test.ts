@@ -55,4 +55,20 @@ describe('ApiRecommendationService', () => {
       expect.objectContaining({ method: 'POST' }),
     ])
   })
+
+  it('读取统一下一步行动（/me/learning-next）', async () => {
+    const action = {
+      type: 'REVIEW_QUIZ',
+      label: '回顾《错题测验》的错题',
+      book_id: 'book-1',
+      chapter_id: 'chapter-1',
+      quiz_session_id: 'quiz-9',
+      reason: '这次测验有 2 道做错，复习一下会记得更牢。',
+      evidence_ids: ['quiz-9'],
+    }
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(200, { data: action }))
+
+    await expect(service.getLearningNext()).resolves.toEqual(action)
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/api/v1/me/learning-next')
+  })
 })

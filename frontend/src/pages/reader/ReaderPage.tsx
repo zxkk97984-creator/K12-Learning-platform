@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
-import type { Chapter, ChapterDetail, ContentBlock } from '@/entities/book/types'
+import type { Chapter, ChapterDetail } from '@/entities/book/types'
 import { useCompanionStore, useTeacherName } from '@/features/companion'
 import type { ConversationIntent } from '@/features/conversation'
 import { useConversationStore } from '@/features/conversation'
 import { useScreenContext } from '@/features/screen-context'
 import { contentService } from '@/shared/services'
 import { learningService } from '@/shared/api/learning-service'
+import { ChapterCompletionCard } from './ChapterCompletionCard'
 import {
   sectionEventKey,
   setCurrentLearningSessionId,
@@ -39,135 +40,7 @@ function shouldTrackBookStarted(bookId: string): boolean {
   return true
 }
 
-function renderMarkedText(text: unknown, mark: unknown) {
-  if (typeof text !== 'string') return null
-  if (typeof mark !== 'string' || !mark || !text.includes(mark)) return text
-  const [before, after] = text.split(mark)
-  return (
-    <>
-      {before}
-      <mark className="rounded bg-accent-soft px-1 text-fg">{mark}</mark>
-      {after}
-    </>
-  )
-}
-
-function exampleOf(content: Record<string, unknown>): { label: string; text: string } | null {
-  const example = content.example
-  if (!example || typeof example !== 'object') return null
-  const record = example as Record<string, unknown>
-  if (typeof record.label !== 'string' || typeof record.text !== 'string') return null
-  return { label: record.label, text: record.text }
-}
-
-function ContentBlockView({
-  block,
-  onExplain,
-}: {
-  block: ContentBlock
-  onExplain: () => void
-}) {
-  const sectionKey = block.section_key ?? undefined
-  const teacherName = useTeacherName()
-
-  if (block.block_type === 'TITLE') {
-    return (
-      <h2 data-read-section={sectionKey} className="font-display text-2xl text-fg">
-        {typeof block.content.text === 'string' ? block.content.text : ''}
-      </h2>
-    )
-  }
-
-  if (block.block_type === 'PARAGRAPH' || block.block_type === 'HIGHLIGHT') {
-    return (
-      <p
-        data-read-section={sectionKey}
-        className="mb-4 text-base leading-[1.85] text-fg"
-      >
-        {renderMarkedText(block.content.text, block.content.mark)}
-      </p>
-    )
-  }
-
-  if (block.block_type === 'KNOWLEDGE_CARD') {
-    const title = typeof block.content.title === 'string' ? block.content.title : ''
-    const text = typeof block.content.text === 'string' ? block.content.text : ''
-    const example = exampleOf(block.content)
-    return (
-      <article
-        data-read-section={sectionKey}
-        data-kc-block={block.block_id}
-        data-kp-ids={(block.knowledge_point_ids ?? []).join(',')}
-        className="my-6 border-y border-border bg-surface px-6 py-5"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <span className="font-mono text-[10px] tracking-wider text-muted">知识卡片</span>
-            <h3 className="font-display text-xl text-fg">{title}</h3>
-          </div>
-          <button
-            type="button"
-            className="rounded-[10px] border border-border bg-surface px-3 py-2 text-xs text-fg hover:border-fg"
-            onClick={onExplain}
-          >
-            让{teacherName}讲给我听
-          </button>
-        </div>
-        <p className="mt-3 text-sm leading-relaxed text-muted">{text}</p>
-        {example ? (
-          <div className="mt-4 border-l-2 border-fg bg-fg-soft px-4 py-3">
-            <strong className="block text-xs text-fg">{example.label}</strong>
-            <span className="mt-1 block text-[13px] text-muted">{example.text}</span>
-          </div>
-        ) : null}
-      </article>
-    )
-  }
-
-  if (block.block_type === 'EXAMPLE') {
-    const text = typeof block.content.text === 'string' ? block.content.text : ''
-    return (
-      <div data-read-section={sectionKey} className="my-5 border-l-2 border-fg bg-fg-soft px-4 py-3">
-        <strong className="block text-xs text-fg">生活里的例子</strong>
-        <span className="mt-1 block text-[13px] text-muted">{text}</span>
-      </div>
-    )
-  }
-
-  if (block.block_type === 'CALLOUT') {
-    const title = typeof block.content.title === 'string' ? block.content.title : ''
-    const text = typeof block.content.text === 'string' ? block.content.text : ''
-    return (
-      <aside data-read-section={sectionKey} className="my-6 border-l-2 border-fg bg-surface px-5 py-4">
-        <strong className="font-display text-lg text-fg">{title}</strong>
-        <p className="mt-2 text-sm leading-relaxed text-muted">{text}</p>
-      </aside>
-    )
-  }
-
-  if (block.block_type === 'FIGURE') {
-    const caption = typeof block.content.caption === 'string' ? block.content.caption : ''
-    const ariaLabel = typeof block.content.aria_label === 'string' ? block.content.aria_label : ''
-    return (
-      <figure data-read-section={sectionKey} className="my-6">
-        <div
-          role="img"
-          aria-label={ariaLabel}
-          className="grid h-36 place-items-center rounded-lg border border-border bg-fg-soft text-sm text-muted"
-        >
-          图解占位 · {ariaLabel}
-        </div>
-        {caption ? (
-          <figcaption className="mt-2 font-mono text-[10px] tracking-wide text-muted">
-            {caption}
-          </figcaption>
-        ) : null}
-      </figure>
-    )
-  }
-
-  return null
-}
+import { ContentBlockView } from './ContentBlockView'
 
 export default function ReaderPage() {
   // Phase 5-B-I：路由必须提供真实 UUID；不再默认 b1/ch3 演示入口
@@ -694,8 +567,21 @@ export default function ReaderPage() {
                     {notice}
                   </p>
                 ) : null}
-                <div className="mt-8 flex items-center justify-between border-t border-fg pt-4">
-                  <span className="text-xs text-muted">读到这里了吗？选择一段文字，直接问{teacherName}。</span>
+                <div className="mt-8">
+                  <ChapterCompletionCard
+                    chapters={chapters}
+                    chapterId={activeChapterId}
+                    chapterTitle={detail?.title ?? ''}
+                    alreadyCompleted={detail?.is_completed ?? false}
+                    onSubmit={() => learningService.markChapterCompleted(activeChapterId)}
+                    onNavigateNext={(nextChapterId) =>
+                      navigate(`/learn/${activeBookId}/${nextChapterId}`)
+                    }
+                    onPractice={() => void triggerIntent('quiz')}
+                  />
+                </div>
+                <div className="mt-4 flex items-center justify-between border-t border-fg pt-4">
+                  <span className="text-xs text-muted">选择一段文字，直接问{teacherName}。</span>
                   <button
                     type="button"
                     className="rounded-[10px] bg-accent px-3 py-2 text-xs text-surface hover:bg-accent/85"

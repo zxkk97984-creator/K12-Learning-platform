@@ -6,3 +6,11 @@ export function formatNow(date: Date): string {
   const mm = String(date.getMinutes()).padStart(2, '0')
   return `${weekday} ${hh}:${mm}`
 }
+
+/** 按本地小时返回时段问候（T08）：05–11 早上好、11–14 中午好、14–18 下午好、18–05 晚上好。 */
+export function greetingForHour(hour: number): string {
+  if (hour >= 5 && hour < 11) return '早上好'
+  if (hour >= 11 && hour < 14) return '中午好'
+  if (hour >= 14 && hour < 18) return '下午好'
+  return '晚上好'
+}

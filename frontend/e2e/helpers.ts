@@ -88,13 +88,27 @@ export async function prepareContinueLearning(
       title: string
     }>
     if (chapters.length === 0) continue
-    target = {
-      bookId: book.book_id,
-      bookTitle: book.title,
-      chapterId: chapters[0].chapter_id,
-      chapterTitle: chapters[0].title,
+    // 优先选"确有内容"的章节：跳过审计/测试章节（"本章暂无内容"这类空 content_blocks），
+    // 否则后续测验生成会因章节无内容而 QUIZ_SKILL_ERROR（不应凭空出与章节无关的题）。
+    for (const chapter of chapters) {
+      const detailResp = await request.get(
+        `/api/v1/chapters/${chapter.chapter_id}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
+      if (!detailResp.ok()) continue
+      const detail = (await detailResp.json()).data as {
+        content_blocks?: unknown[]
+      }
+      if ((detail.content_blocks?.length ?? 0) === 0) continue
+      target = {
+        bookId: book.book_id,
+        bookTitle: book.title,
+        chapterId: chapter.chapter_id,
+        chapterTitle: chapter.title,
+      }
+      break
     }
-    break
+    if (target) break
   }
   expect(target).not.toBeNull()
 

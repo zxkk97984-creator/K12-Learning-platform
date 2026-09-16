@@ -41,5 +41,6 @@ export type ConversationIntent =
   | 'give-hint'
   | 'another-way'
   | 'why-wrong'
+  | 'explain-question'
   | 'quiz-requestion'
   | 'quiz-detail'

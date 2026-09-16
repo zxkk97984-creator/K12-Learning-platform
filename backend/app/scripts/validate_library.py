@@ -31,6 +31,9 @@ LIB_ROOT = Path(__file__).resolve().parents[2] / "data" / "library"
 BLOCK_PREFIXES = ("T:", "P:", "KC:", "CALL:", "FIG:")
 ALLOWED_LINE_RE = re.compile(r"^(T|P|KC|CALL|FIG): |^S: |^@kp=")
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+# T10：图解资源引用仅允许 asset 目录下的安全文件名（相对路径、无穿越、白名单扩展名）。
+_ALLOWED_ASSET_RE = re.compile(r"^assets/[A-Za-z0-9._-]+$")
+_ALLOWED_ASSET_EXT = {".svg", ".png", ".webp", ".jpg", ".jpeg"}
 META_KEYS = ("chapter_title", "estimated_minutes", "summary")
 FORBIDDEN_TOKENS = ("占位", "待补充", "TODO", "todo", "例如等等")
 CJK_RE = re.compile(r"[\u3400-\u9fff]")
@@ -213,8 +216,27 @@ def build_content(block: dict) -> dict[str, Any]:
         title, _, text = payload.partition("::")
         return {"title": title.strip(), "text": text.strip()}
     if btype == "FIG":
-        aria, _, caption = payload.partition("::")
-        return {"aria_label": aria.strip(), "caption": caption.strip()}
+        # FIG 兼容旧式两段：描述 :: 图注。可选资源引用采用显式 `:: assets/<file>`
+        # 结尾；只有结尾段严格匹配 assets/<文件名> 才视为 asset，避免把含 `::`
+        # 的普通图注误判为资源（如"权利…阶梯：每一级…考量"）。
+        aria, _, rest = payload.partition("::")
+        aria = aria.strip()
+        caption = rest.strip()
+        asset = None
+        if "::" in rest:
+            tail_src, _, tail = rest.rpartition("::")
+            tail = tail.strip()
+            if _ALLOWED_ASSET_RE.match(tail) and not tail_src.endswith("::"):
+                asset = tail
+                caption = (tail_src + "::").strip()
+                caption = caption.rstrip(":").strip() or caption
+        content: dict[str, Any] = {
+            "aria_label": aria,
+            "caption": caption,
+        }
+        if asset:
+            content["asset"] = asset
+        return content
     raise ValueError(f"unknown block type {btype}")  # pragma: no cover
 
 
@@ -223,6 +245,36 @@ def main_text_of(content: dict[str, Any]) -> str:
     if "text" in content and isinstance(content["text"], str):
         return content["text"]
     return ""
+
+
+# T10：图解资源引用校验（规则与 build_content 一致，解析后必须落在本书目录内）。
+def _fig_asset_path(book_dir: Path, asset: str) -> Path:
+    """把 asset 引用解析为绝对路径；解析失败视为不可用（由调用方记 R8）。"""
+    return (book_dir / asset.lstrip("/")).resolve()
+
+
+def _validate_fig_asset(
+    book_dir: Path, asset: str, rel: str, line: int, issues: list[Issue]
+) -> None:
+    where = f"{rel}:{line}"
+    if "\\" in asset or asset.startswith("/") or not _ALLOWED_ASSET_RE.match(asset):
+        issues.append(
+            Issue("R8", where, f"图解资源路径非法（仅允许 assets/<文件名> 相对路径）：{asset!r}")
+        )
+        return
+    if Path(asset).suffix.lower() not in _ALLOWED_ASSET_EXT:
+        issues.append(
+            Issue("R8", where, f"图解资源扩展名不允许：{Path(asset).suffix!r}")
+        )
+        return
+    target = _fig_asset_path(book_dir, asset)
+    if not target.is_relative_to(book_dir.resolve()):
+        issues.append(Issue("R8", where, f"图解资源越出本书目录（路径穿越）：{asset!r}"))
+        return
+    if not target.is_file():
+        issues.append(
+            Issue("R8", where, f"引用的图解资源不存在：{asset}")
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -381,6 +433,12 @@ def validate_chapter(book: dict, book_dir: Path, ch: dict, issues: list[Issue]) 
                 issues.append(
                     Issue("R7", f"{rel}:{block['line']}", "CALL 需要 标题 :: 正文 两段")
                 )
+        elif block["type"] == "FIG":
+            # T10：图解可引用本书 assets/ 下资源；路径必须安全且文件存在，
+            # 否则记为图像完整性缺口（R8），不与结构校验（R1-R7）混合统计。
+            asset = content.get("asset")
+            if asset:
+                _validate_fig_asset(book_dir, asset, rel, block["line"], issues)
 
         for token in FORBIDDEN_TOKENS:
             joined = " ".join(iter_text_strings(content))

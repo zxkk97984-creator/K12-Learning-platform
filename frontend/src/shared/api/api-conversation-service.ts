@@ -154,6 +154,8 @@ function apiScreenContext(context: ScreenContext): Record<string, unknown> {
     ['selected_text', context.selectedText],
     ['knowledge_points', context.knowledgePoints],
     ['actions', context.actions],
+    ['quiz_session_id', context.quizSessionId],
+    ['question_id', context.questionId],
   ]
   for (const [key, value] of optional) {
     if (value !== undefined) result[key] = value

@@ -23,7 +23,25 @@ export interface Recommendation {
   updated_at: string
 }
 
+export type LearningNextType =
+  | 'CONTINUE_QUIZ'
+  | 'REVIEW_QUIZ'
+  | 'NEXT_CHAPTER'
+  | 'CONTINUE_READING'
+  | 'START_BOOK'
+
+export interface LearningNextAction {
+  type: LearningNextType
+  label: string
+  book_id: string | null
+  chapter_id: string | null
+  quiz_session_id: string | null
+  reason: string
+  evidence_ids: string[]
+}
+
 export interface RecommendationService {
   getRecommendations(): Promise<Recommendation[]>
   dismissRecommendation(recommendationId: string): Promise<Recommendation>
+  getLearningNext(): Promise<LearningNextAction>
 }

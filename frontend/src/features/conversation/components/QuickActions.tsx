@@ -38,7 +38,7 @@ export function QuickActions() {
       <button
         type="button"
         className="shrink-0 rounded-full border border-border bg-surface px-2.5 py-1.5 text-[10px] text-muted"
-        title="语音聊天（Phase 9 实现）"
+        title="语音聊天"
       >
         语音聊天
       </button>

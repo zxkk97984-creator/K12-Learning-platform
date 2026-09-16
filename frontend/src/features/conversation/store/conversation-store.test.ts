@@ -230,7 +230,7 @@ describe('conversation store real service lifecycle', () => {
         id: 'tool-tool-run-1',
         role: 'ai',
         kind: 'quiz',
-        content: 'Quiz Skill 已创建 · 正式测验已记录',
+        content: '测验已创建 · 正式测验已记录',
         quiz: { sessionId: 'quiz-uuid-1' },
       }),
     ])
@@ -320,7 +320,7 @@ describe('conversation store real service lifecycle', () => {
         id: 'tool-tool-run-error',
         role: 'ai',
         kind: 'tool',
-        content: 'Quiz Skill 生成失败，请稍后再试',
+        content: '测验生成失败，请稍后再试',
         quiz: null,
       }),
     ])
@@ -424,7 +424,7 @@ describe('conversation store real service lifecycle', () => {
         id: 'tool-tool-run-empty',
         role: 'ai',
         kind: 'quiz',
-        content: 'Quiz Skill 已创建 · 正式测验已记录',
+        content: '测验已创建 · 正式测验已记录',
         quiz: null,
       }),
     ])

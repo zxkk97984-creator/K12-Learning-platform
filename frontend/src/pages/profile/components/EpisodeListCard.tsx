@@ -68,7 +68,7 @@ export function EpisodeListCard({ episodes, loadDetail }: EpisodeListCardProps) 
                     {expanded ? '收起详情' : '详情'}
                   </button>
                 </div>
-                <p className="mt-1.5 max-w-[72ch] text-[13px] leading-relaxed text-muted">
+                <p className="mt-1.5 max-w-[72ch] text-[13px] leading-relaxed text-muted wrap-anywhere">
                   {episode.summary}
                 </p>
                 {expanded ? (

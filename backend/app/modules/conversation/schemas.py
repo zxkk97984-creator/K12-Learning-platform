@@ -38,6 +38,38 @@ class SendMessageRequest(BaseModel):
     selected_text: str | None = None
 
 
+class QuizReviewContext(BaseModel):
+    """§4.3 错题讲解的屏幕上下文契约。
+
+    后端只信这里的 ID 并从自己的快照查题干/作答/解析，绝不凭客户端传来的
+    正确答案或归属结论。ID 可空：有 quiz_session_id 而无 question_id 时，
+    服务端明确「还不知道要讲哪一题」。
+    """
+
+    quiz_session_id: UUID | None = None
+    question_id: UUID | None = None
+
+    @classmethod
+    def from_screen_context(cls, screen_context: dict[str, Any] | None) -> "QuizReviewContext":
+        if not screen_context:
+            return cls()
+        raw = screen_context
+        # 兼容前端 camelCase 与既有 snake_case 两种来源；ID 畸形按缺失处理，不炸对话。
+        quiz = raw.get("quizSessionId") or raw.get("quiz_session_id")
+        question = raw.get("questionId") or raw.get("question_id")
+        quiz_uuid = None
+        question_uuid = None
+        try:
+            quiz_uuid = UUID(str(quiz)) if quiz is not None else None
+        except (ValueError, TypeError, AttributeError):
+            quiz_uuid = None
+        try:
+            question_uuid = UUID(str(question)) if question is not None else None
+        except (ValueError, TypeError, AttributeError):
+            question_uuid = None
+        return cls(quiz_session_id=quiz_uuid, question_id=question_uuid)
+
+
 class ConversationListItemDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

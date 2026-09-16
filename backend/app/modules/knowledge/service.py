@@ -142,24 +142,27 @@ class KnowledgeService:
         if request.knowledge_point_ids:
             kp_filter = (
                 "AND EXISTS (SELECT 1 FROM jsonb_array_elements_text("
-                "knowledge_chunks.knowledge_point_ids) AS kp "
+                "kc.knowledge_point_ids) AS kp "
                 "WHERE kp = ANY(:kp_ids))"
             )
         distance_expression = (
-            "CASE WHEN vector_dims(embedding) = :embedding_dimension "
-            "THEN embedding <=> CAST(:query_embedding AS vector) END"
+            "CASE WHEN vector_dims(kc.embedding) = :embedding_dimension "
+            "THEN kc.embedding <=> CAST(:query_embedding AS vector) END"
         )
         similarity_filter = ""
         if request.min_similarity is not None:
             params["max_distance"] = 1.0 - request.min_similarity
             similarity_filter = f"AND ({distance_expression}) <= :max_distance "
         sql = text(
-            "SELECT chunk_id, resource_id, chunk_index, content, content_type, "
-            "metadata, knowledge_point_ids, token_count, status, created_at, "
+            "SELECT kc.chunk_id, kc.resource_id, kc.chunk_index, kc.content, "
+            "kc.content_type, kc.metadata, kc.knowledge_point_ids, kc.token_count, "
+            "kc.status, kc.created_at, "
             f"{distance_expression} AS distance "
-            "FROM knowledge_chunks "
-            "WHERE status = 'READY' AND embedding IS NOT NULL "
-            "AND vector_dims(embedding) = :embedding_dimension "
+            "FROM knowledge_chunks kc "
+            "JOIN knowledge_resources kr ON kr.resource_id = kc.resource_id "
+            "WHERE kc.status = 'READY' AND kr.status = 'READY' "
+            "AND kc.embedding IS NOT NULL "
+            "AND vector_dims(kc.embedding) = :embedding_dimension "
             + kp_filter
             + similarity_filter
             + f" ORDER BY {distance_expression} "
@@ -203,9 +206,14 @@ class KnowledgeService:
         session: AsyncSession,
         request: KnowledgeSearchRequest,
     ) -> list[KnowledgeChunkDTO]:
-        query = select(KnowledgeChunk).where(
-            KnowledgeChunk.status == "READY",
-            KnowledgeChunk.content.ilike(f"%{request.query}%"),
+        query = (
+            select(KnowledgeChunk)
+            .join(KnowledgeResource, KnowledgeResource.resource_id == KnowledgeChunk.resource_id)
+            .where(
+                KnowledgeChunk.status == "READY",
+                KnowledgeResource.status == "READY",
+                KnowledgeChunk.content.ilike(f"%{request.query}%"),
+            )
         )
         if request.knowledge_point_ids:
             query = query.where(

@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     worker_backoff_base_seconds: float = Field(default=2.0, ge=0.1, le=60)
     worker_backoff_max_seconds: float = Field(default=300.0, ge=1.0, le=86400)
     summary_message_threshold: int = Field(default=20, ge=1)
+    context_window_token_budget: int = Field(default=3000, ge=200)
     knowledge_upload_max_bytes: int = Field(default=20 * 1024 * 1024, ge=1)
     avatar_upload_max_bytes: int = Field(default=2 * 1024 * 1024, ge=1)
     # ---- Phase 5-A：限流（Redis 可用则分布式，否则进程内降级；均强制）----

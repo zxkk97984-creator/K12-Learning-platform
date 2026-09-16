@@ -39,7 +39,7 @@ test.describe('黄金路径', () => {
 
     // 3. 打开 companion 面板（动态教师名，不硬编码）
     await page.getByRole('button', { name: /打开.*AI 教师/ }).click()
-    const panel = page.getByRole('complementary', { name: /对话面板/ })
+    const panel = page.getByRole('dialog', { name: /对话面板/ })
     await expect(panel).toBeVisible()
     await expect(page.getByRole('button', { name: '语音输入' })).toBeVisible()
 
@@ -89,9 +89,9 @@ test.describe('黄金路径', () => {
     // 6. 通用答题循环：多题、多题型、服务端判定推进，最终显示真实汇总
     await completeQuizOnPage(page)
 
-    // 7. 测验历史：使用通用入口与标题断言
+    // 7. 测验历史：使用通用入口与标题断言（导航项现为「练习」→ /quizzes）
     await page.keyboard.press('Escape')
-    await page.getByRole('link', { name: '测验' }).click()
+    await page.getByRole('link', { name: '练习' }).click()
     await expect(page.getByRole('heading', { name: /每一次答题/ })).toBeVisible()
     await expect(page.getByText(/随堂测验/).first()).toBeVisible()
 

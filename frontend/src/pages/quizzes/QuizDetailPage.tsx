@@ -1,29 +1,37 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 
 import type {
   QuizAnswer,
   QuizInteraction,
   QuizQuestion,
 } from '@/entities/quiz/types'
-import { useCompanionStore, useTeacherName } from '@/features/companion'
+import { useCompanionStore } from '@/features/companion'
 import { useConversationStore } from '@/features/conversation'
+import { derivePageType } from '@/features/screen-context/types'
 import { quizSource } from '@/features/quiz/lib'
 import { quizService } from '@/shared/services'
 import type { QuizSessionDetail } from '@/shared/api/quiz-service'
 
-function answerValue(value: Record<string, unknown> | null | undefined): string | null {
-  if (!value) return null
-  if (typeof value.key === 'string' || typeof value.key === 'number') return String(value.key)
-  if (Array.isArray(value.keys)) return value.keys.map(String).join(', ')
-  if (typeof value.value === 'string' || typeof value.value === 'number') return String(value.value)
-  return null
+/** 归一化单选/多选/判断/填空的答案键（多选为多个 key）。 */
+function answerKeys(value: Record<string, unknown> | null | undefined): string[] {
+  if (!value) return []
+  if (Array.isArray(value.keys)) return value.keys.map(String)
+  if (Array.isArray(value.values)) return value.values.map(String)
+  if (value.key !== undefined && value.key !== null) return [String(value.key)]
+  if (value.value !== undefined && value.value !== null) return [String(value.value)]
+  return []
+}
+
+/** 从答案键映射到选项文本（找不到时回退到键本身）。 */
+function optionText(question: QuizQuestion, key: string): string {
+  return question.options.find((option) => option.key === key)?.text ?? key
 }
 
 export default function QuizDetailPage() {
   const { quizId = 'q1' } = useParams()
+  const { pathname } = useLocation()
   const runIntent = useConversationStore((state) => state.runIntent)
-  const teacherName = useTeacherName()
   const [session, setSession] = useState<QuizSessionDetail | null>(null)
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [answers, setAnswers] = useState<QuizAnswer[]>([])
@@ -31,25 +39,44 @@ export default function QuizDetailPage() {
   const [source, setSource] = useState<{ bookTitle: string; chapterTitle: string } | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // 只读快照：仅 get* 查询，绝不调用 create/submit（0-D D5）
+  // 只读快照：仅 get* 查询，绝不调用 create/submit（0-D D5）；单来源失败不抹掉整份列表。
   useEffect(() => {
     let cancelled = false
     void (async () => {
+      const [current] = await Promise.allSettled([quizService.getQuizSession(quizId)])
+      if (current.status === 'rejected') {
+        if (!cancelled) {
+          setSession(null)
+          setLoading(false)
+        }
+        return
+      }
+      const sessionValue = current.value
       try {
-        const [current, questionList, answerList, interactionList] = await Promise.all([
-          quizService.getQuizSession(quizId),
+        const [questionList, answerList, interactionList] = await Promise.all([
           quizService.getQuestions(quizId),
           quizService.getAnswers(quizId),
           quizService.getInteractions(quizId),
         ])
         if (cancelled) return
-        setSession(current)
-        setQuestions(current.questions_snapshot?.length ? current.questions_snapshot : questionList)
+        setSession(sessionValue)
+        setQuestions(
+          sessionValue.questions_snapshot?.length
+            ? sessionValue.questions_snapshot
+            : questionList,
+        )
         setAnswers(answerList)
         setInteractions(interactionList)
-        setSource(await quizSource(current.book_id, current.chapter_id))
+        setSource(await quizSource(sessionValue.book_id, sessionValue.chapter_id))
       } catch {
-        if (!cancelled) setSession(null)
+        if (!cancelled) {
+          // 局部来源失败：仍展示会话主体，不丢整份列表。
+          setSession(sessionValue)
+          setQuestions(sessionValue.questions_snapshot ?? [])
+          setAnswers([])
+          setInteractions([])
+          setSource(await quizSource(sessionValue.book_id, sessionValue.chapter_id).catch(() => null))
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -58,11 +85,6 @@ export default function QuizDetailPage() {
       cancelled = true
     }
   }, [quizId])
-
-  const askAgain = () => {
-    runIntent('quiz-requestion')
-    useCompanionStore.getState().setOpen(true)
-  }
 
   if (loading) {
     return <p className="py-10 text-center text-sm text-muted">正在加载答卷…</p>
@@ -79,6 +101,17 @@ export default function QuizDetailPage() {
   }
 
   const summary = session.result_summary
+  const pageType = derivePageType(pathname)
+  const baseContext = { route: pathname, pageType, quizSessionId: session.quiz_session_id }
+
+  const explainQuestion = (questionId: string) => {
+    runIntent('explain-question', undefined, { ...baseContext, questionId })
+    useCompanionStore.getState().setOpen(true)
+  }
+  const practiseAgain = () => {
+    runIntent('quiz-requestion', undefined, baseContext)
+    useCompanionStore.getState().setOpen(true)
+  }
 
   return (
     <section className="py-10">
@@ -112,12 +145,15 @@ export default function QuizDetailPage() {
             (item) =>
               item.question_id === question.question_id && item.interaction_type === 'HINT_RESPONSE',
           )
-          const correctKey = answerValue(question.correct_answer)
-          const correctText =
-            question.options.find((option) => option.key === correctKey)?.text ?? correctKey ?? '—'
-          const answerKey = answerValue(answer?.submitted_answer)
-          const answerText = answer
-            ? question.options.find((option) => option.key === answerKey)?.text ?? answerKey
+          const correctKeys = answerKeys(question.correct_answer)
+          const correctTexts = correctKeys.length
+            ? correctKeys.map((key) => optionText(question, key)).join('；')
+            : '—'
+          const answerKeysList = answerKeys(answer?.submitted_answer)
+          const answerTexts = answer
+            ? answerKeysList.length
+              ? answerKeysList.map((key) => optionText(question, key)).join('；')
+              : answerKeysList.join('；')
             : null
           return (
             <li key={question.question_id} className="border-b border-border py-6">
@@ -144,14 +180,22 @@ export default function QuizDetailPage() {
               </p>
               <div className="mt-2.5 grid grid-cols-[84px_28px_minmax(0,1fr)] items-baseline gap-3">
                 <span className="font-mono text-[10px] text-muted">你的答案</span>
-                <strong className="font-mono text-[13px] text-fg">{answerKey ?? '—'}</strong>
-                <p className="text-[13px] text-fg">{answerText ?? '—'}</p>
+                <strong className="font-mono text-[13px] text-fg">
+                  {answerKeysList.join(', ') || '—'}
+                </strong>
+                <p className="text-[13px] text-fg">{answerTexts ?? '—'}</p>
               </div>
               <div className="mt-1 grid grid-cols-[84px_28px_minmax(0,1fr)] items-baseline gap-3">
                 <span className="font-mono text-[10px] text-muted">正确答案</span>
-                <strong className="font-mono text-[13px] text-fg">{correctKey ?? '—'}</strong>
-                <p className="text-[13px] text-muted">{correctText}</p>
+                <strong className="font-mono text-[13px] text-fg">{correctKeys.join(', ') || '—'}</strong>
+                <p className="text-[13px] text-muted">{correctTexts}</p>
               </div>
+              {question.explanation ? (
+                <div className="mt-3 rounded-[10px] border border-border bg-fg-soft p-3.5">
+                  <p className="font-mono text-[10px] tracking-wider text-muted">解析</p>
+                  <p className="mt-1 text-[13px] leading-relaxed text-fg">{question.explanation}</p>
+                </div>
+              ) : null}
               {hintInteractions.length > 0 ? (
                 <div className="mt-3 rounded-[10px] bg-fg-soft p-3.5">
                   {hintInteractions.map((interaction) => (
@@ -162,19 +206,28 @@ export default function QuizDetailPage() {
                   ))}
                 </div>
               ) : null}
-              <button
-                type="button"
-                className="mt-3 rounded-md px-2 py-1 text-[11px] text-muted hover:text-fg hover:underline"
-                onClick={askAgain}
-              >
-                现在再问{teacherName}
-              </button>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-md border border-border px-2 py-1 text-[11px] text-fg hover:border-fg"
+                  onClick={() => explainQuestion(question.question_id)}
+                >
+                  讲解这道题
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md px-2 py-1 text-[11px] text-muted hover:text-fg hover:underline"
+                  onClick={practiseAgain}
+                >
+                  再练一道类似的
+                </button>
+              </div>
             </li>
           )
         })}
       </ol>
       <p className="mt-4 font-mono text-[10px] text-muted">
-        共 {summary?.total ?? questions.length} 题 · 只读快照，不重新生成题目 · 技能版本 {session.skill_version}
+        共 {summary?.total ?? questions.length} 题 · 只读快照，不重新生成题目
       </p>
     </section>
   )

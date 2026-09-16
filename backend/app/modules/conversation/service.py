@@ -25,6 +25,8 @@ from app.infrastructure.database.models import (
     TeacherRole,
 )
 from app.jobs.queue import enqueue, has_pending_job
+from app.modules.conversation.context_window import build_input_window
+from app.modules.conversation.context_window import estimate_tokens
 from app.modules.conversation.schemas import (
     ConversationDTO,
     ConversationListItemDTO,
@@ -156,6 +158,32 @@ def _sse_error(
 
 def _isoformat_z(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _usage_report(
+    provider: AIProvider,
+    history: list[dict[str, str]],
+    output_text: str,
+) -> dict[str, Any]:
+    """T20 §20b：优先用 provider 实际 usage；拿不到则标注 estimated，不把字符数冒充 token。"""
+    usage = getattr(provider, "last_usage", None)
+    if isinstance(usage, dict):
+        prompt_tokens = usage.get("prompt_tokens")
+        completion_tokens = usage.get("completion_tokens")
+        if prompt_tokens is not None or completion_tokens is not None:
+            return {
+                "estimated": False,
+                "input_tokens": prompt_tokens,
+                "output_tokens": completion_tokens,
+            }
+    # 无真实 usage：估算（字符数 × 系数），明确标注 estimated 与估算方法。
+    return {
+        "estimated": True,
+        "estimate_method": "chars_to_tokens",
+        "chars_per_token_estimate": 0.6,
+        "input_estimate": sum(estimate_tokens(str(item.get("content", ""))) for item in history),
+        "output_estimate": estimate_tokens(output_text),
+    }
 
 
 def _role_summary(role: TeacherRole | None) -> dict | None:
@@ -549,16 +577,33 @@ class ConversationService:
             }.get(message.role, "user")
             history.append({"role": role, "content": message.content})
 
-        summary_context = ""
-        if len(history_rows) >= settings.summary_message_threshold:
-            summary = (
-                await session.execute(_latest_summary_query(conversation_id))
-            ).scalar_one_or_none()
-            if summary is not None and summary.summary.strip():
-                summary_context = (
-                    f"【本会话长对话摘要（v{summary.summary_version}）】\n"
-                    f"{summary.summary.strip()}"
-                )
+        summary_content = ""
+        summary_message_count = 0
+        summary_version: int | None = None
+        summary = (
+            await session.execute(_latest_summary_query(conversation_id))
+        ).scalar_one_or_none()
+        if summary is not None and summary.summary.strip():
+            summary_content = summary.summary.strip()
+            summary_message_count = int(summary.message_covered_count or 0)
+            summary_version = summary.summary_version
+        summary_context = (
+            f"【本会话长对话摘要（v{summary_version}）】\n{summary_content}"
+            if summary_content
+            else ""
+        )
+        # T20 §20a：输入 = 摘要（并入 system prompt）+ 边界后最近消息，按预算截取；
+        # 摘要与最近消息不重叠，且始终保留学生的当前问题。
+        windowed = build_input_window(
+            summary=summary_content,
+            summary_message_count=summary_message_count,
+            summary_version=summary_version,
+            history=history,
+            token_budget=settings.context_window_token_budget,
+        )
+        history = windowed.messages
+        if windowed.early_context_unavailable and not summary_context:
+            summary_context = "【提示】对话较长，较早的上下文可能不可用，若学生问到较早已答过的问题请如实说明。"
 
         teacher_message_id = uuid4()
         teacher_sequence = student_sequence + 1
@@ -943,18 +988,14 @@ class ConversationService:
                         "AI provider returned an empty response"
                     )
                 model_info = provider.model_info
+                usage = _usage_report(provider, history, content)
                 yield _sse_frame(
                     "text.done",
                     {
                         "message_id": str(teacher_message_id),
                         "content": content,
                         "model_info": model_info,
-                        "usage": {
-                            "input_tokens": sum(
-                                len(item["content"]) for item in history
-                            ),
-                            "output_tokens": len(content),
-                        },
+                        "usage": usage,
                     },
                     event_id=teacher_message_id,
                 )

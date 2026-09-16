@@ -164,3 +164,76 @@ def select_questions(difficulty: str, count: int) -> list[QuizBankQuestion]:
     remaining = [item for item in QUIZ_BANK if item.difficulty != difficulty]
     ordered = preferred + remaining
     return [ordered[index % len(ordered)] for index in range(count)]
+
+
+from dataclasses import dataclass as _dataclass  # noqa: E402
+from uuid import UUID as _UUID  # noqa: E402
+from typing import Any as _Any  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession  # noqa: E402
+from sqlalchemy import select as _select  # noqa: E402
+
+
+@_dataclass(frozen=True)
+class ReviewedQuestionItem:
+    """从 reviewed_questions（仅 APPROVED）导出的可出题项，供 QuizSkill 消费。"""
+
+    stable_key: str
+    question_type: str
+    stem: str
+    options: list[dict[str, str]]
+    correct_answer: dict[str, _Any]
+    explanation: str
+    hints: tuple[str, str, str]
+    knowledge_point_ids: tuple[str, ...]
+    grade_min: int
+    grade_max: int
+    review_status: str
+
+
+async def select_reviewed_questions(
+    session: _AsyncSession,
+    chapter_id: _UUID,
+    grade: int | None,
+    count: int,
+) -> list[ReviewedQuestionItem]:
+    """选取当前章节、适配年级的 APPROVED 审校题（T22b）。
+
+    仅 review_status='APPROVED' 的题才会被选中；年级按 grade_min/grade_max 相交匹配。
+    返回空列表表示当前章节无可用审校题，调用方走原有的 LLM/确定性/题库路径（如实标注来源）。
+    """
+    from app.infrastructure.database.models import ReviewedQuestion
+
+    stmt = _select(ReviewedQuestion).where(
+        ReviewedQuestion.chapter_id == chapter_id,
+        ReviewedQuestion.review_status == "APPROVED",
+    )
+    if grade is not None:
+        stmt = stmt.where(
+            ReviewedQuestion.grade_min <= grade,
+            ReviewedQuestion.grade_max >= grade,
+        )
+    stmt = stmt.order_by(ReviewedQuestion.stable_key.asc())
+    rows = (await session.execute(stmt)).scalars().all()
+    items: list[ReviewedQuestionItem] = []
+    for row in rows[:count]:
+        payload = row.payload or {}
+        options = list(payload.get("options") or [])
+        correct = dict(payload.get("correct_answer") or {})
+        hints = tuple(payload.get("hints") or ("", "", ""))[:3]
+        kps = tuple(str(kp) for kp in payload.get("knowledge_point_ids") or ())
+        items.append(
+            ReviewedQuestionItem(
+                stable_key=row.stable_key,
+                question_type=str(payload.get("question_type") or "SINGLE_CHOICE"),
+                stem=str(payload.get("stem") or ""),
+                options=options,
+                correct_answer=correct,
+                explanation=str(payload.get("explanation") or ""),
+                hints=hints,
+                knowledge_point_ids=kps,
+                grade_min=row.grade_min,
+                grade_max=row.grade_max,
+                review_status=row.review_status,
+            )
+        )
+    return items

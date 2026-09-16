@@ -64,13 +64,22 @@ def _clip(text: str, limit: int = _SNIPPET_MAX) -> str:
 async def load_chapter_source(
     session: AsyncSession, book_id: Any, chapter_id: Any
 ) -> ChapterSourceData | None:
-    """读取章节真实内容；章节不存在或完全无可出题素材时返回 None。"""
+    """读取章节真实内容；章节不存在、不可见或完全无可出题素材时返回 None。
+
+    可见性：仅当章节与其所属书均为 PUBLISHED 时返回内容（T03）；
+    若调用方指定的 book_id 与章节实际归属不符，也视为不可见。
+    """
     chapter = await session.get(Chapter, chapter_id)
-    if chapter is None:
+    if chapter is None or chapter.status != "PUBLISHED":
+        return None
+    if book_id is not None and chapter.book_id is not None and chapter.book_id != book_id:
+        # T03：篡改 chapter/book 组合（章节不属于指定书）被拒绝。
         return None
     book = await session.get(Book, book_id) if book_id is not None else None
     if book is None and chapter.book_id is not None:
         book = await session.get(Book, chapter.book_id)
+    if book is None or book.status != "PUBLISHED":
+        return None
 
     blocks = (
         await session.execute(

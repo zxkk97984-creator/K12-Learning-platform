@@ -31,12 +31,13 @@
 
   /* ---- 字体 ---- */
   --font-display: 'Iowan Old Style', 'Charter', Georgia, 'Times New Roman', serif;
-  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui,
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif;
   --font-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
 
   /* ---- 字号 / 间距 / 圆角 / 缓动 ---- */
-  --fs-body: 15px;
-  --text-body: 15px;
+  --fs-body: 16px;
+  --text-body: 16px;
   --spacing-gutter: clamp(20px, 4vw, 56px);
   --content: 1380px;
   --radius: 14px;
@@ -71,7 +72,29 @@ body {
   line-height: 1.55;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+}
+
+/* ---- 焦点（T17 §5.1）：所有可交互元素键盘焦点清楚可见 ---- */
+:where(a, button, input, select, textarea, [role="button"], [tabindex]) :focus,
+:where(a, button, input, select, textarea, [role="button"], [tabindex]):focus {
+  outline: none;
+}
+:where(a, button, input, select, textarea, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ---- 动效尊重（T17 §5.1）：prefers-reduced-motion 下停止非必要桌宠与骨架动画 ---- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ---- 学段适配（原型 html[data-age=...]）----

@@ -26,6 +26,7 @@ LearningEventType = Literal[
     "VOICE_SESSION_ENDED",
     "ROLE_SWITCHED",
     "TEXT_SELECTED",
+    "QUIZ_REVIEW_COMPLETED",
 ]
 
 
@@ -117,3 +118,15 @@ class EventPageMeta(BaseModel):
 class EventPageDTO(BaseModel):
     items: list[LearningEventDTO]
     meta: EventPageMeta
+
+
+class ChapterCompletionDTO(BaseModel):
+    chapter_id: UUID
+    book_id: UUID
+    completed_at: datetime
+    source: Literal["EXPLICIT", "LEGACY_EVENT"]
+    # 本次提交后，本书是否已"全部已发布章节完成"。
+    book_completed: bool
+    # 已完成的已发布章节数 / 本书已发布章节总数（诚实口径，不以滚动事件冒充）。
+    completed_chapters: int
+    published_chapters: int

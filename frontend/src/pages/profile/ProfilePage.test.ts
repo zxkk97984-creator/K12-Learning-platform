@@ -276,3 +276,46 @@ describe('ProfilePage 学习目标持久化（Phase 4 整改 3）', () => {
     expect(vi.mocked(studentService.updateMe)).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('ProfilePage 可恢复与布局修正（T09）', () => {
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  it('prefs 失败显示错误与重试，而非持续骨架', async () => {
+    vi.mocked(studentService.getPreferences).mockRejectedValue(new Error('pref down'))
+    vi.mocked(memoryService.getMemories).mockResolvedValue([])
+    vi.mocked(memoryService.getInsights).mockResolvedValue([])
+    vi.mocked(memoryService.getEpisodes).mockResolvedValue([])
+    renderProfile()
+
+    expect(await screen.findByText('学习偏好暂时无法读取')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
+    expect(screen.queryByText('正在加载学习画像')).toBeNull()
+  })
+
+  it('prefs 失败但其余区块成功时，其他内容可用（不整页骨架）', async () => {
+    vi.mocked(studentService.getPreferences).mockRejectedValue(new Error('pref down'))
+    vi.mocked(memoryService.getMemories).mockResolvedValue([])
+    // 记忆/情节成功：这些渲染在右栏与下方
+    vi.mocked(memoryService.getInsights).mockResolvedValue([insight])
+    vi.mocked(memoryService.getEpisodes).mockResolvedValue([episode])
+    renderProfile()
+
+    expect(await screen.findByText('学习偏好暂时无法读取')).toBeTruthy()
+    // 右栏仍显示记忆/证据提示，页面非整页骨架
+    expect(screen.getByText(/所有结论都来自真实学习记录/)).toBeTruthy()
+  })
+
+  it('管理记忆入口并入右栏（作为第二个直接子元素，不单独掉落）', async () => {
+    vi.mocked(studentService.getPreferences).mockResolvedValue(preference)
+    vi.mocked(memoryService.getMemories).mockResolvedValue([])
+    vi.mocked(memoryService.getInsights).mockResolvedValue([insight])
+    vi.mocked(memoryService.getEpisodes).mockResolvedValue([])
+    renderProfile()
+
+    await waitFor(() => expect(screen.getByTestId('open-memories')).toBeTruthy())
+    expect(screen.getByTestId('open-memories')).toBeTruthy()
+  })
+})

@@ -72,7 +72,8 @@ T: 章节导语标题
 P: 段落正文，60~240 字的生活化讲解。|mark:关键术语      ← |mark: 可省略；术语必须是正文的子串
 KC: 卡片标题 :: 卡片定义正文（40~120字） :: 例子标签 :: 例子正文   ← 例子部分可整体省略
 CALL: 标题 :: 引导思考的问题或过渡
-FIG: 图解的无障碍描述 :: 图注文字
+FIG: 图解的无障碍描述 :: 图注文字            ← 兼容旧式两段（无实图）
+FIG: 描述 :: 图注 :: assets/文件.svg        ← 可选第三段引用真实图（T10，路径仅限本书 assets/ 目录）
 S: 小节锚点名                      ← 可选，之后的块归入该 section_key
 @kp=training_data,label            ← 可选，作用于其上方最近的一个内容块
 ```
@@ -100,9 +101,9 @@ S: 小节锚点名                      ← 可选，之后的块归入该 secti
 |------|------------|---------|
 | T    | TITLE         | `{"text": "..."}` |
 | P    | PARAGRAPH     | `{"text": "..."}` 或带 mark 时 `{"text": "...", "mark": "..."}` |
+| FIG  | FIGURE        | `{"alt","caption"}`，或引用资源时 `{"alt","caption","src"}`（src 为公开静态 URL）|
 | KC   | KNOWLEDGE_CARD| `{"title","text","example":{"label","text"}}`（无例子时省略 example 键）|
 | CALL | CALLOUT       | `{"title","text"}` |
-| FIG  | FIGURE        | `{"aria_label","caption"}` |
 
 ## 知识库文档 knowledge/<slug>.md
 

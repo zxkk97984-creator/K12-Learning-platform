@@ -185,15 +185,34 @@ class QuizService:
 
         book_id = request.book_id
         chapter_id = request.chapter_id
-        if book_id is not None and await session.get(Book, book_id) is None:
+        book_row = await session.get(Book, book_id) if book_id is not None else None
+        if book_id is not None and book_row is None:
+            raise _error(404, "BOOK_NOT_FOUND", "book not found")
+        if book_row is not None and book_row.status != "PUBLISHED":
             raise _error(404, "BOOK_NOT_FOUND", "book not found")
         if chapter_id is not None:
             chapter = await session.get(Chapter, chapter_id)
-            if chapter is None:
+            if chapter is None or chapter.status != "PUBLISHED":
                 raise _error(404, "CHAPTER_NOT_FOUND", "chapter not found")
             if book_id is not None and chapter.book_id != book_id:
                 raise _error(422, "VALIDATION_ERROR", "chapter does not belong to book")
             book_id = book_id or chapter.book_id
+
+        # T16 相似练习来源：新来源题必须属于来源测验，且来源测验/题均归当前学生。
+        source_quiz_session_id = request.source_quiz_session_id
+        source_question_id = request.source_question_id
+        if source_quiz_session_id is not None or source_question_id is not None:
+            source_quiz = (
+                await session.get(QuizSession, source_quiz_session_id)
+                if source_quiz_session_id is not None
+                else None
+            )
+            if source_quiz is None or source_quiz.student_id != profile.student_id:
+                raise _error(422, "VALIDATION_ERROR", "source quiz does not belong to student")
+            if source_question_id is not None:
+                source_q = await session.get(QuizQuestion, source_question_id)
+                if source_q is None or source_q.quiz_session_id != source_quiz.quiz_session_id:
+                    raise _error(422, "VALIDATION_ERROR", "source question not in source quiz")
 
         chapter_title = None
         if chapter_id is not None:
@@ -220,6 +239,10 @@ class QuizService:
         quiz_session = context.generated_session
         if quiz_session is None:
             raise RuntimeError("QuizSkill did not create a quiz session")
+        if source_quiz_session_id is not None:
+            quiz_session.source_quiz_session_id = source_quiz_session_id
+        if source_question_id is not None:
+            quiz_session.source_question_id = source_question_id
         now = quiz_session.created_at
         session.add(
             LearningEvent(

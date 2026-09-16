@@ -8,6 +8,9 @@ class AIProvider(ABC):
 
     provider: str
     model: str
+    # T20 §20b：最近一次调用的真实 usage（若 provider 返回）；拿不到则为 None，
+    # 由调用方标注 estimated，不把字符数冒充 token。
+    last_usage: dict[str, Any] | None = None
 
     @property
     def model_info(self) -> dict[str, str]:

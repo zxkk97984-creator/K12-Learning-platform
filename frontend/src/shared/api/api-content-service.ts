@@ -7,8 +7,9 @@ import type {
   KnowledgePoint,
 } from '@/entities/book/types'
 
-import type { ContentListParams, ContentService } from './content-service'
-import { ApiError, apiRequest } from './http'
+import type { BookPage, ContentListParams, ContentService } from './content-service'
+import { ApiError, apiRequest, apiRequestEnvelope } from './http'
+import type { CursorMeta } from './http'
 
 type ApiContentListParams = ContentListParams & {
   cursor?: string
@@ -150,30 +151,25 @@ function queryOf(params?: ApiContentListParams): string {
     query.set('grade_max', String(gradeMax))
   }
   if (params.topic) query.set('tag', params.topic)
-  // The current backend accepts/ignores this contract parameter; local filtering below
-  // keeps the existing ContentService search behavior until server-side search lands.
   if (params.search) query.set('search', params.search)
   const encoded = query.toString()
   return encoded ? `?${encoded}` : ''
 }
 
-function searchBooks(books: Book[], search: string | undefined): Book[] {
-  const needle = search?.trim().toLowerCase()
-  if (!needle) return books
-  return books.filter((book) =>
-    `${book.title} ${book.description ?? ''} ${book.keywords} ${book.tags.join(' ')}`
-      .toLowerCase()
-      .includes(needle),
-  )
-}
-
 export class ApiContentService implements ContentService {
-  async getBooks(params?: ApiContentListParams): Promise<Book[]> {
-    const payload = await apiRequest<ApiBookDTO[] | { items: ApiBookDTO[] }>(
+  async getBooksPage(params?: ApiContentListParams): Promise<BookPage> {
+    // T04/T05：信封解析；后端全库搜索+分页，服务端返回 meta(游标/总数)。
+    const { data: items, meta } = await apiRequestEnvelope<ApiBookDTO[] | { items: ApiBookDTO[] }, CursorMeta>(
       `/books${queryOf(params)}`,
     )
-    const items = Array.isArray(payload) ? payload : payload.items
-    return searchBooks(items.map(mapBook), params?.search)
+    const list = Array.isArray(items) ? items : items.items
+    return { items: list.map(mapBook), meta }
+  }
+
+  async getBooks(params?: ApiContentListParams): Promise<Book[]> {
+    // 兼容接口：仅返回第一页。书库发现请使用 getBooksPage（支持分页/总数）。
+    const page = await this.getBooksPage(params)
+    return page.items
   }
 
   async getBook(bookId: string): Promise<Book> {

@@ -88,7 +88,7 @@ def _ensure_env() -> None:
                 )
 
             if await session.get(Book, BOOK_ID) is None:
-                # DRAFT：不进入正式书库，避免污染学生端书单。
+                # PUBLISHED：测验关联测试需要可从学生路径出题（T03 可见性守卫）。
                 session.add(
                     Book(
                         book_id=BOOK_ID,
@@ -99,10 +99,15 @@ def _ensure_env() -> None:
                         difficulty="MEDIUM",
                         estimated_minutes=30,
                         tags=["测试"],
-                        status="DRAFT",
+                        status="PUBLISHED",
                         published_at=datetime.now(timezone.utc),
                     )
                 )
+            else:
+                # 库中可能残留历史 DRAFT 状态，强制恢复为 PUBLISHED 以满足出题可见性。
+                book = await session.get(Book, BOOK_ID)
+                book.status = "PUBLISHED"
+                book.published_at = book.published_at or datetime.now(timezone.utc)
             for chapter_id, order, title in [
                 (CH1_ID, 1, "规律是怎么发现的"),
                 (CH2_ID, 2, "另一章"),

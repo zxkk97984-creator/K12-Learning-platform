@@ -75,6 +75,16 @@ async def upsert_book_progress(
     return ok(await service.upsert_book_progress(session, user.user_id, book_id, body))
 
 
+@router.put("/me/chapters/{chapter_id}/completion")
+async def mark_chapter_completed(
+    user: Annotated[User, Depends(require_student)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    chapter_id: UUID,
+):
+    # T13：幂等主动"完成本章"，返回章节 + 本书完成结果（诚实口径）。
+    return ok(await service.mark_chapter_completed(session, user.user_id, chapter_id))
+
+
 @router.get("/me/learning-events")
 async def list_learning_events(
     user: Annotated[User, Depends(require_student)],

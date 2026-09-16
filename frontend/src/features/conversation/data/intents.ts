@@ -33,6 +33,7 @@ export function currentIntentText(intent: ConversationIntent, selectedText = '')
     'give-hint': '给我一点提示，不要直接给答案。',
     'another-way': '换一种讲法解释当前内容。',
     'why-wrong': '我这道题为什么错了？请结合题目解析说明。',
+    'explain-question': '请讲解这道题：结合题目、我的作答与解析，说清楚为什么。',
     'quiz-requestion': '再出一道类似的题。',
     'quiz-detail': '解释这份测验记录里的错题。',
   }
@@ -54,6 +55,7 @@ export const INTENT_AI_STATE: Partial<Record<ConversationIntent, 'idle' | 'liste
   'book-fit': 'thinking',
   'recommend-next': 'thinking',
   'why-wrong': 'thinking',
+  'explain-question': 'thinking',
   'quiz-requestion': 'thinking',
   quiz: 'encouraging',
 }

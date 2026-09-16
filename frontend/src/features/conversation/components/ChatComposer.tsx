@@ -54,6 +54,10 @@ export function ChatComposer() {
   const voiceClientRef = useRef<VoiceClient | null>(null)
   // 缺口 1d：语音结束事件恰好一次（stop 与卸载并发也不会双发）
   const voiceEndedGuardRef = useRef(createVoiceEndedGuard())
+  // T25 缺口：阻止重复提交——发送在途时忽略再次 submit 并禁用发送按钮
+  // （idempotencyKey 是"每次发送一个随机 UUID"，只兜住网络重试，不护快速双击同文本）。
+  const sendingRef = useRef(false)
+  const [sending, setSending] = useState(false)
 
   useEffect(() => {
     void studentService
@@ -173,26 +177,33 @@ export function ChatComposer() {
 
   const submit = async () => {
     const text = value.trim()
-    if (!text) return
+    if (!text || sendingRef.current) return
     // 缺口 1c：自由输入提问同样产生可追溯的 QUESTION_ASKED；
     // 先确保真实会话，再携带 book/chapter/session 关联。
-    let conversationId: string | null = null
+    sendingRef.current = true
+    setSending(true)
     try {
-      conversationId = await ensureConversationId()
-    } catch {
-      conversationId = null
+      let conversationId: string | null = null
+      try {
+        conversationId = await ensureConversationId()
+      } catch {
+        conversationId = null
+      }
+      const questionEvent = buildQuestionAskedEvent({
+        screenContext,
+        conversationId,
+        sessionId: getCurrentLearningSessionId(),
+        source: 'composer',
+      })
+      if (questionEvent) {
+        void learningService.createEvent(questionEvent).catch(() => undefined)
+      }
+      send(text, screenContext)
+      setValue('')
+    } finally {
+      sendingRef.current = false
+      setSending(false)
     }
-    const questionEvent = buildQuestionAskedEvent({
-      screenContext,
-      conversationId,
-      sessionId: getCurrentLearningSessionId(),
-      source: 'composer',
-    })
-    if (questionEvent) {
-      void learningService.createEvent(questionEvent).catch(() => undefined)
-    }
-    send(text, screenContext)
-    setValue('')
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -263,7 +274,8 @@ export function ChatComposer() {
         <button
           type="submit"
           aria-label="发送消息"
-          className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[10px] border border-fg bg-fg text-surface hover:bg-fg/85"
+          disabled={sending}
+          className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[10px] border border-fg bg-fg text-surface hover:bg-fg/85 disabled:cursor-not-allowed disabled:opacity-50"
         >
           ↑
         </button>

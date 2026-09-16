@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   getMemories: vi.fn(),
   getQuizSessions: vi.fn(),
   getRecommendations: vi.fn(),
+  getLearningNext: vi.fn(),
 }))
 
 vi.mock('@/shared/services', () => ({
@@ -31,6 +32,7 @@ vi.mock('@/shared/services', () => ({
   quizService: { getQuizSessions: mocks.getQuizSessions },
   recommendationService: {
     getRecommendations: mocks.getRecommendations,
+    getLearningNext: mocks.getLearningNext,
     dismissRecommendation: mocks.dismissRecommendation,
   },
 }))
@@ -55,6 +57,7 @@ vi.mock('@/features/conversation', () => ({
 }))
 
 import HomePage from './HomePage'
+import { greetingForHour } from './home-time'
 import { ScreenContextProvider } from '@/features/screen-context'
 
 const recommendation: Recommendation = {
@@ -104,6 +107,15 @@ describe('HomePage recommendations', () => {
     mocks.getEpisodes.mockResolvedValue([])
     mocks.getMemories.mockResolvedValue([])
     mocks.getQuizSessions.mockResolvedValue([])
+    mocks.getLearningNext.mockResolvedValue({
+      type: 'START_BOOK',
+      label: '从《人工智能初探》开始',
+      book_id: null,
+      chapter_id: null,
+      quiz_session_id: null,
+      reason: '先挑一本适合的书开始学习。',
+      evidence_ids: [],
+    })
     mocks.getRecommendations.mockResolvedValue([])
   })
 
@@ -140,7 +152,9 @@ describe('HomePage recommendations', () => {
     renderPage()
 
     expect(await screen.findByText(/推荐暂时不可用/)).toBeTruthy()
-    expect(screen.getByRole('heading', { name: /晚上好/ })).toBeTruthy()
+    // 问候按本地时段：不依赖机器时间，用同一纯函数计算期望值。
+    const expectedGreeting = greetingForHour(new Date().getHours())
+    expect(screen.getByRole('heading', { name: new RegExp(expectedGreeting) })).toBeTruthy()
   })
 
   it('点击「不感兴趣」调用 dismiss 并从列表移除对应卡片', async () => {

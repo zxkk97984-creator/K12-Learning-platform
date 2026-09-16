@@ -421,7 +421,7 @@ class LearningEvent(Base):
             "'SUMMARY_REQUESTED','QUIZ_CREATED','QUIZ_ANSWERED','ANSWER_CORRECT',"
             "'ANSWER_WRONG','HINT_REQUESTED','QUESTION_ASKED','BOOK_STARTED',"
             "'BOOK_FINISHED','VOICE_SESSION_STARTED','VOICE_SESSION_ENDED',"
-            "'ROLE_SWITCHED','TEXT_SELECTED')",
+            "'ROLE_SWITCHED','TEXT_SELECTED','QUIZ_REVIEW_COMPLETED')",
             name="ck_learning_events_type",
         ),
         Index(
@@ -511,6 +511,48 @@ class BookProgress(Base):
     total_seconds: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ChapterCompletion(Base):
+    """chapter_completions（T13）：学生主动完成章节的唯一事实表。
+
+    与 LearningEvent(CHAPTER_FINISHED) 区分：这是有意识的"完成本章"操作，
+    唯一约束 (student_id, chapter_id) 保证幂等；旧滚动事件不在此回填。
+    书籍"已完成"由「本书所有已发布章节均在此表完成」判定，而非滚动到末块。
+    """
+
+    __tablename__ = "chapter_completions"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "chapter_id", name="uq_chapter_completion_student_chapter"
+        ),
+        CheckConstraint(
+            "source IN ('EXPLICIT','LEGACY_EVENT')",
+            name="ck_chapter_completions_source",
+        ),
+        Index("ix_chapter_completions_student_book", "student_id", "book_id"),
+    )
+
+    completion_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    chapter_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("chapters.chapter_id", ondelete="RESTRICT"),
+    )
+    # 反范式冗余 book_id：按"本书全部已发布章节完成"判定时避免逐章回查书。
+    book_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="RESTRICT")
+    )
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    source: Mapped[str] = mapped_column(String(16), server_default=text("'EXPLICIT'"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
 
 
@@ -710,6 +752,9 @@ class ConversationSummary(Base):
     source_message_ids: Mapped[list] = mapped_column(
         JSONB, server_default=text("'[]'::jsonb")
     )
+    # T20：摘要已覆盖到的消息条数。其之前的消息已折叠进摘要，
+    # 后续请求只发送此边界之后的最近消息（不与摘要重复）。
+    message_covered_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     model_info: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -989,6 +1034,7 @@ class QuizSession(Base):
         ),
         Index("ix_quiz_sessions_conversation", "conversation_id"),
         Index("ix_quiz_sessions_book_chapter", "book_id", "chapter_id"),
+        Index("ix_quiz_sessions_source_quiz", "source_quiz_session_id"),
     )
 
     quiz_session_id: Mapped[UUID] = mapped_column(
@@ -1012,6 +1058,16 @@ class QuizSession(Base):
     )
     chapter_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("chapters.chapter_id", ondelete="RESTRICT")
+    )
+    # T16：相似练习来源（"再练一道"）。可空，旧行保持 NULL；
+    # 新来源题必须属于来源测验（source_quiz_session_id）且均归当前学生。
+    source_quiz_session_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("quiz_sessions.quiz_session_id", ondelete="SET NULL"),
+    )
+    source_question_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("quiz_questions.question_id", ondelete="SET NULL"),
     )
     title: Mapped[str] = mapped_column(String(255))
     quiz_kind: Mapped[str] = mapped_column(String(16))
@@ -1074,6 +1130,49 @@ class QuizQuestion(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ReviewedQuestion(Base):
+    """reviewed_questions（T22b 题库；可复用，非具体测验的题目）。
+
+    从 assessments JSON 导入，按 stable_key 幂等（导入两次数量不翻倍）。
+    只有 review_status='APPROVED' 的题才被章节测验选中；
+    旧 quiz_sessions 的 questions_snapshot 保存原文，改题后不覆盖旧答卷。
+    """
+
+    __tablename__ = "reviewed_questions"
+    __table_args__ = (
+        UniqueConstraint("stable_key", name="uq_reviewed_questions_stable_key"),
+        CheckConstraint(
+            "review_status IN ('DRAFT','PENDING','APPROVED','REJECTED')",
+            name="ck_reviewed_questions_status",
+        ),
+        CheckConstraint("grade_min >= 1", name="ck_reviewed_questions_grade_min"),
+        CheckConstraint(
+            "grade_max >= grade_min", name="ck_reviewed_questions_grade_range"
+        ),
+        Index("ix_reviewed_questions_chapter_grade", "chapter_id"),
+    )
+
+    question_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    stable_key: Mapped[str] = mapped_column(String(128))
+    chapter_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("chapters.chapter_id", ondelete="SET NULL")
+    )
+    grade_min: Mapped[int] = mapped_column(Integer)
+    grade_max: Mapped[int] = mapped_column(Integer)
+    revision: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    payload: Mapped[dict] = mapped_column(JSONB)
+    review_status: Mapped[str] = mapped_column(String(16), server_default=text("'PENDING'"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
 

@@ -1,0 +1,105 @@
+{
+  "slug": "ml-how-machines-learn",
+  "chapter": 1,
+  "review_status": "DRAFT",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "grade_min": 10,
+  "grade_max": 12,
+  "knowledge_points": ["supervised-learning", "unsupervised-learning", "reinforcement-learning"],
+  "questions": [
+    {
+      "stable_key": "ml-how-machines-learn-ch01-q01",
+      "type": "SINGLE_CHOICE",
+      "stem": "判断一个机器学习任务该采用哪种学习方式，最关键的区分依据是？",
+      "options": [
+        {"key": "A", "text": "训练数据里有没有人类标注的标准答案"},
+        {"key": "B", "text": "模型的参数数量是多是少"},
+        {"key": "C", "text": "使用的编程语言是 Python 还是别的"},
+        {"key": "D", "text": "训练要花多少天才能完成"}
+      ],
+      "correct_answer": {"key": "A"},
+      "explanation": "本章给出的区分坐标是「有没有标准答案、有没有即时反馈」。监督学习靠带标注的答案，无监督学习只有数据本身，强化学习靠奖励信号。参数数量、语言、耗时都不改变学习方式的本质。",
+      "knowledge_point": "supervised-learning",
+      "source_block": "先给「学习」下个定义",
+      "difficulty": "EASY",
+      "grade_min": 10,
+      "grade_max": 12,
+      "learning_objective": "能够说出监督、无监督、强化三种学习方式各自的训练信号",
+      "distractor_rationale": "B 是常见误解，把模型的复杂度和学习方式混为一谈；C、D 属于与学习信号无关的实现细节，是外行常用来抓的「非本质」特征。"
+    },
+    {
+      "stable_key": "ml-how-machines-learn-ch01-q02",
+      "type": "SINGLE_CHOICE",
+      "stem": "自动驾驶系统在十字路口不断尝试不同的变道时机，表现好时收到「安全通过」的正反馈，表现差时收到「刮蹭风险」的负反馈，逐步优化变道策略。这属于哪种学习方式？",
+      "options": [
+        {"key": "A", "text": "监督学习"},
+        {"key": "B", "text": "无监督学习"},
+        {"key": "C", "text": "强化学习"},
+        {"key": "D", "text": "规则程序"}
+      ],
+      "correct_answer": {"key": "C"},
+      "explanation": "智能体在环境里不断试错，环境返回奖励或惩罚，它据此调整策略，这正是强化学习的本质。本章也举例：自动驾驶既用监督学习认路标，又用强化学习优化变道策略。",
+      "knowledge_point": "reinforcement-learning",
+      "source_block": "没有答案也能学",
+      "difficulty": "MEDIUM",
+      "grade_min": 10,
+      "grade_max": 12,
+      "learning_objective": "能够判断一个具体任务该归入哪一类学习方式",
+      "distractor_rationale": "A 是很多人的第一反应——把「变道」错当成需要标注答案的分类；B 忽略了这里有明显的奖励反馈；D 则回到第一本书的老观念，认为所有智能都靠人写规则，实则变道策略人很难写全。"
+    },
+    {
+      "stable_key": "ml-how-machines-learn-ch01-q03",
+      "type": "TRUE_FALSE",
+      "stem": "强化学习在训练前必须准备一大批「输入—正确答案」配对的标注数据，否则无法训练。",
+      "options": [
+        {"key": "A", "text": "正确"},
+        {"key": "B", "text": "错误"}
+      ],
+      "correct_answer": {"key": "B"},
+      "explanation": "强化学习不给标准答案，而是给奖励信号：智能体尝试动作后环境返回奖惩，它据此调整策略。它的训练信号是奖励，不是配对好的「输入—答案」标注数据，后者是监督学习的特征。",
+      "knowledge_point": "reinforcement-learning",
+      "source_block": "没有答案也能学",
+      "difficulty": "MEDIUM",
+      "grade_min": 10,
+      "grade_max": 12,
+      "learning_objective": "能够区分监督学习与强化学习在训练信号上的不同",
+      "distractor_rationale": "这是最常见的混淆：把「有反馈」误当成「有标准答案」。不少学生因为在监督学习里见过大量的标注样例，就误以为所有学习方式都需要答案。"
+    },
+    {
+      "stable_key": "ml-how-machines-learn-ch01-q04",
+      "type": "MULTIPLE_CHOICE",
+      "stem": "下列哪些任务更适合交给无监督学习？（选两项）",
+      "options": [
+        {"key": "A", "text": "把从未分类的百万用户自动分成若干群组"},
+        {"key": "B", "text": "识别一封邮件里有没有垃圾广告词"},
+        {"key": "C", "text": "把每天的海量新闻报道聚成几个话题簇"},
+        {"key": "D", "text": "判断一张图中是猫还是狗"}
+      ],
+      "correct_answer": {"keys": ["A", "C"]},
+      "explanation": "无监督学习只拿数据本身，自行发现内在结构、把相似对象聚成簇。A 是自动分群组、C 是聚话题簇，都是聚类。B 识别垃圾广告词需要标注（监督）、D 判断猫狗需要标注答案（监督），不属于无监督。",
+      "knowledge_point": "unsupervised-learning",
+      "source_block": "没有答案也能学",
+      "difficulty": "HARD",
+      "grade_min": 10,
+      "grade_max": 12,
+      "learning_objective": "能够举例说明无监督学习的典型聚类任务",
+      "distractor_rationale": "B、D 都「看起来像在分东西」，学生容易误当成无监督；实际上它们都依赖人工标注的标准答案，是监督学习。把「分类」和「聚类」混为一谈是本节最典型的错解。"
+    },
+    {
+      "stable_key": "ml-how-machines-learn-ch01-q05",
+      "type": "FILL_BLANK",
+      "stem": "监督学习用带标准答案的样本训练模型；而无监督学习只在没有标准答案的数据中自行发现内在结构，最典型的任务是_______。",
+      "options": [],
+      "correct_answer": {"value": "聚类"},
+      "explanation": "无监督学习最典型的任务是把相似样本聚成簇，即聚类。书中例子是把一盒混装扣子按相似性自动归堆。",
+      "knowledge_point": "unsupervised-learning",
+      "source_block": "没有答案也能学",
+      "difficulty": "EASY",
+      "grade_min": 10,
+      "grade_max": 12,
+      "learning_objective": "能够说出无监督学习最典型的任务",
+      "distractor_rationale": "学生可能答「分类」，混淆了分类（监督，需要标签）与聚类（无监督，自行分堆）。为避免歧义，正确答案明确为聚类。"
+    }
+  ]
+}

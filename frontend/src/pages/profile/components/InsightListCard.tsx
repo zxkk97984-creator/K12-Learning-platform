@@ -67,7 +67,7 @@ export function InsightListCard({ insights, teacherName, loadEvidence }: Insight
                     {expanded ? '收起' : '为什么？'}
                   </button>
                 </div>
-                <p className="mt-1.5 max-w-[72ch] text-[13px] leading-relaxed text-muted">
+                <p className="mt-1.5 max-w-[72ch] text-[13px] leading-relaxed text-muted wrap-anywhere">
                   {insight.description}
                 </p>
                 {expanded ? (

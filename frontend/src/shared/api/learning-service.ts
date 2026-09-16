@@ -81,11 +81,22 @@ export interface UpsertBookProgressInput {
   position_percent?: number
 }
 
+export interface ChapterCompletionResult {
+  chapter_id: string
+  book_id: string
+  completed_at: string
+  source: 'EXPLICIT' | 'LEGACY_EVENT'
+  book_completed: boolean
+  completed_chapters: number
+  published_chapters: number
+}
+
 export interface LearningService {
   createSession(input: CreateLearningSessionInput): Promise<LearningSession>
   endSession(sessionId: string): Promise<LearningSession>
   createEvent(input: CreateLearningEventInput): Promise<LearningEvent>
   upsertProgress(bookId: string, input: UpsertBookProgressInput): Promise<BookProgress>
+  markChapterCompleted(chapterId: string): Promise<ChapterCompletionResult>
 }
 
 async function apiRequestWithToken<T>(
@@ -168,6 +179,15 @@ export class ApiLearningService implements LearningService {
       method: 'PUT',
       body: input,
     })
+  }
+
+  markChapterCompleted(chapterId: string): Promise<ChapterCompletionResult> {
+    return apiRequest<ChapterCompletionResult>(
+      `/me/chapters/${encodeURIComponent(chapterId)}/completion`,
+      {
+        method: 'PUT',
+      },
+    )
   }
 }
 

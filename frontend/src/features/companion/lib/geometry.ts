@@ -42,9 +42,15 @@ export function defaultDockPosition(): Point {
 /** 面板定位：右侧优先 → 溢出翻左侧 → 钳位；≤720px 底部抽屉（原型 placePanel） */
 export function placePanel(dockRect: DOMRect): PanelRect {
   const width = Math.min(PANEL_WIDTH, window.innerWidth - 32)
+  // T18 §5.2：移动端底部抽屉避开底部导航/safe-area（组件层以 paddingBottom 补 inset）。
   const height = Math.min(PANEL_HEIGHT, window.innerHeight - 32)
   if (window.innerWidth <= PANEL_MOBILE_BREAKPOINT) {
-    return { left: 16, top: Math.max(16, window.innerHeight - height - 16), width, height }
+    return {
+      left: 16,
+      top: Math.max(16, window.innerHeight - height - 16),
+      width,
+      height,
+    }
   }
   let left = dockRect.right + PANEL_GAP
   let top = dockRect.top + dockRect.height - height

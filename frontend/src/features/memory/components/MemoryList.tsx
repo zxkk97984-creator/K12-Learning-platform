@@ -42,7 +42,7 @@ export function MemoryList({ memories, onChanged }: MemoryListProps) {
       {memories.map((memory) => {
         const editing = editingId === memory.memory_id
         return (
-          <li key={memory.memory_id} className="rounded-[10px] border border-border bg-surface p-3">
+          <li key={memory.memory_id} className="min-w-0 rounded-[10px] border border-border bg-surface p-3">
             {editing ? (
               <div>
                 <textarea
@@ -70,7 +70,7 @@ export function MemoryList({ memories, onChanged }: MemoryListProps) {
               </div>
             ) : (
               <>
-                <p className="text-xs leading-relaxed text-fg">{memory.content}</p>
+                <p className="text-xs leading-relaxed text-fg wrap-anywhere">{memory.content}</p>
                 {memory.tags.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {memory.tags.map((tag) => (
