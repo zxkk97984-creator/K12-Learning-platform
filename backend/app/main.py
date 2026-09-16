@@ -16,6 +16,7 @@ from app.infrastructure.metrics_registry import metrics_registry
 from app.infrastructure.rate_limit import rate_limiter
 from app.infrastructure.observability import setup_access_logging
 from app.modules.admin.router import router as admin_router
+from app.modules.codelab.router import router as codelab_router
 from app.modules.content.assets import router as library_assets_router
 from app.modules.content.router import router as content_router
 from app.modules.conversation.router import router as conversation_router
@@ -104,6 +105,7 @@ app.include_router(conversation_router, prefix="/api/v1")
 app.include_router(memory_router, prefix="/api/v1")
 app.include_router(quiz_router, prefix="/api/v1")
 app.include_router(recommendation_router, prefix="/api/v1")
+app.include_router(codelab_router, prefix="/api/v1")
 app.include_router(voice_router)
 
 

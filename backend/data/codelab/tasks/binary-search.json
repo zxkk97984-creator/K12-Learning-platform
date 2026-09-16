@@ -1,0 +1,31 @@
+{
+  "slug": "binary-search",
+  "title": "算法思维：二分查找",
+  "description": "编写函数 `binary_search(items, target)`，在一个**已经从小到大排好序**的列表中查找 `target`。\n\n要求：\n1. 找到时返回它的下标（从 0 开始）。\n2. 找不到时返回 `-1`。\n3. 列表内没有重复元素。\n4. 列表为空时也要返回 `-1`，不能报错。\n\n提示：二分查找每次把搜索范围缩小一半，因此不需要逐个比较。\n\n示例：\n- `binary_search([1, 3, 5, 7, 9], 7)` → `3`\n- `binary_search([1, 3, 5, 7, 9], 4)` → `-1`",
+  "starter_code": "def binary_search(items, target):\n    # 在这里写下你的代码\n    pass\n",
+  "reference_solution": "def binary_search(items, target):\n    low, high = 0, len(items) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if items[mid] == target:\n            return mid\n        if items[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1\n",
+  "status": "PUBLISHED",
+  "test_groups": [
+    {
+      "id": "F1",
+      "name": "找到目标",
+      "dimension": "F",
+      "max_score": 30,
+      "tests": "import pytest\n\n\ndef test_middle_element():\n    assert binary_search([1, 3, 5, 7, 9], 5) == 2\n\n\ndef test_last_element():\n    assert binary_search([1, 3, 5, 7, 9], 9) == 4\n\n\ndef test_first_element():\n    assert binary_search([1, 3, 5, 7, 9], 1) == 0\n"
+    },
+    {
+      "id": "F2",
+      "name": "找不到与边界",
+      "dimension": "F",
+      "max_score": 30,
+      "tests": "import pytest\n\n\ndef test_missing_middle():\n    assert binary_search([1, 3, 5, 7, 9], 4) == -1\n\n\ndef test_smaller_than_all():\n    assert binary_search([1, 3, 5, 7, 9], 0) == -1\n\n\ndef test_larger_than_all():\n    assert binary_search([1, 3, 5, 7, 9], 100) == -1\n\n\ndef test_single_element_hit():\n    assert binary_search([8], 8) == 0\n"
+    },
+    {
+      "id": "R1",
+      "name": "空列表不崩溃",
+      "dimension": "R",
+      "max_score": 10,
+      "tests": "import pytest\n\n\ndef test_empty_list():\n    assert binary_search([], 5) == -1\n"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "slug": "list-summary",
+  "title": "数据统计：一组数字的摘要",
+  "description": "编写函数 `summarize(numbers)`，对一组数字做统计，返回一个字典。\n\n返回的字典必须包含 5 个键：\n- `count`：数字的个数\n- `sum`：总和\n- `max`：最大值\n- `min`：最小值\n- `mean`：平均值\n\n特殊约定：当 `numbers` 为空列表时，返回\n`{\"count\": 0, \"sum\": 0, \"max\": None, \"min\": None, \"mean\": None}`\n\n示例：\n- `summarize([1, 2, 3])` → `{\"count\": 3, \"sum\": 6, \"max\": 3, \"min\": 1, \"mean\": 2.0}`",
+  "starter_code": "def summarize(numbers):\n    # 在这里写下你的代码\n    pass\n",
+  "reference_solution": "def summarize(numbers):\n    if not numbers:\n        return {\"count\": 0, \"sum\": 0, \"max\": None, \"min\": None, \"mean\": None}\n    total = sum(numbers)\n    return {\n        \"count\": len(numbers),\n        \"sum\": total,\n        \"max\": max(numbers),\n        \"min\": min(numbers),\n        \"mean\": total / len(numbers),\n    }\n",
+  "status": "PUBLISHED",
+  "test_groups": [
+    {
+      "id": "F1",
+      "name": "常规统计",
+      "dimension": "F",
+      "max_score": 30,
+      "tests": "import pytest\n\n\ndef test_basic_list():\n    result = summarize([1, 2, 3])\n    assert result[\"count\"] == 3\n    assert result[\"sum\"] == 6\n    assert result[\"max\"] == 3\n    assert result[\"min\"] == 1\n    assert abs(result[\"mean\"] - 2.0) < 1e-6\n\n\ndef test_all_keys_present():\n    result = summarize([5])\n    assert set(result) >= {\"count\", \"sum\", \"max\", \"min\", \"mean\"}\n"
+    },
+    {
+      "id": "F2",
+      "name": "负数与单个元素",
+      "dimension": "F",
+      "max_score": 30,
+      "tests": "import pytest\n\n\ndef test_negative_numbers():\n    result = summarize([-3, -1, -7])\n    assert result[\"count\"] == 3\n    assert result[\"sum\"] == -11\n    assert result[\"max\"] == -1\n    assert result[\"min\"] == -7\n\n\ndef test_single_element():\n    result = summarize([42])\n    assert result[\"count\"] == 1\n    assert result[\"sum\"] == 42\n    assert result[\"max\"] == 42\n    assert result[\"min\"] == 42\n    assert abs(result[\"mean\"] - 42.0) < 1e-6\n"
+    },
+    {
+      "id": "R1",
+      "name": "空列表边界",
+      "dimension": "R",
+      "max_score": 10,
+      "tests": "import pytest\n\n\ndef test_empty_list_does_not_crash():\n    result = summarize([])\n    assert result[\"count\"] == 0\n    assert result[\"sum\"] == 0\n    assert result[\"max\"] is None\n    assert result[\"min\"] is None\n    assert result[\"mean\"] is None\n"
+    }
+  ]
+}

@@ -6,6 +6,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -1463,3 +1464,152 @@ class IdempotencyKey(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# CodeLab —— 在线编程教学工具（Phase 1）
+#
+# 三张表，每一个都有明确必要性：
+#   code_tasks    —— 没有它就没有编程任务可做
+#   code_runs     —— 每次沙箱执行为独立事件；是 review 的锚点与执行历史
+#   code_reviews  —— AI 评价有独立生命周期（可失败/可重试），与执行解耦
+#
+# 刻意**不**包含（留待下一阶段，避免提前抽象）：学习事件联动、课程/章节编排、
+# 环境版本、教师覆盖评分、题库编辑、多语言、公开样例字段。
+# ══════════════════════════════════════════════════════════════════════════
+
+
+class CodeTask(Base):
+    """code_tasks —— 编程任务定义（文件导入，按 slug 幂等）。
+
+    ``test_groups`` 与 ``reference_solution`` 是**教师侧私有数据**，
+    绝不允许出现在学生响应中（见 codelab/schemas.py 的 DTO 分层）。
+    """
+
+    __tablename__ = "code_tasks"
+    __table_args__ = (
+        UniqueConstraint("slug", name="uq_code_tasks_slug"),
+        CheckConstraint("status IN ('DRAFT','PUBLISHED','ARCHIVED')", name="ck_code_tasks_status"),
+        Index("ix_code_tasks_status_created", "status", text("created_at DESC")),
+    )
+
+    task_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    slug: Mapped[str] = mapped_column(String(128))
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text)
+    starter_code: Mapped[str] = mapped_column(Text, server_default=text("''"))
+    # F/R 测试组（隐藏测试）：[{id,name,dimension,max_score,tests}]
+    test_groups: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    reference_solution: Mapped[str | None] = mapped_column(Text)
+    # 锁定 rubric（A/Q 评分标准）；为空时由评审流程生成一次后写回，不按学生代码重生成
+    rubric: Mapped[dict | None] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'DRAFT'"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class CodeRun(Base):
+    """code_runs —— 一次沙箱执行记录。
+
+    ``outputs`` 沿用 dai 的输出契约：[{msg_type, content}]，供前端统一渲染
+    （stream / error / image）。stdout 与 stderr 分开保留在各自的 stream 条目中，
+    不像 dai 的 sample-run 那样拼接成一个不可区分的字符串。
+    """
+
+    __tablename__ = "code_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('SUCCESS','FAILED','TIMEOUT','ERROR')", name="ck_code_runs_status"
+        ),
+        Index("ix_code_runs_student_created", "student_id", text("created_at DESC")),
+        Index("ix_code_runs_task_created", "task_id", text("created_at DESC")),
+    )
+
+    run_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.student_id", ondelete="RESTRICT"),
+    )
+    task_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("code_tasks.task_id", ondelete="RESTRICT")
+    )
+    code: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16))
+    outputs: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    execution_time_ms: Mapped[int | None] = mapped_column(Integer)
+    exit_code: Mapped[int | None] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class CodeReview(Base):
+    """code_reviews —— AI 对某次 run 的评价（run_id 唯一 → 同一 run 只评一次）。
+
+    ``final_score_100`` 的 CHECK 是**服务端钳制之外的数据库级兜底**：
+    dai 的已知缺陷 (a) 允许 LLM 给出无上界分数从而产出 1009 分的总分，
+    这里在 Pydantic、merge_scores、DB 三层各设一道上限。
+    """
+
+    __tablename__ = "code_reviews"
+    __table_args__ = (
+        UniqueConstraint("run_id", name="uq_code_reviews_run"),
+        CheckConstraint(
+            "status IN ('RUNNING','COMPLETED','FAILED','REVIEW_REQUIRED')",
+            name="ck_code_reviews_status",
+        ),
+        CheckConstraint(
+            "correctness_status IN ('PASSED','PARTIAL','FAILED','NOT_VERIFIED')",
+            name="ck_code_reviews_correctness",
+        ),
+        CheckConstraint("grading_mode IN ('tests','review_only')", name="ck_code_reviews_mode"),
+        CheckConstraint(
+            "final_score_100 IS NULL OR (final_score_100 >= 0 AND final_score_100 <= 100)",
+            name="ck_code_reviews_final_score_range",
+        ),
+        Index("ix_code_reviews_status_created", "status", text("created_at DESC")),
+    )
+
+    review_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    run_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("code_runs.run_id", ondelete="CASCADE")
+    )
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'RUNNING'"))
+    grading_mode: Mapped[str] = mapped_column(String(16))
+    deterministic_available: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false")
+    )
+    correctness_status: Mapped[str] = mapped_column(String(16))
+    # 确定性维度（有测试组时才非空）
+    functional_score: Mapped[float | None] = mapped_column(Float)
+    robustness_score: Mapped[float | None] = mapped_column(Float)
+    # LLM 维度（始终非空，除非整体 FAILED）
+    algorithm_score: Mapped[float | None] = mapped_column(Float)
+    quality_score: Mapped[float | None] = mapped_column(Float)
+    final_score_100: Mapped[float | None] = mapped_column(Float)
+    deterministic_details: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    static_analysis: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    ai_result: Mapped[dict | None] = mapped_column(JSONB)
+    student_feedback: Mapped[dict | None] = mapped_column(JSONB)
+    validation_errors: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    needs_teacher_review: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    review_reason: Mapped[str | None] = mapped_column(Text)
+    model_info: Mapped[dict | None] = mapped_column(JSONB)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

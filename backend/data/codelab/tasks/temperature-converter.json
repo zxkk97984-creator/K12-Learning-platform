@@ -1,0 +1,31 @@
+{
+  "slug": "temperature-converter",
+  "title": "温度换算：摄氏度转华氏度",
+  "description": "编写函数 `celsius_to_fahrenheit(celsius)`，把摄氏度换算成华氏度。\n\n换算公式：华氏度 = 摄氏度 × 9 ÷ 5 + 32\n\n要求：\n1. 函数名必须是 `celsius_to_fahrenheit`，接收一个数字参数。\n2. 返回换算后的结果（可以是整数或小数）。\n3. 支持负数与小数输入。\n\n示例：\n- `celsius_to_fahrenheit(0)` → `32`\n- `celsius_to_fahrenheit(100)` → `212`\n- `celsius_to_fahrenheit(-40)` → `-40`",
+  "starter_code": "def celsius_to_fahrenheit(celsius):\n    # 在这里写下你的代码\n    pass\n",
+  "reference_solution": "def celsius_to_fahrenheit(celsius):\n    return celsius * 9 / 5 + 32\n",
+  "status": "PUBLISHED",
+  "test_groups": [
+    {
+      "id": "F1",
+      "name": "基本换算",
+      "dimension": "F",
+      "max_score": 30,
+      "tests": "import pytest\n\n\ndef test_freezing_point():\n    assert celsius_to_fahrenheit(0) == 32\n\n\ndef test_boiling_point():\n    assert celsius_to_fahrenheit(100) == 212\n\n\ndef test_body_temperature():\n    assert abs(celsius_to_fahrenheit(37) - 98.6) < 1e-6\n"
+    },
+    {
+      "id": "F2",
+      "name": "负数与小数",
+      "dimension": "F",
+      "max_score": 30,
+      "tests": "import pytest\n\n\ndef test_below_zero():\n    assert abs(celsius_to_fahrenheit(-10) - 14) < 1e-6\n\n\ndef test_same_value_at_minus_40():\n    assert abs(celsius_to_fahrenheit(-40) - (-40)) < 1e-6\n\n\ndef test_decimal_input():\n    assert abs(celsius_to_fahrenheit(36.6) - 97.88) < 1e-6\n"
+    },
+    {
+      "id": "R1",
+      "name": "返回值为数值",
+      "dimension": "R",
+      "max_score": 10,
+      "tests": "import pytest\n\n\ndef test_returns_number():\n    result = celsius_to_fahrenheit(20)\n    assert isinstance(result, (int, float))\n    assert not isinstance(result, bool)\n\n\ndef test_value_is_68():\n    assert abs(celsius_to_fahrenheit(20) - 68) < 1e-6\n"
+    }
+  ]
+}

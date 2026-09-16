@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -28,6 +29,10 @@ class Settings(BaseSettings):
     ai_thinking_mode: Literal["auto", "enabled", "disabled"] = "auto"
     ai_base_url: str = ""
     ai_api_key: str = ""
+    # 结构化 JSON 调用的超时与重试（CodeLab 代码评分）。
+    # 评分 prompt 大、reasoning 模型耗时长，沿用 dai 的经验值：默认 120s / 3 次重试。
+    ai_json_timeout_seconds: float = Field(default=120.0, gt=0, le=600)
+    ai_max_retries: int = Field(default=3, ge=0, le=8)
     embedding_provider: str = "mock"
     embedding_base_url: str = ""
     embedding_api_key: str = ""
@@ -78,6 +83,44 @@ class Settings(BaseSettings):
     aliyun_asr_ws_url: str = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
     speech_sample_rate: int = 16000
     asr_max_frame_bytes: int = 6400
+
+    # ---- CodeLab：在线编程教学工具（Phase 1）----
+    # 默认关闭：未启用时所有 /codelab 端点返回 503 CODELAB_DISABLED，
+    # 既有的启动流程、CI 与测试完全不受影响。
+    codelab_enabled: bool = False
+    # 沙箱镜像——直接复用 dai 已验证的两个镜像（它们本就是为不同路径拆分的）：
+    #   run   路径需要 matplotlib 等数据科学栈（dai 的 kernel 镜像）
+    #   judge 路径需要 pytest（dai 的 judge 镜像）
+    # 两个镜像都没有对方的包，这一点已实测确认，因此必须分开配置，不能合并。
+    codelab_run_image: str = "dai-kernel-python:latest"
+    codelab_judge_image: str = "dai-judge-python:latest"
+    codelab_run_timeout_seconds: int = Field(default=10, ge=1, le=60)
+    codelab_judge_timeout_seconds: int = Field(default=20, ge=1, le=120)
+    codelab_memory_limit_mb: int = Field(default=256, ge=64, le=4096)
+    codelab_cpu_limit: float = Field(default=1.0, gt=0, le=8)
+    codelab_max_code_bytes: int = Field(default=50_000, ge=1, le=1_000_000)
+    codelab_max_output_bytes: int = Field(default=65_536, ge=1024, le=1_048_576)
+    codelab_max_concurrent: int = Field(default=2, ge=1, le=16)
+    codelab_work_dir: str = "storage/codelab"
+    # 未设置时视为与 codelab_work_dir 相同（API 以宿主机进程运行时二者一致）。
+    # 若将来把 API 容器化，必须显式设置为本机路径，否则挂载会失败。
+    codelab_host_work_dir: str = ""
+    codelab_rate_limit_per_minute: int = Field(default=20, ge=1, le=600)
+
+    @property
+    def codelab_work_dir_resolved(self) -> str:
+        """**绝对**路径。
+
+        Docker 的 `-v` 只接受绝对路径作为 bind mount；相对路径会被解释为
+        命名卷并直接报错（实测 `includes invalid characters for a local volume name`）。
+        因此这里必须 resolve，不能把配置里的相对字符串直接交给 docker。
+        """
+        return str(Path(self.codelab_work_dir).resolve())
+
+    @property
+    def codelab_host_work_dir_resolved(self) -> str:
+        base = self.codelab_host_work_dir or self.codelab_work_dir
+        return str(Path(base).resolve())
 
     @model_validator(mode="after")
     def _reject_placeholder_secret_in_prod(self) -> "Settings":
