@@ -28,7 +28,7 @@ test.describe('黄金路径', () => {
 
     // 1. 首页：昵称来自登录用户；继续学习卡指向准备好的书
     await page.goto('/home')
-    await expect(page.getByRole('heading', { name: /晚上好，/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /(早上好|中午好|下午好|晚上好)，/ })).toBeVisible()
     await expect(page.getByText(target.bookTitle).first()).toBeVisible()
 
     // 2. 继续学习 → 真实 UUID Reader；断言 URL 与非空章节标题
